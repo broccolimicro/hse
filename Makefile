@@ -1,4 +1,4 @@
-SRCDIR       =  hse
+SRCDIR       =  graph
 CXXFLAGS	 =  -O2 -g -Wall -fmessage-length=0 -I../boolean -I../common
 SOURCES	    :=  $(shell find $(SRCDIR) -name '*.cpp')
 OBJECTS	    :=  $(SOURCES:%.cpp=%.o)
