@@ -12,8 +12,14 @@
 
 namespace graph
 {
-struct petri : marked_graph
+struct petri : graph
 {
+	enum
+	{
+		places = 0,
+		transitions = 1
+	};
+
 	struct transition : node
 	{
 		boolean::cover action;
@@ -24,11 +30,18 @@ struct petri : marked_graph
 		boolean::cover predicate;
 	};
 
-	enum
+	struct token
 	{
-		places = 0,
-		transitions = 1
+		graph::iterator index;
 	};
+
+	struct marking
+	{
+		vector<token*> tokens;
+		marked_graph *base;
+	};
+
+	marking M0;
 
 	iterator create_transition(boolean::cover action);
 	vector<iterator> create_transitions(vector<boolean::cover> actions);
