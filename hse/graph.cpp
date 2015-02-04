@@ -198,9 +198,9 @@ iterator graph::insert_before(iterator to, hse::place n)
 	iterator i[2];
 	i[transition] = create(hse::transition());
 	i[place] = create(n);
-	for (int j = 0; j < arcs[1-to.type].size(); j++)
+	for (int j = 0; j < (int)arcs[1-to.type].size(); j++)
 		if (arcs[1-to.type][j].to.index == to.index)
-			arcs[1-to.type][j].to.index = i[to.type];
+			arcs[1-to.type][j].to.index = i[to.type].index;
 	connect(i[1-to.type], to);
 	connect(i[to.type], i[1-to.type]);
 	return i[place];
@@ -211,9 +211,9 @@ iterator graph::insert_before(iterator to, hse::transition n)
 	iterator i[2];
 	i[transition] = create(n);
 	i[place] = create(hse::place());
-	for (int j = 0; j < arcs[1-to.type].size(); j++)
+	for (int j = 0; j < (int)arcs[1-to.type].size(); j++)
 		if (arcs[1-to.type][j].to.index == to.index)
-			arcs[1-to.type][j].to.index = i[to.type];
+			arcs[1-to.type][j].to.index = i[to.type].index;
 	connect(i[1-to.type], to);
 	connect(i[to.type], i[1-to.type]);
 	return i[transition];
@@ -224,9 +224,9 @@ iterator graph::insert_after(iterator from, hse::place n)
 	iterator i[2];
 	i[transition] = create(hse::transition());
 	i[place] = create(n);
-	for (int j = 0; j < arcs[from.type].size(); j++)
+	for (int j = 0; j < (int)arcs[from.type].size(); j++)
 		if (arcs[from.type][j].from.index == from.index)
-			arcs[from.type][j].from.index = i[from.type];
+			arcs[from.type][j].from.index = i[from.type].index;
 	connect(from, i[1-from.type]);
 	connect(i[1-from.type], i[from.type]);
 	return i[place];
@@ -238,9 +238,9 @@ iterator graph::insert_after(iterator from, hse::transition n)
 	iterator i[2];
 	i[transition] = create(n);
 	i[place] = create(hse::place());
-	for (int j = 0; j < arcs[from.type].size(); j++)
+	for (int j = 0; j < (int)arcs[from.type].size(); j++)
 		if (arcs[from.type][j].from.index == from.index)
-			arcs[from.type][j].from.index = i[from.type];
+			arcs[from.type][j].from.index = i[from.type].index;
 	connect(from, i[1-from.type]);
 	connect(i[1-from.type], i[from.type]);
 	return i[transition];
@@ -421,7 +421,7 @@ vector<iterator> graph::next(iterator n)
 vector<iterator> graph::next(vector<iterator> n)
 {
 	vector<iterator> result;
-	for (int i = 0; i < n.size(); i++)
+	for (int i = 0; i < (int)n.size(); i++)
 	{
 		vector<iterator> temp = next(n[i]);
 		result.insert(result.end(), temp.begin(), temp.end());
@@ -441,7 +441,7 @@ vector<iterator> graph::prev(iterator n)
 vector<iterator> graph::prev(vector<iterator> n)
 {
 	vector<iterator> result;
-	for (int i = 0; i < n.size(); i++)
+	for (int i = 0; i < (int)n.size(); i++)
 	{
 		vector<iterator> temp = prev(n[i]);
 		result.insert(result.end(), temp.begin(), temp.end());

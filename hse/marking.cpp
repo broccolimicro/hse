@@ -105,7 +105,7 @@ vector<enabled_transition> marking::enabled(bool sorted)
 			if (!found)
 			{
 				disabled.push_back(base->arcs[graph::place][i].to.index);
-				if (k < result.size())
+				if (k < (int)result.size())
 					result.erase(result.begin() + k);
 			}
 		}
@@ -120,13 +120,13 @@ vector<enabled_transition> marking::enabled(bool sorted)
 	for (int i = (int)result.size()-1; i >= 0; i--)
 	{
 		for (int j = base->transitions[result[i].index].action.size()-1; j > 0; j--)
-			if (base->transitions[result[i].index].type == transition::active || (base->transitions[result[i].index].action[j] & result[i].state != 0))
+			if (base->transitions[result[i].index].type == transition::active || (base->transitions[result[i].index].action[j] & result[i].state) != 0)
 			{
 				result.push_back(result[i]);
 				result.back().term = j;
 			}
 
-		if (base->transitions[result[i].index].action.size() > 0 && (base->transitions[result[i].index].type == transition::active || (base->transitions[result[i].index].action[0] & result[i].state != 0)))
+		if (base->transitions[result[i].index].action.size() > 0 && (base->transitions[result[i].index].type == transition::active || (base->transitions[result[i].index].action[0] & result[i].state) != 0))
 			result[i].term = 0;
 		else
 			result.erase(result.begin() + i);
@@ -142,7 +142,7 @@ void marking::fire(enabled_transition t)
 	else if (base->transitions[t.index].type == transition::passive)
 		t.state &= base->transitions[t.index].action[t.term];
 
-	vector<int> next = base->output_places(t.index);
+	vector<int> next = base->next(graph::transition, t.index);
 
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	for (int i = 0; i < (int)tokens.size(); i++)
