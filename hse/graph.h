@@ -7,90 +7,14 @@
 
 #include <common/standard.h>
 
+#include "node.h"
+#include "marking.h"
+
 #ifndef hse_graph_h
 #define hse_graph_h
 
 namespace hse
 {
-
-struct place
-{
-	place();
-	~place();
-
-	boolean::cover predicate;
-	boolean::cover effective;
-
-	static place parallel_merge(place p0, place p1);
-	static place conditional_merge(place p0, place p1);
-};
-
-struct transition
-{
-	transition();
-	transition(int type, boolean::cover action = 1);
-	~transition();
-
-	enum
-	{
-		passive = 0,
-		active = 1
-	};
-
-	boolean::cover action;
-	int type;
-
-	static transition parallel_merge(transition t0, transition t1);
-	static transition conditional_merge(transition t0, transition t1);
-};
-
-struct iterator
-{
-	iterator();
-	iterator(int type, int index);
-	~iterator();
-
-	int type;
-	int index;
-
-	iterator &operator=(iterator i);
-	iterator &operator--();
-	iterator &operator++();
-	iterator &operator--(int);
-	iterator &operator++(int);
-
-	iterator &operator+=(int i);
-	iterator &operator-=(int i);
-
-	iterator operator+(int i);
-	iterator operator-(int i);
-
-	bool operator==(iterator i) const;
-	bool operator!=(iterator i) const;
-	bool operator<(iterator i) const;
-	bool operator>(iterator i) const;
-	bool operator<=(iterator i) const;
-	bool operator>=(iterator i) const;
-};
-
-struct arc
-{
-	arc();
-	arc(iterator from, iterator to);
-	~arc();
-
-	iterator from;
-	iterator to;
-};
-
-struct token
-{
-	token();
-	~token();
-
-	iterator index;
-};
-
 struct graph
 {
 	graph();
@@ -104,11 +28,13 @@ struct graph
 
 	vector<hse::place> places;
 	vector<hse::transition> transitions;
-	vector<arc> arcs;
-	vector<token> init;
+	vector<arc> arcs[2];
+	marking init;
 
 	iterator begin(int type);
 	iterator end(int type);
+	iterator begin_arc(int type);
+	iterator end_arc(int type);
 
 	iterator create(hse::place p);
 	iterator create(hse::transition t);
@@ -170,45 +96,14 @@ struct graph
 		return connect(create(n, num), to);
 	}
 
-	template <class node>
-	iterator insert(int a, node n)
-	{
-		iterator i = create(n);
-		arcs.push_back(arc(i, arcs[a].to));
-		arcs[a].to = i;
-		return i;
-	}
-
-	template <class node>
-	iterator insert_alongside(iterator from, iterator to, node n)
-	{
-		iterator i = create(n);
-		connect(from, i);
-		connect(i, to);
-		return i;
-	}
-
-	template <class node>
-	iterator insert_before(iterator to, node n)
-	{
-		iterator i = create(n);
-		for (int j = 0; j < arcs.size(); j++)
-			if (arcs[j].to == to)
-				arcs[j].to = i;
-		connect(i, to);
-		return i;
-	}
-
-	template <class node>
-	iterator insert_after(iterator from, node n)
-	{
-		iterator i = create(n);
-		for (int j = 0; j < arcs.size(); j++)
-			if (arcs[j].from == from)
-				arcs[j].from = i;
-		connect(from, i);
-		return i;
-	}
+	iterator insert(iterator a, hse::place n);
+	iterator insert(iterator a, hse::transition n);
+	iterator insert_alongside(iterator from, iterator to, hse::place n);
+	iterator insert_alongside(iterator from, iterator to, hse::transition n);
+	iterator insert_before(iterator to, hse::place n);
+	iterator insert_before(iterator to, hse::transition n);
+	iterator insert_after(iterator from, hse::place n);
+	iterator insert_after(iterator from, hse::transition n);
 
 	iterator duplicate(iterator n);
 	vector<iterator> duplicate(vector<iterator> n);
@@ -226,14 +121,28 @@ struct graph
 	vector<iterator> next(vector<iterator> n);
 	vector<iterator> prev(iterator n);
 	vector<iterator> prev(vector<iterator> n);
-	vector<int> outgoing(iterator n);
-	vector<int> outgoing(vector<iterator> n);
-	vector<int> incoming(iterator n);
-	vector<int> incoming(vector<iterator> n);
-	vector<int> next(int a);
-	vector<int> next(vector<int> a);
-	vector<int> prev(int a);
-	vector<int> prev(vector<int> a);
+	vector<int> next(int type, int n);
+	vector<int> next(int type, vector<int> n);
+	vector<int> prev(int type, int n);
+	vector<int> prev(int type, vector<int> n);
+
+	vector<iterator> out(iterator n);
+	vector<iterator> out(vector<iterator> n);
+	vector<iterator> in(iterator n);
+	vector<iterator> in(vector<iterator> n);
+	vector<int> out(int type, int n);
+	vector<int> out(int type, vector<int> n);
+	vector<int> in(int type, int n);
+	vector<int> in(int type, vector<int> n);
+
+	vector<iterator> next_arcs(iterator a);
+	vector<iterator> next_arcs(vector<iterator> a);
+	vector<iterator> prev_arcs(iterator a);
+	vector<iterator> prev_arcs(vector<iterator> a);
+	vector<int> next_arcs(int type, int a);
+	vector<int> next_arcs(int type, vector<int> a);
+	vector<int> prev_arcs(int type, int a);
+	vector<int> prev_arcs(int type, vector<int> a);
 
 	bool is_floating(iterator n);
 
