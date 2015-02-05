@@ -6,6 +6,7 @@
  */
 
 #include "graph.h"
+#include <common/message.h>
 
 namespace hse
 {
@@ -288,8 +289,11 @@ iterator graph::duplicate_merge(iterator n0, iterator n1)
 		result = create(hse::place::conditional_merge(places[n0.index], places[n1.index]));
 	else if (n0.type == transition && n1.type == transition)
 		result = create(hse::transition::parallel_merge(transitions[n0.index], transitions[n1.index]));
-	else // TODO make this an internal failure signal
+	else
+	{
+		internal("hse::graph::duplicate_merge", "iterator types do not match", __FILE__, __LINE__);
 		return iterator();
+	}
 
 	for (int i = (int)arcs[result.type].size(); i >= 0; i--)
 		if (arcs[result.type][i].from == n0 || arcs[result.type][i].from == n1)
@@ -306,8 +310,11 @@ iterator graph::merge(iterator n0, iterator n1)
 		places[n0.index] = hse::place::conditional_merge(places[n0.index], places[n1.index]);
 	else if (n0.type == transition && n1.type == transition)
 		transitions[n0.index] = hse::transition::parallel_merge(transitions[n0.index], transitions[n1.index]);
-	else // TODO make this an internal failure signal
+	else
+	{
+		internal("hse::graph::merge", "iterator types do not match", __FILE__, __LINE__);
 		return iterator();
+	}
 
 	for (int i = 0; i < (int)arcs[n1.type].size(); i++)
 	{
