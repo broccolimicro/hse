@@ -98,21 +98,34 @@ vector<iterator> graph::create(hse::transition t, int num)
 
 iterator graph::connect(iterator from, iterator to)
 {
-	arcs[from.type].push_back(arc(from, to));
+	if (from.type == place && to.type == place)
+	{
+		iterator mid = create(hse::transition());
+		arcs[from.type].push_back(arc(from, mid));
+		arcs[mid.type].push_back(arc(mid, to));
+	}
+	else if (from.type == transition && to.type == transition)
+	{
+		iterator mid = create(hse::place());
+		arcs[from.type].push_back(arc(from, mid));
+		arcs[mid.type].push_back(arc(mid, to));
+	}
+	else
+		arcs[from.type].push_back(arc(from, to));
 	return to;
 }
 
 vector<iterator> graph::connect(iterator from, vector<iterator> to)
 {
 	for (int i = 0; i < (int)to.size(); i++)
-		arcs[from.type].push_back(arc(from, to[i]));
+		connect(from, to[i]);
 	return to;
 }
 
 iterator graph::connect(vector<iterator> from, iterator to)
 {
 	for (int i = 0; i < (int)from.size(); i++)
-		arcs[from[i].type].push_back(arc(from[i], to));
+		connect(from[i], to);
 	return to;
 }
 
@@ -120,7 +133,7 @@ vector<iterator> graph::connect(vector<iterator> from, vector<iterator> to)
 {
 	for (int i = 0; i < (int)from.size(); i++)
 		for (int j = 0; j < (int)to.size(); j++)
-			arcs[from[i].type].push_back(arc(from[i], to[i]));
+			connect(from[i], to[i]);
 	return to;
 }
 

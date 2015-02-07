@@ -52,6 +52,8 @@ struct marking
 
 	vector<enabled_transition> enabled(bool sorted = false);
 	void fire(enabled_transition t);
+
+	vector<iterator> to_raw();
 };
 }
 

@@ -152,4 +152,12 @@ void marking::fire(enabled_transition t)
 		tokens.push_back(token(next[i], t.state));
 }
 
+vector<iterator> marking::to_raw()
+{
+	vector<iterator> result;
+	for (int i = 0; i < (int)tokens.size(); i++)
+		result.push_back(iterator(graph::place, tokens[i].index));
+	return result;
+}
+
 }

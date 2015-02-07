@@ -67,7 +67,7 @@ struct graph
 	}
 
 	template <class node>
-	vector<iterator> push_back(vector<iterator> from, node n, int num = 1)
+	vector<iterator> push_back(vector<iterator> from, node n, int num)
 	{
 		return connect(from, create(n, num));
 	}
