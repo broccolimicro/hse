@@ -12,7 +12,7 @@ namespace hse
 {
 graph::graph()
 {
-
+	reset = 1;
 }
 
 graph::~graph()
@@ -260,6 +260,37 @@ iterator graph::insert_after(iterator from, hse::transition n)
 	return i[transition];
 }
 
+void graph::cut(iterator n)
+{
+	for (int i = (int)arcs[n.type].size(); i >= 0; i--)
+	{
+		if (arcs[n.type][i].from == n)
+			arcs[n.type].erase(arcs[n.type].begin() + i);
+		else if (arcs[n.type][i].from.index > n.index)
+			arcs[n.type][i].from.index--;
+	}
+	for (int i = (int)arcs[1-n.type].size(); i >= 0; i--)
+	{
+		if (arcs[1-n.type][i].to == n)
+			arcs[1-n.type].erase(arcs[1-n.type].begin() + i);
+		else if (arcs[1-n.type][i].to.index > n.index)
+			arcs[1-n.type][i].to.index--;
+	}
+
+	if (n.type == place)
+		places.erase(places.begin() + n.index);
+	else if (n.type == transition)
+		transitions.erase(transitions.begin() + n.index);
+}
+
+void graph::cut(vector<iterator> n, bool rsorted)
+{
+	if (!rsorted)
+		sort(n.rbegin(), n.rend());
+	for (int i = 0; i < (int)n.size(); i++)
+		cut(n[i]);
+}
+
 iterator graph::duplicate(iterator n)
 {
 	iterator d;
@@ -351,35 +382,14 @@ iterator graph::merge(iterator n0, iterator n1)
 	return n0;
 }
 
-void graph::cut(iterator n)
+void graph::merge(vector<iterator> n0, vector<iterator> n1)
 {
-	for (int i = (int)arcs[n.type].size(); i >= 0; i--)
-	{
-		if (arcs[n.type][i].from == n)
-			arcs[n.type].erase(arcs[n.type].begin() + i);
-		else if (arcs[n.type][i].from.index > n.index)
-			arcs[n.type][i].from.index--;
-	}
-	for (int i = (int)arcs[1-n.type].size(); i >= 0; i--)
-	{
-		if (arcs[1-n.type][i].to == n)
-			arcs[1-n.type].erase(arcs[1-n.type].begin() + i);
-		else if (arcs[1-n.type][i].to.index > n.index)
-			arcs[1-n.type][i].to.index--;
-	}
+	for (int i = 0; i < (int)n0.size(); i++)
+		for (int j = 0; j < (int)n1.size(); j++)
+			duplicate_merge(n0[i], n1[j]);
 
-	if (n.type == place)
-		places.erase(places.begin() + n.index);
-	else if (n.type == transition)
-		transitions.erase(transitions.begin() + n.index);
-}
-
-void graph::cut(vector<iterator> n, bool rsorted)
-{
-	if (!rsorted)
-		sort(n.rbegin(), n.rend());
-	for (int i = 0; i < (int)n.size(); i++)
-		cut(n[i]);
+	n0.insert(n0.end(), n1.begin(), n1.end());
+	cut(n0);
 }
 
 void graph::pinch(iterator n)
@@ -413,12 +423,7 @@ void graph::pinch(iterator n)
 	else if (n.type == transition)
 		transitions.erase(transitions.begin() + n.index);
 
-	for (int i = 0; i < (int)from.size(); i++)
-		for (int j = 0; j < (int)to.size(); j++)
-			duplicate_merge(from[i], to[j]);
-
-	cut(from);
-	cut(to);
+	merge(from, to);
 }
 
 void graph::pinch(vector<iterator> n, bool rsorted)
@@ -669,4 +674,81 @@ bool graph::is_floating(iterator n)
 				return false;
 	return true;
 }
+
+map<iterator, iterator> graph::merge(const graph &g)
+{
+	map<iterator, iterator> result;
+
+	places.reserve(places.size() + g.places.size());
+	for (int i = 0; i < (int)g.places.size(); i++)
+	{
+		result.insert(pair<iterator, iterator>(iterator(graph::place, i), iterator(graph::place, (int)places.size())));
+		places.push_back(g.places[i]);
+	}
+
+	transitions.reserve(transitions.size() + g.transitions.size());
+	for (int i = 0; i < (int)g.transitions.size(); i++)
+	{
+		result.insert(pair<iterator, iterator>(iterator(graph::transition, i), iterator(graph::transition, (int)transitions.size())));
+		transitions.push_back(g.transitions[i]);
+	}
+
+	for (int i = 0; i < 2; i++)
+		for (int j = 0; j < (int)g.arcs[i].size(); j++)
+			arcs[i].push_back(arc(result[g.arcs[i][j].from], result[g.arcs[i][j].to]));
+
+	for (int i = 0; i < (int)g.source.size(); i++)
+		source.push_back(result[g.source[i]]);
+
+	for (int i = 0; i < (int)g.sink.size(); i++)
+		sink.push_back(result[g.sink[i]]);
+
+	reset &= g.reset;
+
+	return result;
+}
+
+map<iterator, iterator> graph::sequence(const graph &g)
+{
+	map<iterator, iterator> result;
+
+	places.reserve(places.size() + g.places.size());
+	for (int i = 0; i < (int)g.places.size(); i++)
+	{
+		result.insert(pair<iterator, iterator>(iterator(graph::place, i), iterator(graph::place, (int)places.size())));
+		places.push_back(g.places[i]);
+	}
+
+	transitions.reserve(transitions.size() + g.transitions.size());
+	for (int i = 0; i < (int)g.transitions.size(); i++)
+	{
+		result.insert(pair<iterator, iterator>(iterator(graph::transition, i), iterator(graph::transition, (int)transitions.size())));
+		transitions.push_back(g.transitions[i]);
+	}
+
+	for (int i = 0; i < 2; i++)
+		for (int j = 0; j < (int)g.arcs[i].size(); j++)
+			arcs[i].push_back(arc(result[g.arcs[i][j].from], result[g.arcs[i][j].to]));
+
+	if (sink.size() == 0)
+		for (int i = 0; i < (int)g.source.size(); i++)
+			source.push_back(result[g.source[i]]);
+	else
+		for (int i = 0; i < (int)g.source.size(); i++)
+			connect(sink, result[g.source[i]]);
+
+	sink.clear();
+	for (int i = 0; i < (int)g.sink.size(); i++)
+		sink.push_back(result[g.sink[i]]);
+
+	reset &= g.reset;
+
+	return result;
+}
+
+void graph::compact()
+{
+
+}
+
 }

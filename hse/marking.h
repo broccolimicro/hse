@@ -31,7 +31,7 @@ struct local_token
 
 struct remote_token
 {
-	struct index;
+	struct index
 	{
 		int location;
 		int iteration;

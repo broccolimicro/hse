@@ -6,6 +6,7 @@
  */
 
 #include <common/standard.h>
+#include <boolean/cover.h>
 
 #include "node.h"
 
@@ -28,7 +29,8 @@ struct graph
 	vector<hse::place> places;
 	vector<hse::transition> transitions;
 	vector<arc> arcs[2];
-	vector<int> init;
+	vector<iterator> source, sink;
+	boolean::cube reset;
 
 	iterator begin(int type);
 	iterator end(int type);
@@ -104,14 +106,15 @@ struct graph
 	iterator insert_after(iterator from, hse::place n);
 	iterator insert_after(iterator from, hse::transition n);
 
+	void cut(iterator n);
+	void cut(vector<iterator> n, bool rsorted = false);
+
 	iterator duplicate(iterator n);
 	vector<iterator> duplicate(vector<iterator> n);
 
 	iterator duplicate_merge(iterator n0, iterator n1);
 	iterator merge(iterator n0, iterator n1);
-
-	void cut(iterator n);
-	void cut(vector<iterator> n, bool rsorted = false);
+	void merge(vector<iterator> n0, vector<iterator> n1);
 
 	void pinch(iterator n);
 	void pinch(vector<iterator> n, bool rsorted);
@@ -162,6 +165,11 @@ struct graph
 		else
 			return transitions[i.index];
 	}
+
+	map<iterator, iterator> merge(const graph &g);
+	map<iterator, iterator> sequence(const graph &g);
+
+	void compact();
 };
 }
 
