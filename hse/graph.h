@@ -8,7 +8,6 @@
 #include <common/standard.h>
 
 #include "node.h"
-#include "marking.h"
 
 #ifndef hse_graph_h
 #define hse_graph_h
@@ -29,7 +28,7 @@ struct graph
 	vector<hse::place> places;
 	vector<hse::transition> transitions;
 	vector<arc> arcs[2];
-	marking init;
+	vector<int> init;
 
 	iterator begin(int type);
 	iterator end(int type);

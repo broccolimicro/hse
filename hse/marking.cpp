@@ -10,24 +10,24 @@
 
 namespace hse
 {
-token::token()
+local_token::local_token()
 {
 	index = -1;
 	state = 0;
 }
 
-token::token(int index, boolean::cube state)
+local_token::local_token(int index, boolean::cube state)
 {
 	this->index = index;
 	this->state = state;
 }
 
-token::~token()
+local_token::~local_token()
 {
 
 }
 
-bool token::operator<(token t) const
+bool local_token::operator<(local_token t) const
 {
 	return (index < t.index);
 }
@@ -69,12 +69,12 @@ marking::~marking()
 vector<enabled_transition> marking::enabled(bool sorted)
 {
 	if (!sorted)
-		sort(tokens.begin(), tokens.end());
+		sort(local.begin(), local.end());
 
 	vector<enabled_transition> result;
 	vector<int> disabled;
 
-	// Get the list of transitions have have a sufficient number of tokens at the input places
+	// Get the list of transitions have have a sufficient number of local at the input places
 	for (int i = 0; i < (int)base->arcs[graph::place].size(); i++)
 	{
 		// Check to see if we haven't already determined that this transition can't be enabled
@@ -88,8 +88,8 @@ vector<enabled_transition> marking::enabled(bool sorted)
 			// this token has not already been consumed by this particular transition
 			// Also since we only need one token per arc, we can stop once we've found a token
 			bool found = false;
-			for (int j = 0; j < (int)tokens.size() && !found; j++)
-				if (base->arcs[graph::place][i].from.index == tokens[j].index && (k >= (int)result.size() || find(result[k].tokens.begin(), result[k].tokens.end(), j) == result[k].tokens.end()))
+			for (int j = 0; j < (int)local.size() && !found; j++)
+				if (base->arcs[graph::place][i].from.index == local[j].index && (k >= (int)result.size() || find(result[k].tokens.begin(), result[k].tokens.end(), j) == result[k].tokens.end()))
 				{
 					// We are safe to add this to the list of possibly enabled transitions
 					found = true;
@@ -111,10 +111,10 @@ vector<enabled_transition> marking::enabled(bool sorted)
 		}
 	}
 
-	// Now we have a list of transitions that have enough tokens to consume. We need to figure out their state
+	// Now we have a list of transitions that have enough local to consume. We need to figure out their state
 	for (int i = 0; i < (int)result.size(); i++)
 		for (int j = 0; j < (int)result[i].tokens.size(); j++)
-			result[i].state &= tokens[result[i].tokens[j]].state;
+			result[i].state &= local[result[i].tokens[j]].state;
 
 	// Now we need to check all of the terms against the state
 	for (int i = (int)result.size()-1; i >= 0; i--)
@@ -145,18 +145,38 @@ void marking::fire(enabled_transition t)
 	vector<int> next = base->next(graph::transition, t.index);
 
 	sort(t.tokens.rbegin(), t.tokens.rend());
-	for (int i = 0; i < (int)tokens.size(); i++)
-		tokens.erase(tokens.begin() + t.tokens[i]);
+	for (int i = 0; i < (int)local.size(); i++)
+		local.erase(local.begin() + t.tokens[i]);
 
 	for (int i = 0; i < (int)next.size(); i++)
-		tokens.push_back(token(next[i], t.state));
+		local.push_back(local_token(next[i], t.state));
+}
+
+bool marking::is_marked(iterator loc) const
+{
+	for (int i = 0; i < (int)local.size(); i++)
+		if (loc.type == hse::graph::place && local[i].index == loc.index)
+			return true;
+	return false;
+}
+
+void marking::mark(iterator loc, boolean::cube state)
+{
+	if (loc.type == hse::graph::place)
+		local.push_back(local_token(loc.index, state));
+}
+
+void marking::mark(vector<iterator> loc, boolean::cube state)
+{
+	for (int i = 0; i < (int)loc.size(); i++)
+		mark(loc[i], state);
 }
 
 vector<iterator> marking::to_raw()
 {
 	vector<iterator> result;
-	for (int i = 0; i < (int)tokens.size(); i++)
-		result.push_back(iterator(graph::place, tokens[i].index));
+	for (int i = 0; i < (int)local.size(); i++)
+		result.push_back(iterator(graph::place, local[i].index));
 	return result;
 }
 
