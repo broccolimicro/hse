@@ -260,35 +260,80 @@ iterator graph::insert_after(iterator from, hse::transition n)
 	return i[transition];
 }
 
-void graph::cut(iterator n)
+pair<vector<iterator>, vector<iterator> > graph::cut(iterator n, vector<iterator> *i0, vector<iterator> *i1)
 {
-	for (int i = (int)arcs[n.type].size(); i >= 0; i--)
+	pair<vector<iterator>, vector<iterator> > result;
+	for (int i = (int)arcs[n.type].size()-1; i >= 0; i--)
 	{
-		if (arcs[n.type][i].from == n)
+		if (arcs[n.type][i].from.index == n.index)
+		{
+			result.second.push_back(arcs[n.type][i].to);
 			arcs[n.type].erase(arcs[n.type].begin() + i);
+		}
 		else if (arcs[n.type][i].from.index > n.index)
 			arcs[n.type][i].from.index--;
 	}
-	for (int i = (int)arcs[1-n.type].size(); i >= 0; i--)
+	for (int i = (int)arcs[1-n.type].size()-1; i >= 0; i--)
 	{
-		if (arcs[1-n.type][i].to == n)
+		if (arcs[1-n.type][i].to.index == n.index)
+		{
+			result.first.push_back(arcs[1-n.type][i].from);
 			arcs[1-n.type].erase(arcs[1-n.type].begin() + i);
+		}
 		else if (arcs[1-n.type][i].to.index > n.index)
 			arcs[1-n.type][i].to.index--;
+	}
+
+	for (int i = (int)source.size()-1; i >= 0; i--)
+	{
+		if (source[i] == n)
+			source.erase(source.begin() + i);
+		else if (source[i].type == n.type && source[i].index > n.index)
+			source[i].index--;
+	}
+	for (int i = (int)sink.size()-1; i >= 0; i--)
+	{
+		if (sink[i] == n)
+			sink.erase(sink.begin() + i);
+		else if (sink[i].type == n.type && sink[i].index > n.index)
+			sink[i].index--;
+	}
+
+	if (i0 != NULL)
+	{
+		for (int i = (int)i0->size()-1; i >= 0; i--)
+		{
+			if (i0->at(i) == n)
+				i0->erase(i0->begin() + i);
+			else if (i0->at(i).type == n.type && i0->at(i).index > n.index)
+				i0->at(i).index--;
+		}
+	}
+	if (i1 != NULL)
+	{
+		for (int i = (int)i1->size()-1; i >= 0; i--)
+		{
+			if (i1->at(i) == n)
+				i1->erase(i1->begin() + i);
+			else if (i1->at(i).type == n.type && i1->at(i).index > n.index)
+				i1->at(i).index--;
+		}
 	}
 
 	if (n.type == place)
 		places.erase(places.begin() + n.index);
 	else if (n.type == transition)
 		transitions.erase(transitions.begin() + n.index);
+
+	return result;
 }
 
-void graph::cut(vector<iterator> n, bool rsorted)
+void graph::cut(vector<iterator> n, vector<iterator> *i0, vector<iterator> *i1, bool rsorted)
 {
 	if (!rsorted)
 		sort(n.rbegin(), n.rend());
 	for (int i = 0; i < (int)n.size(); i++)
-		cut(n[i]);
+		cut(n[i], i0, i1);
 }
 
 iterator graph::duplicate(iterator n)
@@ -297,23 +342,28 @@ iterator graph::duplicate(iterator n)
 	if (n.type == place)
 	{
 		d = create(places[n.index]);
-		for (int i = (int)arcs[place].size(); i >= 0; i--)
+		for (int i = (int)arcs[place].size()-1; i >= 0; i--)
 			if (arcs[place][i].from == n)
 				connect(d, arcs[place][i].to);
-		for (int i = (int)arcs[transition].size(); i >= 0; i--)
+		for (int i = (int)arcs[transition].size()-1; i >= 0; i--)
 			if (arcs[transition][i].to == n)
 				connect(arcs[transition][i].from, d);
 	}
 	else if (n.type == transition)
 	{
 		d = create(transitions[n.index]);
-		for (int i = (int)arcs[place].size(); i >= 0; i--)
+		for (int i = (int)arcs[place].size()-1; i >= 0; i--)
 			if (arcs[place][i].to == n)
 				connect(arcs[place][i].from, d);
-		for (int i = (int)arcs[transition].size(); i >= 0; i--)
+		for (int i = (int)arcs[transition].size()-1; i >= 0; i--)
 			if (arcs[transition][i].from == n)
 				connect(d, arcs[transition][i].to);
 	}
+	if (find(source.begin(), source.end(), n) != source.end())
+		source.push_back(d);
+	if (find(sink.begin(), sink.end(), n) != sink.end())
+		sink.push_back(d);
+
 	return d;
 }
 
@@ -339,16 +389,25 @@ iterator graph::duplicate_merge(iterator n0, iterator n1)
 		return iterator();
 	}
 
-	for (int i = (int)arcs[result.type].size(); i >= 0; i--)
+	for (int i = (int)arcs[result.type].size()-1; i >= 0; i--)
 		if (arcs[result.type][i].from == n0 || arcs[result.type][i].from == n1)
 			arcs[result.type].push_back(arc(result, arcs[result.type][i].to));
-	for (int i = (int)arcs[1-result.type].size(); i >= 0; i--)
+	for (int i = (int)arcs[1-result.type].size()-1; i >= 0; i--)
 		if (arcs[1-result.type][i].to == n0 || arcs[1-result.type][i].to == n1)
 			arcs[1-result.type].push_back(arc(arcs[1-result.type][i].from, result));
+
+	bool n0_is_source = find(source.begin(), source.end(), n0) != source.end();
+	bool n0_is_sink = find(sink.begin(), sink.end(), n0) != sink.end();
+	bool n1_is_source = find(source.begin(), source.end(), n1) != source.end();
+	bool n1_is_sink = find(sink.begin(), sink.end(), n1) != sink.end();
+	if (n0_is_source || n1_is_source)
+		source.push_back(result);
+	if (n0_is_sink || n1_is_sink)
+		sink.push_back(result);
 	return result;
 }
 
-iterator graph::merge(iterator n0, iterator n1)
+iterator graph::merge(iterator n0, iterator n1, vector<iterator> *i0, vector<iterator> *i1)
 {
 	if (n0.type == place && n1.type == place)
 		places[n0.index] = hse::place::conditional_merge(places[n0.index], places[n1.index]);
@@ -375,6 +434,63 @@ iterator graph::merge(iterator n0, iterator n1)
 			arcs[1-n1.type][i].to.index--;
 	}
 
+	bool n0_is_source = find(source.begin(), source.end(), n0) != source.end();
+	bool n0_is_sink = find(sink.begin(), sink.end(), n0) != sink.end();
+	bool n1_is_source = find(source.begin(), source.end(), n1) != source.end();
+	bool n1_is_sink = find(sink.begin(), sink.end(), n1) != sink.end();
+	for (int i = (int)source.size()-1; i >= 0; i--)
+	{
+		if (source[i] == n1)
+			source.erase(source.begin() + i);
+		else if (source[i].type == n1.type && source[i].index > n1.index)
+			source[i].index--;
+	}
+	for (int i = (int)sink.size()-1; i >= 0; i--)
+	{
+		if (sink[i] == n1)
+			sink.erase(sink.begin() + i);
+		else if (sink[i].type == n1.type && sink[i].index > n1.index)
+			sink[i].index--;
+	}
+
+	if (n1_is_source && !n0_is_source)
+		source.push_back(n0);
+	if (n1_is_sink && !n0_is_sink)
+		sink.push_back(n0);
+
+	if (i0 != NULL)
+	{
+		bool has_n0 = false;
+		for (int i = (int)i0->size()-1; i >= 0; i--)
+		{
+			if ((i0->at(i) == n1 || i0->at(i) == n0) && !has_n0)
+			{
+				i0->at(i) = n0;
+				has_n0 = true;
+			}
+			else if (i0->at(i) == n1 || i0->at(i) == n0)
+				i0->erase(i0->begin() + i);
+			else if (i0->at(i).type == n1.type && i0->at(i).index > n1.index)
+				i0->at(i).index--;
+		}
+	}
+	if (i1 != NULL)
+	{
+		bool has_n0 = false;
+		for (int i = (int)i1->size()-1; i >= 0; i--)
+		{
+			if ((i1->at(i) == n1 || i1->at(i) == n0) && !has_n0)
+			{
+				i1->at(i) = n0;
+				has_n0 = true;
+			}
+			else if (i1->at(i) == n1 || i1->at(i) == n0)
+				i1->erase(i1->begin() + i);
+			else if (i1->at(i).type == n1.type && i1->at(i).index > n1.index)
+				i1->at(i).index--;
+		}
+	}
+
 	if (n1.type == place)
 		places.erase(places.begin() + n1.index);
 	else if (n1.type == transition)
@@ -382,56 +498,49 @@ iterator graph::merge(iterator n0, iterator n1)
 	return n0;
 }
 
-void graph::merge(vector<iterator> n0, vector<iterator> n1)
+void graph::merge(vector<iterator> n0, vector<iterator> n1, vector<iterator> *i0, vector<iterator> *i1)
 {
 	for (int i = 0; i < (int)n0.size(); i++)
 		for (int j = 0; j < (int)n1.size(); j++)
 			duplicate_merge(n0[i], n1[j]);
 
 	n0.insert(n0.end(), n1.begin(), n1.end());
-	cut(n0);
+	cut(n0, i0, i1);
 }
 
-void graph::pinch(iterator n)
+void graph::pinch(iterator n, vector<iterator> *i0, vector<iterator> *i1)
 {
-	vector<iterator> to;
-	vector<iterator> from;
-
-	for (int i = (int)arcs[n.type].size(); i >= 0; i--)
-	{
-		if (arcs[n.type][i].from.index == n.index)
-		{
-			to.push_back(arcs[n.type][i].to);
-			arcs[n.type].erase(arcs[n.type].begin() + i);
-		}
-		else if (arcs[n.type][i].from.index > n.index)
-			arcs[n.type][i].from.index--;
-	}
-	for (int i = (int)arcs[1-n.type].size(); i >= 0; i--)
-	{
-		if (arcs[1-n.type][i].to.index == n.index)
-		{
-			from.push_back(arcs[1-n.type][i].from);
-			arcs[1-n.type].erase(arcs[1-n.type].begin() + i);
-		}
-		else if (arcs[1-n.type][i].to.index > n.index)
-			arcs[1-n.type][i].to.index--;
-	}
-
-	if (n.type == place)
-		places.erase(places.begin() + n.index);
-	else if (n.type == transition)
-		transitions.erase(transitions.begin() + n.index);
-
-	merge(from, to);
+	pair<vector<iterator>, vector<iterator> > neighbors;
+	neighbors = cut(n, i0, i1);
+	merge(neighbors.first, neighbors.second, i0, i1);
 }
 
-void graph::pinch(vector<iterator> n, bool rsorted)
+void graph::pinch_forward(iterator n, vector<iterator> *i0, vector<iterator> *i1)
 {
-	if (!rsorted)
-		sort(n.rbegin(), n.rend());
-	for (int i = 0; i < (int)n.size(); i++)
-		pinch(n[i]);
+	pair<vector<iterator>, vector<iterator> > neighbors;
+	neighbors = cut(n, i0, i1);
+	sort(neighbors.second.rbegin(), neighbors.second.rend());
+	for (int i = 0; i < (int)neighbors.second.size(); i++)
+	{
+		pair<vector<iterator>, vector<iterator> > next_neighbors;
+		next_neighbors = cut(neighbors.second[i], i0, i1);
+		connect(next_neighbors.first, neighbors.first);
+		connect(neighbors.first, next_neighbors.second);
+	}
+}
+
+void graph::pinch_backward(iterator n, vector<iterator> *i0, vector<iterator> *i1)
+{
+	pair<vector<iterator>, vector<iterator> > neighbors;
+	neighbors = cut(n, i0, i1);
+	sort(neighbors.first.rbegin(), neighbors.first.rend());
+	for (int i = 0; i < (int)neighbors.first.size(); i++)
+	{
+		pair<vector<iterator>, vector<iterator> > prev_neighbors;
+		prev_neighbors = cut(neighbors.first[i], i0, i1);
+		connect(prev_neighbors.first, neighbors.second);
+		connect(neighbors.second, prev_neighbors.second);
+	}
 }
 
 vector<iterator> graph::next(iterator n)
@@ -746,9 +855,171 @@ map<iterator, iterator> graph::sequence(const graph &g)
 	return result;
 }
 
-void graph::compact()
+void graph::compact(bool proper_nesting)
 {
+	bool change = true;
+	while (change)
+	{
+		change = false;
 
+		for (iterator i(hse::graph::transition, 0); i < (int)transitions.size(); )
+		{
+			vector<iterator> n = next(i);
+			vector<iterator> p = prev(i);
+
+			bool affect = false;
+			/* A transition will never be enabled if its action is not physically possible or it doesn't
+			 * have any input arcs. These transitions may be removed while preserving proper nesting, token flow
+			 * stability, non interference, and deadlock freedom.
+			 */
+			if (transitions[i.index].action == 0 || p.size() == 0)
+			{
+				if (find(source.begin(), source.end(), i) != source.end())
+				{
+					source.insert(source.end(), n.begin(), n.end());
+					if (transitions[i.index].type == transition::active)
+						reset = boolean::transition(reset, transitions[i.index].action);
+					else if (transitions[i.index].type == transition::passive)
+						reset &= transitions[i.index].action;
+				}
+
+				cut(i);
+				affect = true;
+			}
+			/* We can know for sure if a transition is vacuous before we've elaborated the state space if
+			 * the transition is the universal cube. These transitions may be pinched while preserving token flow
+			 * stability, non interference, and deadlock freedom. However, proper nesting is not necessarily
+			 * preserved. We have to take special precautions if we want to preserver proper nesting.
+			 */
+			if (!affect && transitions[i.index].action == 1)
+			{
+				if (!proper_nesting)
+				{
+					pinch(i);
+					affect = true;
+				}
+				else
+				{
+					vector<iterator> np = next(p);
+					vector<iterator> pn = prev(n);
+
+					if (p.size() == 1 && n.size() == 1 && np.size() == 1 && pn.size() == 1)
+					{
+						pinch(i);
+						affect = true;
+					}
+					else
+					{
+						vector<iterator> nn = next(n);
+						vector<iterator> nnp = next(np);
+						vector<iterator> pp = prev(p);
+						vector<iterator> ppn = prev(pn);
+
+						if (n.size() == 1 && nn.size() == 1 && nnp.size() == 1 && np.size() == 1)
+						{
+							pinch_forward(i);
+							affect = true;
+						}
+						else if (p.size() == 1 && pp.size() == 1 && ppn.size() == 1 && pn.size() == 1)
+						{
+							pinch_backward(i);
+							affect = true;
+						}
+					}
+				}
+			}
+
+			if (!affect)
+				i++;
+			else
+				change = true;
+		}
+
+		for (iterator i(hse::graph::place, 0); i < (int)places.size(); )
+		{
+			vector<iterator> n = next(i);
+			vector<iterator> p = prev(i);
+
+			bool affect = false;
+
+			/* We know a place will never be marked if it is not in the initial marking and it has no input arcs
+			 * Furthermore, if the place is in the initial marking and it has only one output transition, we can
+			 * just fire its output transition on reset.
+			 */
+			if (p.size() == 0)
+			{
+				vector<iterator>::iterator s = find(source.begin(), source.end(), i);
+				if (s != source.end() && n.size() <= 1)
+				{
+					if (n.size() == 1)
+						*s = n.back();
+
+					cut(i);
+					affect = true;
+				}
+				else if (s == source.end())
+				{
+					cut(i);
+					affect = true;
+				}
+			}
+			/* Identify implicit internal choice and make it explicit internal choice.
+			 * First find a place with multiple output transitions (a conditional split)
+			 */
+			if (!affect && n.size() > 1)
+			{
+				// Then check to see if the types (active or passive) of all the output transitions match
+				bool internal_choice = true;
+				for (int j = 1; j < (int)n.size() && internal_choice; j++)
+					if (transitions[n[j].index].type != transitions[n[0].index].type)
+						internal_choice = false;
+
+				if (internal_choice)
+				{
+					// Next we need to make sure all of their input and output places match
+					vector<iterator> nn = next(n[0]);
+					vector<iterator> pn = prev(n[0]);
+
+					sort(nn.begin(), nn.end());
+					sort(pn.begin(), pn.end());
+
+					for (int j = 1; j < (int)n.size() && internal_choice; j++)
+					{
+						vector<iterator> jnn = next(n[j]);
+						sort(jnn.begin(), jnn.end());
+
+						if (jnn != nn)
+							internal_choice = false;
+
+						if (internal_choice)
+						{
+							vector<iterator> jpn = prev(n[j]);
+							sort(jpn.begin(), jpn.end());
+
+							if (jpn != pn)
+								internal_choice = false;
+						}
+					}
+
+					// Now we can do the merge
+					if (internal_choice)
+					{
+						for (int j = 1; j < (int)n.size(); j++)
+							transitions[n[0].index] = hse::transition::conditional_merge(transitions[n[0].index], transitions[n[j].index]);
+
+						n.erase(n.begin());
+						cut(n);
+						affect = true;
+					}
+				}
+			}
+
+			if (!affect)
+				i++;
+			else
+				change = true;
+		}
+	}
 }
 
 }

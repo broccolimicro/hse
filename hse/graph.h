@@ -9,6 +9,7 @@
 #include <boolean/cover.h>
 
 #include "node.h"
+#include "token.h"
 
 #ifndef hse_graph_h
 #define hse_graph_h
@@ -30,7 +31,7 @@ struct graph
 	vector<hse::transition> transitions;
 	vector<arc> arcs[2];
 	vector<iterator> source, sink;
-	boolean::cube reset;
+	boolean::cover reset;
 
 	iterator begin(int type);
 	iterator end(int type);
@@ -106,18 +107,19 @@ struct graph
 	iterator insert_after(iterator from, hse::place n);
 	iterator insert_after(iterator from, hse::transition n);
 
-	void cut(iterator n);
-	void cut(vector<iterator> n, bool rsorted = false);
+	pair<vector<iterator>, vector<iterator> > cut(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
+	void cut(vector<iterator> n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL, bool rsorted = false);
 
 	iterator duplicate(iterator n);
 	vector<iterator> duplicate(vector<iterator> n);
 
 	iterator duplicate_merge(iterator n0, iterator n1);
-	iterator merge(iterator n0, iterator n1);
-	void merge(vector<iterator> n0, vector<iterator> n1);
+	iterator merge(iterator n0, iterator n1, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
+	void merge(vector<iterator> n0, vector<iterator> n1, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 
-	void pinch(iterator n);
-	void pinch(vector<iterator> n, bool rsorted);
+	void pinch(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
+	void pinch_forward(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
+	void pinch_backward(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 
 	vector<iterator> next(iterator n);
 	vector<iterator> next(vector<iterator> n);
@@ -169,7 +171,7 @@ struct graph
 	map<iterator, iterator> merge(const graph &g);
 	map<iterator, iterator> sequence(const graph &g);
 
-	void compact();
+	void compact(bool proper_nesting = false);
 };
 }
 

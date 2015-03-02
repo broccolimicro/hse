@@ -176,6 +176,36 @@ bool iterator::operator>=(iterator i) const
 		   (type == i.type && index >= i.index));
 }
 
+bool iterator::operator==(int i) const
+{
+	return index == i;
+}
+
+bool iterator::operator!=(int i) const
+{
+	return index != i;
+}
+
+bool iterator::operator<(int i) const
+{
+	return index < i;
+}
+
+bool iterator::operator>(int i) const
+{
+	return index > i;
+}
+
+bool iterator::operator<=(int i) const
+{
+	return index <= i;
+}
+
+bool iterator::operator>=(int i) const
+{
+	return index >= i;
+}
+
 arc::arc()
 {
 

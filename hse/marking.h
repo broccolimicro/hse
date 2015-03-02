@@ -9,6 +9,7 @@
 #include <boolean/cube.h>
 
 #include "node.h"
+#include "token.h"
 #include "graph.h"
 
 #ifndef hse_marking_h
@@ -16,38 +17,6 @@
 
 namespace hse
 {
-
-struct local_token
-{
-	local_token();
-	local_token(int index, boolean::cube state);
-	~local_token();
-
-	int index;
-	boolean::cube state;
-
-	bool operator<(local_token t) const;
-};
-
-struct remote_token
-{
-	struct index
-	{
-		int location;
-		int iteration;
-	};
-
-	struct arc
-	{
-		index from;
-		index to;
-	};
-
-	vector<index> begin;
-	vector<index> end;
-	vector<arc> arcs;
-	vector<int> place_visit_count;
-};
 
 struct enabled_transition
 {

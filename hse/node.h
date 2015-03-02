@@ -70,6 +70,13 @@ struct iterator
 	bool operator>(iterator i) const;
 	bool operator<=(iterator i) const;
 	bool operator>=(iterator i) const;
+
+	bool operator==(int i) const;
+	bool operator!=(int i) const;
+	bool operator<(int i) const;
+	bool operator>(int i) const;
+	bool operator<=(int i) const;
+	bool operator>=(int i) const;
 };
 
 struct arc

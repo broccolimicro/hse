@@ -10,27 +10,6 @@
 
 namespace hse
 {
-local_token::local_token()
-{
-	index = -1;
-	state = 0;
-}
-
-local_token::local_token(int index, boolean::cube state)
-{
-	this->index = index;
-	this->state = state;
-}
-
-local_token::~local_token()
-{
-
-}
-
-bool local_token::operator<(local_token t) const
-{
-	return (index < t.index);
-}
 
 enabled_transition::enabled_transition()
 {
