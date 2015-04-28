@@ -12,22 +12,27 @@
 
 namespace hse
 {
+enum relation
+{
+	parallel = 0,
+	choice = 1,
+	sequence = 2
+};
+
 struct place
 {
 	place();
 	~place();
 
+	static const int type = 0;
 	boolean::cover predicate;
 	boolean::cover effective;
-
-	static place parallel_merge(place p0, place p1);
-	static place conditional_merge(place p0, place p1);
 };
 
 struct transition
 {
 	transition();
-	transition(int type, boolean::cover action = 1);
+	transition(int behavior, boolean::cover action = 1);
 	~transition();
 
 	enum
@@ -36,12 +41,13 @@ struct transition
 		active = 1
 	};
 
+	static const int type = 1;
 	boolean::cover action;
-	int type;
-
-	static transition parallel_merge(transition t0, transition t1);
-	static transition conditional_merge(transition t0, transition t1);
+	int behavior;
 };
+
+place merge(int relation, place p0, place p1);
+transition merge(int relation, transition t0, transition t1);
 
 struct iterator
 {
@@ -88,6 +94,19 @@ struct arc
 	iterator from;
 	iterator to;
 };
+
+struct half_synchronization
+{
+	half_synchronization();
+	~half_synchronization();
+
+	struct
+	{
+		int index;
+		int cube;
+	} active, passive;
+};
+
 }
 
 #endif

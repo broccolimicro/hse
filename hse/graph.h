@@ -9,7 +9,6 @@
 #include <boolean/cover.h>
 
 #include "node.h"
-#include "token.h"
 
 #ifndef hse_graph_h
 #define hse_graph_h
@@ -21,29 +20,32 @@ struct graph
 	graph();
 	~graph();
 
-	enum
-	{
-		place = 0,
-		transition = 1
-	};
-
-	vector<hse::place> places;
-	vector<hse::transition> transitions;
+	vector<place> places;
+	vector<transition> transitions;
 	vector<arc> arcs[2];
 	vector<iterator> source, sink;
 	boolean::cover reset;
+
+	vector<half_synchronization> synchronizations;
 
 	iterator begin(int type);
 	iterator end(int type);
 	iterator begin_arc(int type);
 	iterator end_arc(int type);
 
-	iterator create(hse::place p);
-	iterator create(hse::transition t);
-	vector<iterator> create(vector<hse::place> p);
-	vector<iterator> create(vector<hse::transition> t);
-	vector<iterator> create(hse::place p, int num);
-	vector<iterator> create(hse::transition t, int num);
+	iterator create(place p);
+	iterator create(transition t);
+	iterator create(int n);
+	vector<iterator> create(vector<place> p);
+	vector<iterator> create(vector<transition> t);
+	vector<iterator> create(place p, int num);
+	vector<iterator> create(transition t, int num);
+	vector<iterator> create(int n, int num);
+	iterator copy(iterator i);
+	vector<iterator> copy(iterator i, int num);
+	vector<iterator> copy(vector<iterator> i, int num = 1);
+	iterator copy_combine(int relation, iterator i0, iterator i1);
+	iterator combine(int relation, iterator i0, iterator i1);
 
 	iterator connect(iterator from, iterator to);
 	vector<iterator> connect(iterator from, vector<iterator> to);
@@ -98,28 +100,27 @@ struct graph
 		return connect(create(n, num), to);
 	}
 
-	iterator insert(iterator a, hse::place n);
-	iterator insert(iterator a, hse::transition n);
-	iterator insert_alongside(iterator from, iterator to, hse::place n);
-	iterator insert_alongside(iterator from, iterator to, hse::transition n);
-	iterator insert_before(iterator to, hse::place n);
-	iterator insert_before(iterator to, hse::transition n);
-	iterator insert_after(iterator from, hse::place n);
-	iterator insert_after(iterator from, hse::transition n);
+	iterator insert(iterator a, place n);
+	iterator insert(iterator a, transition n);
+	iterator insert(iterator a, int n);
+	iterator insert_alongside(iterator from, iterator to, place n);
+	iterator insert_alongside(iterator from, iterator to, transition n);
+	iterator insert_alongside(iterator from, iterator to, int n);
+	iterator insert_before(iterator to, place n);
+	iterator insert_before(iterator to, transition n);
+	iterator insert_before(iterator to, int n);
+	iterator insert_after(iterator from, place n);
+	iterator insert_after(iterator from, transition n);
+	iterator insert_after(iterator from, int n);
 
 	pair<vector<iterator>, vector<iterator> > cut(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 	void cut(vector<iterator> n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL, bool rsorted = false);
 
-	iterator duplicate(iterator n);
-	vector<iterator> duplicate(vector<iterator> n);
-
-	iterator duplicate_merge(iterator n0, iterator n1);
-	iterator merge(iterator n0, iterator n1, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
-	void merge(vector<iterator> n0, vector<iterator> n1, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
+	iterator duplicate(int relation, iterator i);
+	vector<iterator> duplicate(int relation, iterator i, int num);
+	vector<iterator> duplicate(int relation, vector<iterator> i, int num = 1, bool interleaved = false);
 
 	void pinch(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
-	void pinch_forward(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
-	void pinch_backward(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 
 	vector<iterator> next(iterator n);
 	vector<iterator> next(vector<iterator> n);
@@ -153,7 +154,7 @@ struct graph
 	template <class node>
 	node &operator[](iterator i)
 	{
-		if (i.type == place)
+		if (i.type == place::type)
 			return places[i.index];
 		else
 			return transitions[i.index];
@@ -162,7 +163,7 @@ struct graph
 	template <class node>
 	node &at(iterator i)
 	{
-		if (i.type == place)
+		if (i.type == place::type)
 			return places[i.index];
 		else
 			return transitions[i.index];
@@ -172,6 +173,9 @@ struct graph
 	map<iterator, iterator> sequence(const graph &g);
 
 	void compact(bool proper_nesting = false);
+	void synchronize();
+	void unravel();
+	void elaborate();
 };
 }
 

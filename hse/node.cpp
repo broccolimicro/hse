@@ -19,31 +19,15 @@ place::~place()
 
 }
 
-place place::parallel_merge(place p0, place p1)
-{
-	place result;
-	result.effective = p0.effective & p1.effective;
-	result.predicate = p0.predicate & p1.predicate;
-	return result;
-}
-
-place place::conditional_merge(place p0, place p1)
-{
-	place result;
-	result.effective = p0.effective | p1.effective;
-	result.predicate = p0.predicate | p1.predicate;
-	return result;
-}
-
 transition::transition()
 {
-	type = active;
+	behavior = active;
 	action = 1;
 }
 
-transition::transition(int type, boolean::cover action)
+transition::transition(int behavior, boolean::cover action)
 {
-	this->type = type;
+	this->behavior = behavior;
 	this->action = action;
 }
 
@@ -52,19 +36,35 @@ transition::~transition()
 
 }
 
-transition transition::parallel_merge(transition t0, transition t1)
+place merge(int relation, place p0, place p1)
 {
-	transition result;
-	result.action = t0.action & t1.action;
-	result.type = t0.type;
+	place result;
+	if (relation == parallel)
+	{
+		result.effective = p0.effective & p1.effective;
+		result.predicate = p0.predicate & p1.predicate;
+	}
+	else if (relation == choice)
+	{
+		result.effective = p0.effective | p1.effective;
+		result.predicate = p0.predicate | p1.predicate;
+	}
 	return result;
 }
 
-transition transition::conditional_merge(transition t0, transition t1)
+transition merge(int relation, transition t0, transition t1)
 {
 	transition result;
-	result.action = t0.action | t1.action;
-	result.type = t0.type;
+	if (relation == parallel)
+	{
+		result.action = t0.action & t1.action;
+		result.behavior = t0.behavior;
+	}
+	else if (relation == choice)
+	{
+		result.action = t0.action | t1.action;
+		result.behavior = t0.behavior;
+	}
 	return result;
 }
 
@@ -221,4 +221,18 @@ arc::~arc()
 {
 
 }
+
+half_synchronization::half_synchronization()
+{
+	active.index = 0;
+	active.cube = 0;
+	passive.index = 0;
+	passive.cube = 0;
+}
+
+half_synchronization::~half_synchronization()
+{
+
+}
+
 }
