@@ -49,7 +49,23 @@ struct simulator
 	int disabled_global(bool sorted = false);
 	void begin(int index);
 	void end(int index);
+
+	struct state
+	{
+		vector<int> tokens;
+		boolean::cube encoding;
+	};
+
+	state get_state();
+	vector<int> get_choice(int i);
 };
+
+bool operator<(simulator::state s1, simulator::state s2);
+bool operator>(simulator::state s1, simulator::state s2);
+bool operator<=(simulator::state s1, simulator::state s2);
+bool operator>=(simulator::state s1, simulator::state s2);
+bool operator==(simulator::state s1, simulator::state s2);
+bool operator!=(simulator::state s1, simulator::state s2);
 
 }
 

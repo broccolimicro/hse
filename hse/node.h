@@ -22,6 +22,7 @@ enum relation
 struct place
 {
 	place();
+	place(boolean::cover predicate);
 	~place();
 
 	static const int type = 0;
@@ -44,6 +45,8 @@ struct transition
 	static const int type = 1;
 	boolean::cover action;
 	int behavior;
+
+	transition subdivide(int term);
 };
 
 place merge(int relation, place p0, place p1);
@@ -105,6 +108,15 @@ struct half_synchronization
 		int index;
 		int cube;
 	} active, passive;
+};
+
+struct synchronization_region
+{
+	synchronization_region();
+	~synchronization_region();
+
+	boolean::cover action;
+	vector<iterator> nodes;
 };
 
 }

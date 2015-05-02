@@ -14,6 +14,12 @@ place::place()
 
 }
 
+place::place(boolean::cover predicate)
+{
+	this->predicate = predicate;
+	this->effective = predicate;
+}
+
 place::~place()
 {
 
@@ -34,6 +40,11 @@ transition::transition(int behavior, boolean::cover action)
 transition::~transition()
 {
 
+}
+
+transition transition::subdivide(int term)
+{
+	return transition(behavior, boolean::cover(action.cubes[term]));
 }
 
 place merge(int relation, place p0, place p1)
@@ -231,6 +242,16 @@ half_synchronization::half_synchronization()
 }
 
 half_synchronization::~half_synchronization()
+{
+
+}
+
+synchronization_region::synchronization_region()
+{
+
+}
+
+synchronization_region::~synchronization_region()
 {
 
 }

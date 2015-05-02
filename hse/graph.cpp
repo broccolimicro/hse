@@ -80,7 +80,7 @@ vector<iterator> graph::create(vector<transition> t)
 	for (int i = 0; i < (int)t.size(); i++)
 	{
 		transitions.push_back(t[i]);
-		result.push_back(iterator(place::type, (int)transitions.size()-1));
+		result.push_back(iterator(transition::type, (int)transitions.size()-1));
 	}
 	return result;
 }
@@ -102,7 +102,7 @@ vector<iterator> graph::create(transition t, int num)
 	for (int i = 0; i < num; i++)
 	{
 		transitions.push_back(t);
-		result.push_back(iterator(place::type, (int)transitions.size()-1));
+		result.push_back(iterator(transition::type, (int)transitions.size()-1));
 	}
 	return result;
 }
@@ -488,7 +488,7 @@ void graph::cut(vector<iterator> n, vector<iterator> *i0, vector<iterator> *i1, 
 		cut(n[i], i0, i1);
 }
 
-iterator graph::duplicate(int relation, iterator i)
+iterator graph::duplicate(int relation, iterator i, bool add)
 {
 	iterator d = copy(i);
 	if (i.type == relation)
@@ -500,7 +500,7 @@ iterator graph::duplicate(int relation, iterator i)
 			if (arcs[1-i.type][j].to == i)
 				connect(arcs[1-i.type][j].from, d);
 	}
-	else
+	else if (add)
 	{
 		vector<iterator> x = create(1-i.type, 4);
 		vector<iterator> y = create(i.type, 2);
@@ -521,6 +521,27 @@ iterator graph::duplicate(int relation, iterator i)
 		connect(x[2], y[1]);
 		connect(x[3], y[1]);
 	}
+	else
+	{
+		vector<iterator> n = next(i);
+		vector<iterator> p = prev(i);
+
+		for (int j = 0; j < 2; j++)
+			for (int k = (int)arcs[j].size()-1; k >= 0; k--)
+				if (arcs[j][k].from == i || arcs[j][k].to == i)
+					arcs[j].erase(arcs[j].begin() + k);
+
+		vector<iterator> n1, p1;
+		for (int l = 0; l < (int)n.size(); l++)
+			n1.push_back(duplicate(relation, n[l]));
+		for (int l = 0; l < (int)p.size(); l++)
+			p1.push_back(duplicate(relation, p[l]));
+
+		connect(p1, d);
+		connect(d, n1);
+		connect(p, i);
+		connect(i, n);
+	}
 
 	if (find(source.begin(), source.end(), i) != source.end())
 		source.push_back(d);
@@ -531,7 +552,7 @@ iterator graph::duplicate(int relation, iterator i)
 	return d;
 }
 
-vector<iterator> graph::duplicate(int relation, iterator i, int num)
+vector<iterator> graph::duplicate(int relation, iterator i, int num, bool add)
 {
 	vector<iterator> d = copy(i, num-1);
 	if (i.type == relation)
@@ -545,7 +566,7 @@ vector<iterator> graph::duplicate(int relation, iterator i, int num)
 				for (int k = 0; k < (int)d.size(); k++)
 					connect(arcs[1-i.type][j].from, d[k]);
 	}
-	else
+	else if (add)
 	{
 		vector<iterator> x = create(1-i.type, 2*(num-1));
 		vector<iterator> y = create(i.type, 2);
@@ -571,6 +592,30 @@ vector<iterator> graph::duplicate(int relation, iterator i, int num)
 			connect(x[k*2 + 1], y[1]);
 		}
 	}
+	else
+	{
+		vector<iterator> n = next(i);
+		vector<iterator> p = prev(i);
+
+		for (int j = 0; j < 2; j++)
+			for (int k = (int)arcs[j].size()-1; k >= 0; k--)
+				if (arcs[j][k].from == i || arcs[j][k].to == i)
+					arcs[j].erase(arcs[j].begin() + k);
+
+		for (int k = 0; k < num-1; k++)
+		{
+			vector<iterator> n1, p1;
+			for (int l = 0; l < (int)n.size(); l++)
+				n1.push_back(duplicate(relation, n[l]));
+			for (int l = 0; l < (int)p.size(); l++)
+				p1.push_back(duplicate(relation, p[l]));
+
+			connect(p1, d[k]);
+			connect(d[k], n1);
+		}
+		connect(p, i);
+		connect(i, n);
+	}
 
 	if (find(source.begin(), source.end(), i) != source.end())
 		source.insert(source.end(), d.begin(), d.end());
@@ -582,13 +627,13 @@ vector<iterator> graph::duplicate(int relation, iterator i, int num)
 	return d;
 }
 
-vector<iterator> graph::duplicate(int relation, vector<iterator> n, int num, bool interleaved)
+vector<iterator> graph::duplicate(int relation, vector<iterator> n, int num, bool interleaved, bool add)
 {
 	vector<iterator> result;
 	result.reserve(n.size()*num);
 	for (int i = 0; i < (int)n.size(); i++)
 	{
-		vector<iterator> temp = duplicate(relation, n[i], num);
+		vector<iterator> temp = duplicate(relation, n[i], num, add);
 		if (interleaved && i > 0)
 			for (int j = 0; j < (int)temp.size(); j++)
 				result.insert(result.begin() + j*(i+1) + 1, temp[j]);
@@ -1040,8 +1085,8 @@ void graph::compact(bool proper_nesting)
 			 * then we can just fire the transition, accumulate its effect in the reset state and move the
 			 * source tokens forward.
 			 */
-			/*sort(source.begin(), source.end());
-			if (!affect && transitions[i.index].behavior == transition::active && vector_intersection_size(p, source) == (int)p.size())
+			sort(source.begin(), source.end());
+			if (!affect && transitions[i.index].behavior == transition::active && transitions[i.index].action.cubes.size() == 1 && vector_intersection_size(p, source) == (int)p.size())
 			{
 				vector<iterator> pn = next(p);
 				sort(pn.begin(), pn.end());
@@ -1059,10 +1104,10 @@ void graph::compact(bool proper_nesting)
 							j++;
 					}
 					source.insert(source.end(), n.begin(), n.end());
-					reset = boolean::local_transition(reset, transitions[i.index].action);
+					reset = boolean::local_transition(reset, transitions[i.index].action.cubes[0]);
 					affect = true;
 				}
-			}*/
+			}
 
 			if (!affect)
 				i++;
@@ -1183,6 +1228,31 @@ void graph::compact(bool proper_nesting)
 	}
 }
 
+void graph::reachability()
+{
+	int nodes = (int)(places.size() + transitions.size());
+	reach.assign(nodes*nodes, false);
+	for (int i = 0; i < 2; i++)
+		for (int j = 0; j < (int)arcs[i].size(); j++)
+			reach[(places.size()*arcs[i][j].from.type + arcs[i][j].from.index)*nodes + (places.size()*arcs[i][j].to.type + arcs[i][j].to.index)] = true;
+
+	vector<bool> old_reach;
+	while (old_reach != reach)
+	{
+		old_reach = reach;
+		for (int i = 0; i < nodes; i++)
+			for (int j = 0; j < nodes; j++)
+				if (reach[i*nodes + j])
+					for (int k = 0; k < nodes; k++)
+						reach[i*nodes + k] = (reach[i*nodes + k] || reach[j*nodes + k]);
+	}
+}
+
+bool graph::is_reachable(iterator from, iterator to)
+{
+	return reach[(places.size()*from.type + from.index)*(places.size() + transitions.size()) + (places.size()*to.type + to.index)];
+}
+
 void graph::synchronize()
 {
 	half_synchronization sync;
@@ -1196,14 +1266,319 @@ void graph::synchronize()
 								synchronizations.push_back(sync);
 }
 
-void graph::unravel()
+void graph::petrify()
 {
+	// Petri nets don't support internal parallelism or choice, so we have to expand those transitions.
+	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+	{
+		if (transitions[i.index].behavior == transition::active && transitions[i.index].action.cubes.size() > 1)
+		{
+			vector<iterator> k = duplicate(choice, i, transitions[i.index].action.cubes.size(), false);
+			for (int j = 0; j < (int)k.size(); j++)
+				transitions[k[j].index].action = boolean::cover(transitions[k[j].index].action.cubes[j]);
+		}
+	}
 
+	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+	{
+		if (transitions[i.index].behavior == transition::active && transitions[i.index].action.cubes.size() == 1)
+		{
+			vector<int> vars = transitions[i.index].action.cubes[0].vars();
+			if (vars.size() > 1)
+			{
+				vector<iterator> k = duplicate(parallel, i, vars.size(), false);
+				for (int j = 0; j < (int)k.size(); j++)
+					transitions[k[j].index].action.cubes[0] = boolean::cube(vars[j], transitions[k[j].index].action.cubes[0].get(vars[j]));
+			}
+		}
+	}
+
+	// Find all of the guards
+	vector<iterator> passive;
+	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+		if (transitions[i.index].behavior == transition::passive)
+			passive.push_back(i);
+
+	synchronize();
+
+	/* Implement each guard in the petri net. As of now, this is done
+	 * syntactically meaning that a few assumptions are made. First, if
+	 * there are two transitions that affect the same variable in a guard,
+	 * then they must be composed in condition. If they are not, then the
+	 * net will not be 1-bounded. Second, you cannot have two guards on
+	 * separate conditional branches that both have a cube which checks the
+	 * same value for the same variable. Once again, if you do, the net
+	 * will not be one bounded. There are probably other issues that I haven't
+	 * uncovered yet, but just beware.
+	 */
+	for (int i = 0; i < (int)passive.size(); i++)
+	{
+		if (!transitions[passive[i].index].action.is_tautology())
+		{
+			// Find all of the half synchronization actions for this guard and group them accordingly:
+			// outside group is by disjunction, middle group is by conjunction, and inside group is by value and variable.
+			vector<vector<vector<iterator> > > sync;
+			sync.resize(transitions[passive[i].index].action.cubes.size());
+			for (int j = 0; j < (int)synchronizations.size(); j++)
+				if (synchronizations[j].passive.index == passive[i].index)
+				{
+					bool found = false;
+					for (int l = 0; l < (int)sync[synchronizations[j].passive.cube].size(); l++)
+						if (similarity_g0(transitions[sync[synchronizations[j].passive.cube][l][0].index].action.cubes[0], transitions[synchronizations[j].active.index].action.cubes[0]))
+						{
+							found = true;
+							sync[synchronizations[j].passive.cube][l].push_back(iterator(transition::type, synchronizations[j].active.index));
+						}
+
+					if (!found)
+						sync[synchronizations[j].passive.cube].push_back(vector<iterator>(1, iterator(transition::type, synchronizations[j].active.index)));
+				}
+
+			/* Finally implement the connections. The basic observation being that a guard affects when the next
+			 * transition can fire.
+			 */
+			vector<iterator> n = next(passive[i]);
+			vector<iterator> g = create(place(), n.size());
+			for (int j = 0; j < (int)n.size(); j++)
+				connect(g[j], next(n[j]));
+
+			for (int j = 0; j < (int)sync.size(); j++)
+			{
+				iterator t = create(transition());
+				connect(t, g);
+				for (int k = 0; k < (int)sync[j].size(); k++)
+				{
+					iterator p = create(place());
+					connect(p, t);
+					connect(sync[j][k], p);
+				}
+			}
+		}
+	}
+
+	// Remove the guards from the graph
+	vector<iterator> n = next(passive), p = prev(passive);
+	passive.insert(passive.end(), n.begin(), n.end());
+	passive.insert(passive.end(), p.begin(), p.end());
+	sort(passive.begin(), passive.end());
+	passive.resize(unique(passive.begin(), passive.end()) - passive.begin());
+
+	cut(passive);
+
+	synchronizations.clear();
+
+	// Clean up
+	compact();
 }
 
 void graph::elaborate()
 {
+	for (int i = 0; i < (int)places.size(); i++)
+	{
+		places[i].predicate = boolean::cover();
+		places[i].effective = boolean::cover();
+	}
 
+	vector<simulator::state> states;
+	vector<simulator> simulations;
+
+	// Set up the first simulation that starts at the reset state
+	simulations.push_back(simulator(this));
+
+	// Record the reset state in our map of visited states
+	states.push_back(simulations.back().get_state());
+
+	while (simulations.size() > 0)
+	{
+		simulator sim = simulations.back();
+		simulations.pop_back();
+
+		int enabled = sim.enabled();
+		simulations.reserve(simulations.size() + enabled);
+		for (int i = 0; i < enabled; i++)
+		{
+			simulations.push_back(sim);
+			enabled_transition e = simulations.back().local.ready[i];
+
+			// Fire the transition in the simulation
+			simulations.back().fire(i);
+
+			// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
+			// and if it is not, then we need to put the state in and continue on our way.
+			simulator::state state = simulations.back().get_state();
+			vector<simulator::state>::iterator loc = lower_bound(states.begin(), states.end(), state);
+			if (*loc == state)
+				simulations.pop_back();
+			else
+				states.insert(loc, state);
+		}
+
+		for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+		{
+			boolean::cover effective = sim.local.tokens[i].state;
+			places[sim.local.tokens[i].index].predicate |= effective;
+
+			for (int j = 0; j < enabled; j++)
+				if (find(sim.local.ready[j].local_tokens.begin(), sim.local.ready[j].local_tokens.end(), i) != sim.local.ready[j].local_tokens.end())
+					effective &= ~transitions[sim.local.ready[j].index].action[sim.local.ready[j].term];
+
+			places[sim.local.tokens[i].index].effective |= effective;
+		}
+	}
+}
+
+/** to_state_graph()
+ *
+ * This converts a given graph to the fully expanded state space through simulation. It systematically
+ * simulates all possible transition orderings and determines all of the resulting state information.
+ */
+graph graph::to_state_graph()
+{
+	graph result;
+	map<simulator::state, hse::iterator> states;
+	vector<pair<simulator, hse::iterator> > simulations;
+	vector<pair<int, int> > to_merge;
+
+	// Set up the initial state which is determined by the reset behavior
+	hse::iterator initial_state = result.create(place(boolean::cover(reset)));
+	result.source.push_back(initial_state);
+
+	// Set up the first simulation that starts at the reset state
+	simulations.push_back(pair<simulator, hse::iterator>(simulator(this), initial_state));
+
+	// Record the reset state in our map of visited states
+	states.insert(pair<simulator::state, hse::iterator>(simulations.back().first.get_state(), initial_state));
+
+	while (simulations.size() > 0)
+	{
+		pair<simulator, hse::iterator> sim = simulations.back();
+		simulations.pop_back();
+
+		int enabled = sim.first.enabled();
+		simulations.reserve(simulations.size() + enabled);
+		for (int i = 0; i < enabled; i++)
+		{
+			simulations.push_back(sim);
+			enabled_transition e = simulations.back().first.local.ready[i];
+
+			if (transitions[e.index].behavior == transition::active)
+			{
+				// Look to see if this transition has already been drawn in the state graph
+				// We know by construction that every transition in the state graph will have exactly one cube
+				// and that every transition will be active
+				hse::iterator n(hse::place::type, -1);
+				for (int j = 0; j < (int)result.arcs[hse::place::type].size() && n.index == -1; j++)
+					if (result.arcs[hse::place::type][j].from == simulations.back().second &&
+						result.transitions[result.arcs[hse::place::type][j].to.index].action.cubes[0] == transitions[e.index].action.cubes[e.term])
+					{
+						simulations.back().second = result.arcs[hse::place::type][j].to;
+						for (int k = 0; k < (int)result.arcs[hse::transition::type].size() && n == -1; k++)
+							if (result.arcs[hse::transition::type][k].from == simulations.back().second)
+								n = result.arcs[hse::transition::type][k].to;
+					}
+
+				// Since it isn't already in the state graph, we need to draw it
+				if (n.index == -1)
+					simulations.back().second = result.push_back(simulations.back().second, transitions[e.index].subdivide(e.term));
+
+				// Fire the transition in the simulation
+				simulations.back().first.fire(i);
+
+				// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
+				// and if it is not, then we need to put the state in and continue on our way.
+				simulator::state state = simulations.back().first.get_state();
+				map<simulator::state, iterator>::iterator loc = states.find(state);
+				if (loc != states.end() && n.index == -1)
+				{
+					result.connect(simulations.back().second, loc->second);
+					simulations.pop_back();
+				}
+				else if (loc != states.end() && n.index != -1)
+				{
+					// If we find duplicate records of the same state, then we'll need to merge them later.
+					if (loc->second.index > n.index)
+						to_merge.push_back(pair<int, int>(loc->second.index, n.index));
+					else if (n.index > loc->second.index)
+						to_merge.push_back(pair<int, int>(n.index, loc->second.index));
+					simulations.pop_back();
+				}
+				else if (loc == states.end() && n.index == -1)
+				{
+					simulations.back().second = result.push_back(simulations.back().second, place(state.encoding));
+					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+				}
+				else
+				{
+					simulations.back().second = n;
+					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+				}
+			}
+			else
+			{
+				simulations.back().first.fire(i);
+				simulator::state state = simulations.back().first.get_state();
+				map<simulator::state, iterator>::iterator loc = states.find(state);
+				if (loc != states.end())
+				{
+					// If we find duplicate records of the same state, then we'll need to merge them later.
+					if (loc->second.index > simulations.back().second.index)
+						to_merge.push_back(pair<int, int>(loc->second.index, simulations.back().second.index));
+					else if (simulations.back().second.index > loc->second.index)
+						to_merge.push_back(pair<int, int>(simulations.back().second.index, loc->second.index));
+					simulations.pop_back();
+				}
+				else
+					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+			}
+		}
+	}
+
+	sort(to_merge.rbegin(), to_merge.rend());
+	to_merge.resize(unique(to_merge.begin(), to_merge.end()) - to_merge.begin());
+	for (int i = 0; i < (int)to_merge.size(); i++)
+	{
+		for (int j = 0; j < (int)result.arcs[place::type].size(); j++)
+		{
+			if (result.arcs[place::type][j].from.index == to_merge[i].first)
+				result.arcs[place::type][j].from.index = to_merge[i].second;
+			else if (result.arcs[place::type][j].from.index > to_merge[i].first)
+				result.arcs[place::type][j].from.index--;
+		}
+		for (int j = 0; j < (int)result.arcs[transition::type].size(); j++)
+		{
+			if (result.arcs[transition::type][j].to.index == to_merge[i].first)
+				result.arcs[transition::type][j].to.index = to_merge[i].second;
+			else if (result.arcs[transition::type][j].to.index > to_merge[i].first)
+				result.arcs[transition::type][j].to.index--;
+		}
+		for (int j = 0; j < (int)result.source.size(); j++)
+		{
+			if (result.source[j].type == place::type && result.source[j].index == to_merge[i].first)
+				result.source[j].index = to_merge[i].first;
+			else if (result.source[j].type == place::type && result.source[j].index > to_merge[i].first)
+				result.source[j].index--;
+		}
+		for (int j = 0; j < (int)result.sink.size(); j++)
+		{
+			if (result.sink[j].type == place::type && result.sink[j].index == to_merge[i].first)
+				result.sink[j].index = to_merge[i].first;
+			else if (result.sink[j].type == place::type && result.sink[j].index > to_merge[i].first)
+				result.sink[j].index--;
+		}
+
+		result.places.erase(result.places.begin() + to_merge[i].first);
+	}
+
+	return result;
+}
+
+/* to_petri_net()
+ *
+ * Converts the HSE into a petri net using index-priority simulation.
+ */
+graph graph::to_petri_net()
+{
+	return graph();
 }
 
 }

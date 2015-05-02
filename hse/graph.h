@@ -24,9 +24,11 @@ struct graph
 	vector<transition> transitions;
 	vector<arc> arcs[2];
 	vector<iterator> source, sink;
-	boolean::cover reset;
+	boolean::cube reset;
 
 	vector<half_synchronization> synchronizations;
+	vector<bool> reach;
+	vector<synchronization_region> regions;
 
 	iterator begin(int type);
 	iterator end(int type);
@@ -116,9 +118,9 @@ struct graph
 	pair<vector<iterator>, vector<iterator> > cut(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 	void cut(vector<iterator> n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL, bool rsorted = false);
 
-	iterator duplicate(int relation, iterator i);
-	vector<iterator> duplicate(int relation, iterator i, int num);
-	vector<iterator> duplicate(int relation, vector<iterator> i, int num = 1, bool interleaved = false);
+	iterator duplicate(int relation, iterator i, bool add = true);
+	vector<iterator> duplicate(int relation, iterator i, int num, bool add = true);
+	vector<iterator> duplicate(int relation, vector<iterator> i, int num = 1, bool interleaved = false, bool add = true);
 
 	void pinch(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 
@@ -173,10 +175,19 @@ struct graph
 	map<iterator, iterator> sequence(const graph &g);
 
 	void compact(bool proper_nesting = false);
+	void reachability();
+	bool is_reachable(iterator from, iterator to);
+
+	// Generated through syntax
 	void synchronize();
-	void unravel();
+	void petrify();
+
+	// Generated through simulation
 	void elaborate();
+	graph to_state_graph();
+	graph to_petri_net();
 };
+
 }
 
 #endif
