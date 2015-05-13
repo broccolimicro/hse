@@ -9,6 +9,7 @@
 #include <boolean/cover.h>
 
 #include "node.h"
+#include "token.h"
 
 #ifndef hse_graph_h
 #define hse_graph_h
@@ -23,12 +24,13 @@ struct graph
 	vector<place> places;
 	vector<transition> transitions;
 	vector<arc> arcs[2];
-	vector<iterator> source, sink;
-	boolean::cube reset;
+	vector<vector<token> > source, sink;
 
 	vector<half_synchronization> synchronizations;
-	vector<bool> reach;
+	vector<int> reach;
 	vector<synchronization_region> regions;
+
+	vector<pair<iterator, iterator> > parallel_nodes;
 
 	iterator begin(int type);
 	iterator end(int type);
@@ -124,34 +126,34 @@ struct graph
 
 	void pinch(iterator n, vector<iterator> *i0 = NULL, vector<iterator> *i1 = NULL);
 
-	vector<iterator> next(iterator n);
-	vector<iterator> next(vector<iterator> n);
-	vector<iterator> prev(iterator n);
-	vector<iterator> prev(vector<iterator> n);
-	vector<int> next(int type, int n);
-	vector<int> next(int type, vector<int> n);
-	vector<int> prev(int type, int n);
-	vector<int> prev(int type, vector<int> n);
+	vector<iterator> next(iterator n) const;
+	vector<iterator> next(vector<iterator> n) const;
+	vector<iterator> prev(iterator n) const;
+	vector<iterator> prev(vector<iterator> n) const;
+	vector<int> next(int type, int n) const;
+	vector<int> next(int type, vector<int> n) const;
+	vector<int> prev(int type, int n) const;
+	vector<int> prev(int type, vector<int> n) const;
 
-	vector<iterator> out(iterator n);
-	vector<iterator> out(vector<iterator> n);
-	vector<iterator> in(iterator n);
-	vector<iterator> in(vector<iterator> n);
-	vector<int> out(int type, int n);
-	vector<int> out(int type, vector<int> n);
-	vector<int> in(int type, int n);
-	vector<int> in(int type, vector<int> n);
+	vector<iterator> out(iterator n) const;
+	vector<iterator> out(vector<iterator> n) const;
+	vector<iterator> in(iterator n) const;
+	vector<iterator> in(vector<iterator> n) const;
+	vector<int> out(int type, int n) const;
+	vector<int> out(int type, vector<int> n) const;
+	vector<int> in(int type, int n) const;
+	vector<int> in(int type, vector<int> n) const;
 
-	vector<iterator> next_arcs(iterator a);
-	vector<iterator> next_arcs(vector<iterator> a);
-	vector<iterator> prev_arcs(iterator a);
-	vector<iterator> prev_arcs(vector<iterator> a);
-	vector<int> next_arcs(int type, int a);
-	vector<int> next_arcs(int type, vector<int> a);
-	vector<int> prev_arcs(int type, int a);
-	vector<int> prev_arcs(int type, vector<int> a);
+	vector<iterator> next_arcs(iterator a) const;
+	vector<iterator> next_arcs(vector<iterator> a) const;
+	vector<iterator> prev_arcs(iterator a) const;
+	vector<iterator> prev_arcs(vector<iterator> a) const;
+	vector<int> next_arcs(int type, int a) const;
+	vector<int> next_arcs(int type, vector<int> a) const;
+	vector<int> prev_arcs(int type, int a) const;
+	vector<int> prev_arcs(int type, vector<int> a) const;
 
-	bool is_floating(iterator n);
+	bool is_floating(iterator n) const;
 
 	template <class node>
 	node &operator[](iterator i)
@@ -171,12 +173,13 @@ struct graph
 			return transitions[i.index];
 	}
 
-	map<iterator, iterator> merge(const graph &g);
-	map<iterator, iterator> sequence(const graph &g);
+	map<iterator, iterator> merge(int relation, const graph &g);
+	void wrap();
 
 	void compact(bool proper_nesting = false);
 	void reachability();
 	bool is_reachable(iterator from, iterator to);
+	bool is_parallel(iterator a, iterator b);
 
 	// Generated through syntax
 	void synchronize();

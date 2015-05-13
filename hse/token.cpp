@@ -12,146 +12,55 @@
 namespace hse
 {
 
-global_token::global_token()
-{
-	index = 0;
-}
-
-global_token::~global_token()
-{
-
-}
-
-bool operator<(global_token i, global_token j)
-{
-	return i.index < j.index;
-}
-
-bool operator>(global_token i, global_token j)
-{
-	return i.index > j.index;
-}
-
-bool operator<=(global_token i, global_token j)
-{
-	return i.index <= j.index;
-}
-
-bool operator>=(global_token i, global_token j)
-{
-	return i.index >= j.index;
-}
-
-bool operator==(global_token i, global_token j)
-{
-	return i.index == j.index;
-}
-
-bool operator!=(global_token i, global_token j)
-{
-	return i.index != j.index;
-}
-
-local_token::local_token()
+token::token()
 {
 	index = 0;
 	state = 1;
 }
 
-local_token::local_token(int index, boolean::cube state)
+token::token(int index, boolean::cube state)
 {
 	this->index = index;
 	this->state = state;
 }
 
-local_token::~local_token()
+token::~token()
 {
 
 }
 
-bool operator<(local_token i, local_token j)
+bool operator<(token i, token j)
 {
 	return (i.index < j.index) ||
 		   (i.index == j.index && i.state < j.state);
 }
 
-bool operator>(local_token i, local_token j)
+bool operator>(token i, token j)
 {
 	return (i.index > j.index) ||
 		   (i.index == j.index && i.state > j.state);
 }
 
-bool operator<=(local_token i, local_token j)
+bool operator<=(token i, token j)
 {
 	return (i.index < j.index) ||
 		   (i.index == j.index && i.state <= j.state);
 }
 
-bool operator>=(local_token i, local_token j)
+bool operator>=(token i, token j)
 {
 	return (i.index > j.index) ||
 		   (i.index == j.index && i.state >= j.state);
 }
 
-bool operator==(local_token i, local_token j)
+bool operator==(token i, token j)
 {
 	return (i.index == j.index && i.state == j.state);
 }
 
-bool operator!=(local_token i, local_token j)
+bool operator!=(token i, token j)
 {
 	return (i.index != j.index || i.state != j.state);
-}
-
-term_index::term_index()
-{
-	index = 0;
-	term = 0;
-}
-
-term_index::term_index(int index, int term)
-{
-	this->index = index;
-	this->term = term;
-}
-
-term_index::~term_index()
-{
-
-}
-
-bool operator<(term_index i, term_index j)
-{
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.term < j.term);
-}
-
-bool operator>(term_index i, term_index j)
-{
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.term > j.term);
-}
-
-bool operator<=(term_index i, term_index j)
-{
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.term <= j.term);
-}
-
-bool operator>=(term_index i, term_index j)
-{
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.term >= j.term);
-}
-
-bool operator==(term_index i, term_index j)
-{
-	return (i.index == j.index && i.term == j.term);
-}
-
-bool operator!=(term_index i, term_index j)
-{
-	return (i.index != j.index || i.term != j.term);
 }
 
 enabled_transition::enabled_transition()

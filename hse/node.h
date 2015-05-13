@@ -98,6 +98,26 @@ struct arc
 	iterator to;
 };
 
+/* This points to the cube 'term' in the action of transition 'index' in a graph.
+ * i.e. g.transitions[index].action.cubes[term]
+ */
+struct term_index
+{
+	term_index();
+	term_index(int index, int term);
+	~term_index();
+
+	int index;
+	int term;
+};
+
+bool operator<(term_index i, term_index j);
+bool operator>(term_index i, term_index j);
+bool operator<=(term_index i, term_index j);
+bool operator>=(term_index i, term_index j);
+bool operator==(term_index i, term_index j);
+bool operator!=(term_index i, term_index j);
+
 struct half_synchronization
 {
 	half_synchronization();

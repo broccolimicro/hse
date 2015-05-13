@@ -233,6 +233,57 @@ arc::~arc()
 
 }
 
+term_index::term_index()
+{
+	index = -1;
+	term = -1;
+}
+
+term_index::term_index(int index, int term)
+{
+	this->index = index;
+	this->term = term;
+}
+
+term_index::~term_index()
+{
+
+}
+
+bool operator<(term_index i, term_index j)
+{
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.term < j.term);
+}
+
+bool operator>(term_index i, term_index j)
+{
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.term > j.term);
+}
+
+bool operator<=(term_index i, term_index j)
+{
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.term <= j.term);
+}
+
+bool operator>=(term_index i, term_index j)
+{
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.term >= j.term);
+}
+
+bool operator==(term_index i, term_index j)
+{
+	return (i.index == j.index && i.term == j.term);
+}
+
+bool operator!=(term_index i, term_index j)
+{
+	return (i.index != j.index || i.term != j.term);
+}
+
 half_synchronization::half_synchronization()
 {
 	active.index = 0;
