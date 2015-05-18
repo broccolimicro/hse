@@ -176,6 +176,8 @@ struct graph
 	map<iterator, iterator> merge(int relation, const graph &g);
 	void wrap();
 
+	vector<vector<iterator> > cycles() const;
+
 	void compact(bool proper_nesting = false);
 	void reachability();
 	bool is_reachable(iterator from, iterator to);

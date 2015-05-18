@@ -1083,6 +1083,42 @@ void graph::wrap()
 	}
 }
 
+vector<vector<iterator> > graph::cycles() const
+{
+	vector<vector<hse::iterator> > curr;
+	vector<vector<hse::iterator> > result;
+	for (int i = 0; i < (int)source.size(); i++)
+		for (int j = 0; j < (int)source[i].size(); j++)
+			curr.push_back(vector<hse::iterator>(1, hse::iterator(hse::place::type, source[i][j].index)));
+
+	sort(curr.begin(), curr.end());
+	curr.resize(unique(curr.begin(), curr.end()) - curr.begin());
+
+	while (curr.size() > 0)
+	{
+		vector<hse::iterator> x = curr.back();
+		curr.pop_back();
+
+		vector<hse::iterator> n = next(x.back());
+		for (int j = 0; j < (int)n.size(); j++)
+		{
+			vector<hse::iterator>::iterator loopback = find(x.begin(), x.end(), n[j]);
+			if (loopback != x.end())
+			{
+				result.push_back(x);
+				result.back().erase(result.back().begin(), result.back().begin() + (loopback - x.begin()));
+			}
+			else
+			{
+				curr.push_back(x);
+				curr.back().push_back(n[j]);
+			}
+		}
+	}
+
+	return result;
+}
+
 void graph::compact(bool proper_nesting)
 {
 	bool change = true;
