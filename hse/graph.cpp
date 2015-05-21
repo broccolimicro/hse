@@ -1135,8 +1135,7 @@ void graph::compact(bool proper_nesting)
 			sort(p.begin(), p.end());
 
 			bool affect = false;
-			/* If it doesn't have any input places, then we need to add one.
-			 */
+			// If it doesn't have any input places, then we need to add one.
 			if (!affect && p.size() == 0)
 			{
 				p.push_back(create(place::type));
@@ -1144,8 +1143,7 @@ void graph::compact(bool proper_nesting)
 				affect = true;
 			}
 
-			/* If it doesn't have any output places, then we need to add one.
-			 */
+			// If it doesn't have any output places, then we need to add one.
 			if (!affect && n.size() == 0)
 			{
 				n.push_back(create(place::type));
@@ -1153,22 +1151,20 @@ void graph::compact(bool proper_nesting)
 				affect = true;
 			}
 
-			/* A transition will never be enabled if its action is not physically possible.
-			 * These transitions may be removed while preserving proper nesting, token flow
-			 * stability, non interference, and deadlock freedom. At this point, it is not
-			 * possible for this transition to be in the source list.
-			 */
+			// A transition will never be enabled if its action is not physically possible.
+			// These transitions may be removed while preserving proper nesting, token flow
+			// stability, non interference, and deadlock freedom. At this point, it is not
+			// possible for this transition to be in the source list.
 			if (!affect && transitions[i.index].action == 0)
 			{
 				cut(i);
 				affect = true;
 			}
 
-			/* We can know for sure if a transition is vacuous before we've elaborated the state space if
-			 * the transition is the universal cube. These transitions may be pinched while preserving token flow,
-			 * stability, non interference, and deadlock freedom. However, proper nesting is not necessarily
-			 * preserved. We have to take special precautions if we want to preserver proper nesting.
-			 */
+			// We can know for sure if a transition is vacuous before we've elaborated the state space if
+			// the transition is the universal cube. These transitions may be pinched while preserving token flow,
+			// stability, non interference, and deadlock freedom. However, proper nesting is not necessarily
+			// preserved. We have to take special precautions if we want to preserver proper nesting.
 			if (!affect && transitions[i.index].action == 1)
 			{
 				if (!proper_nesting)
@@ -1225,9 +1221,8 @@ void graph::compact(bool proper_nesting)
 
 			bool affect = false;
 
-			/* We know a place will never be marked if it is not in the initial marking and it has no input arcs.
-			 * This means that its output transitions will never fire.
-			 */
+			// We know a place will never be marked if it is not in the initial marking and it has no input arcs.
+			// This means that its output transitions will never fire.
 			if (p.size() == 0 && (!i_is_reset || n.size() == 0))
 			{
 				cut(n);
@@ -1235,8 +1230,7 @@ void graph::compact(bool proper_nesting)
 				affect = true;
 			}
 
-			/* Check to see if there are any excess places whose existence doesn't affect the behavior of the circuit
-			 */
+			// Check to see if there are any excess places whose existence doesn't affect the behavior of the circuit
 			for (iterator j = i+1; j < (int)places.size(); )
 			{
 				bool j_is_reset = false;
@@ -1267,7 +1261,7 @@ void graph::compact(bool proper_nesting)
 		}
 
 
-		vector<iterator> left;
+		/*vector<iterator> left;
 		vector<iterator> right;
 
 		vector<vector<iterator> > n, p;
@@ -1300,9 +1294,8 @@ void graph::compact(bool proper_nesting)
 			{
 				if (transitions[j.index].behavior == transitions[i.index].behavior)
 				{
-					/* Find internally conditioned transitions. Transitions are internally conditioned if they are the same type
-					 * share all of the same input and output places.
-					 */
+					// Find internally conditioned transitions. Transitions are internally conditioned if they are the same type
+					// share all of the same input and output places.
 					if (n[j.index] == n[i.index] && p[j.index] == p[i.index])
 					{
 						transitions[j.index] = hse::merge(choice, transitions[i.index], transitions[j.index]);
@@ -1310,10 +1303,9 @@ void graph::compact(bool proper_nesting)
 						change = true;
 					}
 
-					/* Find internally parallel transitions. A pair of transitions A and B are internally parallel if
-					 * they are the same type, have disjoint sets of input and output places that share a single input
-					 * or output transition and have no output or input transitions other than A or B.
-					 */
+					// Find internally parallel transitions. A pair of transitions A and B are internally parallel if
+					// they are the same type, have disjoint sets of input and output places that share a single input
+					// or output transition and have no output or input transitions other than A or B.
 					else if (vector_intersection_size(n[i.index], n[j.index]) == 0 && vector_intersection_size(p[i.index], p[j.index]) == 0 && nx[i.index] == nx[j.index] && px[i.index] == px[j.index])
 					{
 						transitions[j.index] = hse::merge(parallel, transitions[i.index], transitions[j.index]);
@@ -1326,7 +1318,7 @@ void graph::compact(bool proper_nesting)
 					}
 				}
 			}
-		}
+		}*/
 
 		if (!change)
 		{
@@ -1356,6 +1348,9 @@ void graph::compact(bool proper_nesting)
 						j = 0;
 					}
 				}
+
+				for (int j = 0; j < (int)sim.tokens.size(); j++)
+					sim.tokens[j].guard.clear();
 
 				source[i] = sim.tokens;
 			}
@@ -1517,7 +1512,7 @@ void graph::petrify()
 	compact();
 }
 
-void graph::elaborate()
+void graph::elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks)
 {
 	for (int i = 0; i < (int)places.size(); i++)
 	{
@@ -1560,9 +1555,31 @@ void graph::elaborate()
 			// and if it is not, then we need to put the state in and continue on our way.
 			vector<vector<token> >::iterator loc = lower_bound(states.begin(), states.end(), simulations.back().tokens);
 			if (loc != states.end() && *loc == simulations.back().tokens)
+			{
+				unstable.insert(unstable.end(), simulations.back().unstable.begin(), simulations.back().unstable.end());
+				interfering.insert(interfering.end(), simulations.back().interfering.begin(), simulations.back().interfering.end());
+				sort(unstable.begin(), unstable.end());
+				sort(interfering.begin(), interfering.end());
+				unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+				interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+
 				simulations.pop_back();
+			}
 			else
 				states.insert(loc, simulations.back().tokens);
+		}
+
+		if (enabled == 0)
+		{
+			deadlocks.push_back(deadlock(sim.tokens));
+			unstable.insert(unstable.end(), sim.unstable.begin(), sim.unstable.end());
+			interfering.insert(interfering.end(), sim.interfering.begin(), sim.interfering.end());
+			sort(deadlocks.begin(), deadlocks.end());
+			sort(unstable.begin(), unstable.end());
+			sort(interfering.begin(), interfering.end());
+			deadlocks.resize(unique(deadlocks.begin(), deadlocks.end()) - deadlocks.begin());
+			unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+			interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
 		}
 
 		for (int i = 0; i < (int)sim.tokens.size(); i++)
@@ -1596,7 +1613,7 @@ void graph::elaborate()
  * This converts a given graph to the fully expanded state space through simulation. It systematically
  * simulates all possible transition orderings and determines all of the resulting state information.
  */
-graph graph::to_state_graph()
+graph graph::to_state_graph(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks)
 {
 	graph result;
 	map<simulator::state, iterator> states;
@@ -1659,18 +1676,26 @@ graph graph::to_state_graph()
 				// and if it is not, then we need to put the state in and continue on our way.
 				simulator::state state = simulations.back().first.get_state();
 				map<simulator::state, iterator>::iterator loc = states.find(state);
-				if (loc != states.end() && n.index == -1)
+				if (loc != states.end())
 				{
-					result.connect(simulations.back().second, loc->second);
-					simulations.pop_back();
-				}
-				else if (loc != states.end() && n.index != -1)
-				{
-					// If we find duplicate records of the same state, then we'll need to merge them later.
-					if (loc->second.index > n.index)
-						to_merge.push_back(pair<int, int>(loc->second.index, n.index));
-					else if (n.index > loc->second.index)
-						to_merge.push_back(pair<int, int>(n.index, loc->second.index));
+					unstable.insert(unstable.end(), simulations.back().first.unstable.begin(), simulations.back().first.unstable.end());
+					interfering.insert(interfering.end(), simulations.back().first.interfering.begin(), simulations.back().first.interfering.end());
+					sort(unstable.begin(), unstable.end());
+					sort(interfering.begin(), interfering.end());
+					unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+					interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+
+					if (n.index == -1)
+						result.connect(simulations.back().second, loc->second);
+					else if (n.index != -1)
+					{
+						// If we find duplicate records of the same state, then we'll need to merge them later.
+						if (loc->second.index > n.index)
+							to_merge.push_back(pair<int, int>(loc->second.index, n.index));
+						else if (n.index > loc->second.index)
+							to_merge.push_back(pair<int, int>(n.index, loc->second.index));
+					}
+
 					simulations.pop_back();
 				}
 				else if (loc == states.end() && n.index == -1)
@@ -1691,16 +1716,37 @@ graph graph::to_state_graph()
 				map<simulator::state, iterator>::iterator loc = states.find(state);
 				if (loc != states.end())
 				{
+					unstable.insert(unstable.end(), simulations.back().first.unstable.begin(), simulations.back().first.unstable.end());
+					interfering.insert(interfering.end(), simulations.back().first.interfering.begin(), simulations.back().first.interfering.end());
+					sort(unstable.begin(), unstable.end());
+					sort(interfering.begin(), interfering.end());
+					unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+					interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+
 					// If we find duplicate records of the same state, then we'll need to merge them later.
 					if (loc->second.index > simulations.back().second.index)
 						to_merge.push_back(pair<int, int>(loc->second.index, simulations.back().second.index));
 					else if (simulations.back().second.index > loc->second.index)
 						to_merge.push_back(pair<int, int>(simulations.back().second.index, loc->second.index));
+
 					simulations.pop_back();
 				}
 				else
 					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
 			}
+		}
+
+		if (enabled == 0)
+		{
+			deadlocks.push_back(deadlock(sim.first.tokens));
+			unstable.insert(unstable.end(), sim.first.unstable.begin(), sim.first.unstable.end());
+			interfering.insert(interfering.end(), sim.first.interfering.begin(), sim.first.interfering.end());
+			sort(deadlocks.begin(), deadlocks.end());
+			sort(unstable.begin(), unstable.end());
+			sort(interfering.begin(), interfering.end());
+			deadlocks.resize(unique(deadlocks.begin(), deadlocks.end()) - deadlocks.begin());
+			unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+			interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
 		}
 	}
 

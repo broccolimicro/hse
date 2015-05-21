@@ -188,8 +188,8 @@ struct graph
 	void petrify();
 
 	// Generated through simulation
-	void elaborate();
-	graph to_state_graph();
+	void elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks);
+	graph to_state_graph(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks);
 	graph to_petri_net();
 };
 

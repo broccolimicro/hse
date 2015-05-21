@@ -24,6 +24,13 @@ token::token(int index, boolean::cube state)
 	this->state = state;
 }
 
+token::token(int index, boolean::cube state, vector<term_index> guard)
+{
+	this->index = index;
+	this->state = state;
+	this->guard = guard;
+}
+
 token::~token()
 {
 
@@ -82,5 +89,149 @@ enabled_transition::~enabled_transition()
 
 }
 
+instability::instability()
+{
+
+}
+
+instability::instability(term_index effect, vector<term_index> cause)
+{
+	this->effect = effect;
+	this->cause = cause;
+}
+
+instability::~instability()
+{
+
+}
+
+bool operator<(instability i, instability j)
+{
+	return (i.effect < j.effect) ||
+		   (i.effect == j.effect && i.cause < j.cause);
+}
+
+bool operator>(instability i, instability j)
+{
+	return (i.effect > j.effect) ||
+		   (i.effect == j.effect && i.cause > j.cause);
+}
+
+bool operator<=(instability i, instability j)
+{
+	return (i.effect < j.effect) ||
+		   (i.effect == j.effect && i.cause <= j.cause);
+}
+
+bool operator>=(instability i, instability j)
+{
+	return (i.effect > j.effect) ||
+		   (i.effect == j.effect && i.cause >= j.cause);
+}
+
+bool operator==(instability i, instability j)
+{
+	return (i.effect == j.effect && i.cause == j.cause);
+}
+
+bool operator!=(instability i, instability j)
+{
+	return (i.effect != j.effect || i.cause != j.cause);
+}
+
+interference::interference()
+{
+
+}
+
+interference::interference(term_index first, term_index second)
+{
+	this->first = first;
+	this->second = second;
+}
+
+interference::~interference()
+{
+
+}
+
+bool operator<(interference i, interference j)
+{
+	return (i.first < j.first) ||
+		   (i.first == j.first && i.second < j.second);
+}
+
+bool operator>(interference i, interference j)
+{
+	return (i.first > j.first) ||
+		   (i.first == j.first && i.second > j.second);
+}
+
+bool operator<=(interference i, interference j)
+{
+	return (i.first < j.first) ||
+		   (i.first == j.first && i.second <= j.second);
+}
+
+bool operator>=(interference i, interference j)
+{
+	return (i.first > j.first) ||
+		   (i.first == j.first && i.second >= j.second);
+}
+
+bool operator==(interference i, interference j)
+{
+	return (i.first == j.first && i.second == j.second);
+}
+
+bool operator!=(interference i, interference j)
+{
+	return (i.first != j.first || i.second != j.second);
+}
+
+deadlock::deadlock()
+{
+
+}
+
+deadlock::deadlock(vector<token> tokens)
+{
+	this->tokens = tokens;
+}
+
+deadlock::~deadlock()
+{
+
+}
+
+bool operator<(deadlock i, deadlock j)
+{
+	return i.tokens < j.tokens;
+}
+
+bool operator>(deadlock i, deadlock j)
+{
+	return i.tokens > j.tokens;
+}
+
+bool operator<=(deadlock i, deadlock j)
+{
+	return i.tokens <= j.tokens;
+}
+
+bool operator>=(deadlock i, deadlock j)
+{
+	return i.tokens >= j.tokens;
+}
+
+bool operator==(deadlock i, deadlock j)
+{
+	return i.tokens == j.tokens;
+}
+
+bool operator!=(deadlock i, deadlock j)
+{
+	return i.tokens != j.tokens;
+}
 
 }

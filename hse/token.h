@@ -23,10 +23,12 @@ struct token
 {
 	token();
 	token(int index, boolean::cube state);
+	token(int index, boolean::cube state, vector<term_index> guard);
 	~token();
 
 	int index;
 	boolean::cube state;
+	vector<term_index> guard;
 };
 
 bool operator<(token i, token j);
@@ -47,9 +49,59 @@ struct enabled_transition : term_index
 
 	vector<int> tokens;
 	boolean::cube state;
+	vector<term_index> history;
+	vector<term_index> guard;
 };
 
+struct instability
+{
+	instability();
+	instability(term_index effect, vector<term_index> cause);
+	~instability();
 
+	term_index effect;
+	vector<term_index> cause;
+};
+
+bool operator<(instability i, instability j);
+bool operator>(instability i, instability j);
+bool operator<=(instability i, instability j);
+bool operator>=(instability i, instability j);
+bool operator==(instability i, instability j);
+bool operator!=(instability i, instability j);
+
+struct interference
+{
+	interference();
+	interference(term_index first, term_index second);
+	~interference();
+
+	term_index first;
+	term_index second;
+};
+
+bool operator<(interference i, interference j);
+bool operator>(interference i, interference j);
+bool operator<=(interference i, interference j);
+bool operator>=(interference i, interference j);
+bool operator==(interference i, interference j);
+bool operator!=(interference i, interference j);
+
+struct deadlock
+{
+	deadlock();
+	deadlock(vector<token> tokens);
+	~deadlock();
+
+	vector<token> tokens;
+};
+
+bool operator<(deadlock i, deadlock j);
+bool operator>(deadlock i, deadlock j);
+bool operator<=(deadlock i, deadlock j);
+bool operator>=(deadlock i, deadlock j);
+bool operator==(deadlock i, deadlock j);
+bool operator!=(deadlock i, deadlock j);
 
 }
 

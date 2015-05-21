@@ -20,6 +20,10 @@ struct simulator
 	simulator(graph *base, int i);
 	~simulator();
 
+	vector<instability> unstable;
+	vector<interference> interfering;
+	term_index last;
+
 	vector<token> tokens;
 	vector<enabled_transition> ready;
 	boolean::cube global;
