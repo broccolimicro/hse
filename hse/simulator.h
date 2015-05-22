@@ -36,6 +36,8 @@ struct simulator
 	{
 		vector<int> tokens;
 		boolean::cube encoding;
+
+		pair<vector<int>, boolean::cover> to_pair();
 	};
 
 	state get_state();

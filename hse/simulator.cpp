@@ -234,6 +234,11 @@ simulator::state simulator::get_state()
 	return result;
 }
 
+pair<vector<int>, boolean::cover>simulator::state::to_pair()
+{
+	return pair<vector<int>, boolean::cover>(tokens, boolean::cover(encoding));
+}
+
 bool operator<(simulator::state s1, simulator::state s2)
 {
 	return (s1.tokens < s2.tokens) || (s1.tokens == s2.tokens && s1.encoding < s2.encoding);

@@ -8,6 +8,7 @@
 #include "graph.h"
 #include "simulator.h"
 #include <common/message.h>
+#include <common/text.h>
 
 namespace hse
 {
@@ -689,12 +690,12 @@ void graph::pinch(iterator n, vector<iterator> *i0, vector<iterator> *i1)
 			for (int j = 0; j < (int)source.size(); j++)
 				for (int k = 0; k < (int)source[j].size(); k++)
 					if (source[j][k].index == right[i].index)
-						source[j].push_back(token(left[i].index, boolean::cube()));
+						source[j].push_back(token(left[i].index, source[j][k].state));
 
 			for (int j = 0; j < (int)sink.size(); j++)
 				for (int k = 0; k < (int)sink[j].size(); k++)
 					if (sink[j][k].index == right[i].index)
-						sink[j].push_back(token(left[i].index, boolean::cube()));
+						sink[j].push_back(token(left[i].index, source[j][k].state));
 		}
 	}
 
@@ -1345,7 +1346,7 @@ void graph::compact(bool proper_nesting)
 						sim.fire(j);
 						change = true;
 						enabled = sim.enabled();
-						j = 0;
+						j = -1;
 					}
 				}
 
@@ -1520,8 +1521,9 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		places[i].effective = boolean::cover();
 	}
 
-	vector<vector<token> > states;
+	map<vector<int>, boolean::cover> states;
 	vector<simulator> simulations;
+	simulations.reserve(20000);
 
 	// Set up the first simulation that starts at the reset state
 	for (int i = 0; i < (int)source.size(); i++)
@@ -1529,9 +1531,11 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		simulations.push_back(simulator(this, i));
 
 		// Record the reset state in our map of visited states
-		states.push_back(simulations.back().tokens);
+		simulator::state state = simulations.back().get_state();
+		states.insert(state.to_pair());
 	}
 
+	int count = 0;
 	while (simulations.size() > 0)
 	{
 		simulator sim = simulations.back();
@@ -1539,7 +1543,9 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 		// Handle the local tokens
 		int enabled = sim.enabled();
-		simulations.reserve(simulations.size() + enabled);
+
+		progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.size()) + " " + to_string(enabled), __FILE__, __LINE__);
+
 		for (int i = 0; i < enabled; i++)
 		{
 			simulations.push_back(sim);
@@ -1553,8 +1559,9 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 			// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
 			// and if it is not, then we need to put the state in and continue on our way.
-			vector<vector<token> >::iterator loc = lower_bound(states.begin(), states.end(), simulations.back().tokens);
-			if (loc != states.end() && *loc == simulations.back().tokens)
+			simulator::state state = simulations.back().get_state();
+			map<vector<int>, boolean::cover>::iterator loc = states.find(state.tokens);
+			if (loc != states.end() && state.encoding.is_subset_of(loc->second))
 			{
 				unstable.insert(unstable.end(), simulations.back().unstable.begin(), simulations.back().unstable.end());
 				interfering.insert(interfering.end(), simulations.back().interfering.begin(), simulations.back().interfering.end());
@@ -1565,8 +1572,10 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 				simulations.pop_back();
 			}
+			else if (loc != states.end())
+				loc->second |= state.encoding;
 			else
-				states.insert(loc, simulations.back().tokens);
+				states.insert(state.to_pair());
 		}
 
 		if (enabled == 0)
@@ -1602,7 +1611,11 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		for (int i = 0; i < (int)sim.tokens.size(); i++)
 			if (acting[i].first)
 				places[sim.tokens[i].index].effective |= (sim.tokens[i].state & acting[i].second);
+
+		count++;
 	}
+
+	done_progress();
 
 	sort(parallel_nodes.begin(), parallel_nodes.end());
 	parallel_nodes.resize(unique(parallel_nodes.begin(), parallel_nodes.end()) - parallel_nodes.begin());
