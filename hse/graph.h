@@ -24,7 +24,7 @@ struct graph
 	vector<place> places;
 	vector<transition> transitions;
 	vector<arc> arcs[2];
-	vector<vector<token> > source, sink;
+	vector<vector<local_token> > source, sink;
 
 	vector<half_synchronization> synchronizations;
 	vector<int> reach;

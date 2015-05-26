@@ -24,10 +24,32 @@ struct simulator
 	vector<interference> interfering;
 	term_index last;
 
-	vector<token> tokens;
-	vector<enabled_transition> ready;
 	boolean::cube global;
 	graph *base;
+
+	struct
+	{
+		vector<local_token> tokens;
+		vector<enabled_transition> ready;
+	} local;
+
+	struct
+	{
+		// structures for handling the environment
+		// indexes for places in the graph
+		vector<remote_token> tail;
+		vector<remote_token> head;
+
+		// indices for transitions in the graph between the head and the tail
+		deque<term_index> body;
+
+		vector<enabled_transition> ready;
+
+		bool is_active()
+		{
+			return (head.size() > 0);
+		}
+	} remote;
 
 	int enabled(bool sorted = false);
 	void fire(int index);

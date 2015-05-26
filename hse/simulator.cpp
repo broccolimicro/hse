@@ -20,9 +20,9 @@ simulator::simulator()
 simulator::simulator(graph *base, int i)
 {
 	this->base = base;
-	tokens = base->source[i];
-	for (int j = 0; j < (int)tokens.size(); j++)
-		global &= tokens[j].state;
+	local.tokens = base->source[i];
+	for (int j = 0; j < (int)local.tokens.size(); j++)
+		global &= local.tokens[j].state;
 }
 
 simulator::~simulator()
@@ -39,13 +39,13 @@ simulator::~simulator()
 int simulator::enabled(bool sorted)
 {
 	if (!sorted)
-		sort(tokens.begin(), tokens.end());
+		sort(local.tokens.begin(), local.tokens.end());
 
 	vector<enabled_transition> potential;
 	vector<int> disabled;
 
 	// Get the list of transitions have have a sufficient number of local at the input places
-	potential.reserve(tokens.size()*2);
+	potential.reserve(local.tokens.size()*2);
 	disabled.reserve(base->transitions.size());
 	for (vector<arc>::iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
 	{
@@ -63,8 +63,8 @@ int simulator::enabled(bool sorted)
 			// this token has not already been consumed by this particular transition
 			// Also since we only need one token per arc, we can stop once we've found a token
 			bool found = false;
-			for (int j = 0; j < (int)tokens.size() && !found; j++)
-				if (a->from.index == tokens[j].index &&
+			for (int j = 0; j < (int)local.tokens.size() && !found; j++)
+				if (a->from.index == local.tokens[j].index &&
 					(e_invalid || find(e->tokens.begin(), e->tokens.end(), j) == e->tokens.end()))
 				{
 					// We are safe to add this to the list of possibly enabled transitions
@@ -87,13 +87,13 @@ int simulator::enabled(bool sorted)
 		}
 	}
 
-	// Now we have a list of transitions that have enough tokens to consume. We need to figure out their state and their guarding transitions
+	// Now we have a list of transitions that have enough local.tokens to consume. We need to figure out their state and their guarding transitions
 	for (int i = 0; i < (int)potential.size(); i++)
 	{
 		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
 		{
-			potential[i].state &= tokens[potential[i].tokens[j]].state;
-			potential[i].guard.insert(potential[i].guard.end(), tokens[potential[i].tokens[j]].guard.begin(), tokens[potential[i].tokens[j]].guard.end());
+			potential[i].state &= local.tokens[potential[i].tokens[j]].state;
+			potential[i].guard.insert(potential[i].guard.end(), local.tokens[potential[i].tokens[j]].guard.begin(), local.tokens[potential[i].tokens[j]].guard.end());
 		}
 
 		sort(potential[i].guard.begin(), potential[i].guard.end());
@@ -130,26 +130,26 @@ int simulator::enabled(bool sorted)
 	}
 
 	// Check for interfering transitions
-	for (int i = 0; i < (int)ready.size(); i++)
-		if (base->transitions[ready[i].index].behavior == transition::active)
-			for (int j = i+1; j < (int)ready.size(); j++)
-				if (base->transitions[ready[j].index].behavior == transition::active &&
-					boolean::are_mutex(base->transitions[ready[i].index].action[ready[i].term], base->transitions[ready[j].index].action[ready[j].term]))
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		if (base->transitions[local.ready[i].index].behavior == transition::active)
+			for (int j = i+1; j < (int)local.ready.size(); j++)
+				if (base->transitions[local.ready[j].index].behavior == transition::active &&
+					boolean::are_mutex(base->transitions[local.ready[i].index].action[local.ready[i].term], base->transitions[local.ready[j].index].action[local.ready[j].term]))
 				{
-					interference err(ready[i], ready[j]);
+					interference err(local.ready[i], local.ready[j]);
 					vector<interference>::iterator loc = lower_bound(interfering.begin(), interfering.end(), err);
 					if (loc == interfering.end() || *loc != err)
 						interfering.insert(loc, err);
 				}
 
 	// Check for unstable transitions
-	for (int i = 0, j = 0; i < (int)ready.size();)
+	for (int i = 0, j = 0; i < (int)local.ready.size();)
 	{
-		if (j >= (int)result.size() || ready[i] < result[j])
+		if (j >= (int)result.size() || local.ready[i] < result[j])
 		{
-			if (base->transitions[ready[i].index].behavior == hse::transition::active)
+			if (base->transitions[local.ready[i].index].behavior == hse::transition::active)
 			{
-				instability err = instability(ready[i], ready[i].history);
+				instability err = instability(local.ready[i], local.ready[i].history);
 				vector<instability>::iterator loc = lower_bound(unstable.begin(), unstable.end(), err);
 				if (loc == unstable.end() || *loc != err)
 					unstable.insert(loc, err);
@@ -157,41 +157,41 @@ int simulator::enabled(bool sorted)
 
 			i++;
 		}
-		else if (result[j] < ready[i])
+		else if (result[j] < local.ready[i])
 		{
 			if (last.index >= 0 && last.term >= 0)
 				result[j].history.push_back(last);
 			j++;
 		}
-		else if (ready[i] == result[j])
+		else if (local.ready[i] == result[j])
 		{
-			result[j].history = ready[i].history;
+			result[j].history = local.ready[i].history;
 			i++;
 			j++;
 		}
 	}
 
-	ready = result;
-	return ready.size();
+	local.ready = result;
+	return local.ready.size();
 }
 
 void simulator::fire(int index)
 {
-	enabled_transition t = ready[index];
+	enabled_transition t = local.ready[index];
 
-	// Update the tokens
+	// Update the local.tokens
 	vector<int> next = base->next(transition::type, t.index);
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	for (int i = 0; i < (int)t.tokens.size(); i++)
-		tokens.erase(tokens.begin() + t.tokens[i]);
+		local.tokens.erase(local.tokens.begin() + t.tokens[i]);
 
 	// Update the state
 	if (base->transitions[t.index].behavior == transition::active)
 	{
 		t.state = boolean::local_transition(t.state, base->transitions[t.index].action[t.term]);
 		global = boolean::local_transition(global, base->transitions[t.index].action[t.term]);
-		for (int i = 0; i < (int)tokens.size(); i++)
-			tokens[i].state = boolean::remote_transition(tokens[i].state, global);
+		for (int i = 0; i < (int)local.tokens.size(); i++)
+			local.tokens[i].state = boolean::remote_transition(local.tokens[i].state, global);
 
 		t.guard.clear();
 	}
@@ -207,16 +207,16 @@ void simulator::fire(int index)
 	t.guard.resize(unique(t.guard.begin(), t.guard.end()) - t.guard.begin());
 
 	for (int i = 0; i < (int)next.size(); i++)
-		tokens.push_back(token(next[i], t.state, t.guard));
+		local.tokens.push_back(local_token(next[i], t.state, t.guard));
 
-	// disable any transitions that were dependent on at least one of the same tokens
+	// disable any transitions that were dependent on at least one of the same local.tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
-	for (int i = (int)ready.size()-1; i >= 0; i--)
-		if (vector_intersection_size(ready[i].tokens, t.tokens) > 0)
-			ready.erase(ready.begin() + i);
+	for (int i = (int)local.ready.size()-1; i >= 0; i--)
+		if (vector_intersection_size(local.ready[i].tokens, t.tokens) > 0)
+			local.ready.erase(local.ready.begin() + i);
 
-	for (int i = 0; i < (int)ready.size(); i++)
-		ready[i].history.push_back(t);
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		local.ready[i].history.push_back(t);
 
 	last = t;
 }
@@ -226,8 +226,8 @@ simulator::state simulator::get_state()
 	simulator::state result;
 
 	result.encoding = global;
-	for (int i = 0; i < (int)tokens.size(); i++)
-		result.tokens.push_back(tokens[i].index);
+	for (int i = 0; i < (int)local.tokens.size(); i++)
+		result.tokens.push_back(local.tokens[i].index);
 
 	sort(result.tokens.begin(), result.tokens.end());
 

@@ -12,60 +12,105 @@
 namespace hse
 {
 
-token::token()
+remote_token::remote_token()
+{
+	index = 0;
+}
+
+remote_token::remote_token(int index)
+{
+	this->index = index;
+}
+
+remote_token::~remote_token()
+{
+
+}
+
+bool operator<(remote_token i, remote_token j)
+{
+	return i.index < j.index;
+}
+
+bool operator>(remote_token i, remote_token j)
+{
+	return i.index > j.index;
+}
+
+bool operator<=(remote_token i, remote_token j)
+{
+	return i.index <= j.index;
+}
+
+bool operator>=(remote_token i, remote_token j)
+{
+	return i.index >= j.index;
+}
+
+bool operator==(remote_token i, remote_token j)
+{
+	return i.index == j.index;
+}
+
+bool operator!=(remote_token i, remote_token j)
+{
+	return i.index != j.index;
+}
+
+local_token::local_token()
 {
 	index = 0;
 	state = 1;
 }
 
-token::token(int index, boolean::cube state)
+local_token::local_token(int index, boolean::cube state)
 {
 	this->index = index;
 	this->state = state;
 }
 
-token::token(int index, boolean::cube state, vector<term_index> guard)
+local_token::local_token(int index, boolean::cube state, vector<term_index> guard)
 {
 	this->index = index;
 	this->state = state;
 	this->guard = guard;
 }
 
-token::~token()
+local_token::~local_token()
 {
 
 }
 
-bool operator<(token i, token j)
+bool operator<(local_token i, local_token j)
 {
 	return (i.index < j.index) ||
 		   (i.index == j.index && i.state < j.state);
 }
 
-bool operator>(token i, token j)
+bool operator>(local_token i, local_token j)
 {
 	return (i.index > j.index) ||
 		   (i.index == j.index && i.state > j.state);
 }
 
-bool operator<=(token i, token j)
+bool operator<=(local_token i, local_token j)
 {
 	return (i.index < j.index) ||
 		   (i.index == j.index && i.state <= j.state);
 }
 
-bool operator>=(token i, token j)
+bool operator>=(local_token i, local_token j)
 {
 	return (i.index > j.index) ||
 		   (i.index == j.index && i.state >= j.state);
 }
 
-bool operator==(token i, token j)
+bool operator==(local_token i, local_token j)
 {
 	return (i.index == j.index && i.state == j.state);
 }
 
-bool operator!=(token i, token j)
+bool operator!=(local_token i, local_token j)
 {
 	return (i.index != j.index || i.state != j.state);
 }
@@ -194,7 +239,7 @@ deadlock::deadlock()
 
 }
 
-deadlock::deadlock(vector<token> tokens)
+deadlock::deadlock(vector<local_token> tokens)
 {
 	this->tokens = tokens;
 }

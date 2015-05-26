@@ -554,12 +554,12 @@ iterator graph::duplicate(int relation, iterator i, bool add)
 		for (int j = 0; j < (int)source.size(); j++)
 			for (int k = 0; k < (int)source[j].size(); k++)
 				if (source[j][k].index == i.index)
-					source[j].push_back(token(d.index, source[j][k].state));
+					source[j].push_back(local_token(d.index, source[j][k].state));
 
 		for (int j = 0; j < (int)sink.size(); j++)
 			for (int k = 0; k < (int)sink[j].size(); k++)
 				if (sink[j][k].index == i.index)
-					sink[j].push_back(token(d.index, sink[j][k].state));
+					sink[j].push_back(local_token(d.index, sink[j][k].state));
 	}
 
 	return d;
@@ -636,13 +636,13 @@ vector<iterator> graph::duplicate(int relation, iterator i, int num, bool add)
 			for (int k = 0; k < (int)source[j].size(); k++)
 				if (source[j][k].index == i.index)
 					for (int l = 0; l < (int)d.size(); l++)
-						source[j].push_back(token(d[l].index, source[j][k].state));
+						source[j].push_back(local_token(d[l].index, source[j][k].state));
 
 		for (int j = 0; j < (int)sink.size(); j++)
 			for (int k = 0; k < (int)sink[j].size(); k++)
 				if (sink[j][k].index == i.index)
 					for (int l = 0; l < (int)d.size(); l++)
-						sink[j].push_back(token(d[l].index, sink[j][k].state));
+						sink[j].push_back(local_token(d[l].index, sink[j][k].state));
 	}
 
 	d.push_back(i);
@@ -690,12 +690,12 @@ void graph::pinch(iterator n, vector<iterator> *i0, vector<iterator> *i1)
 			for (int j = 0; j < (int)source.size(); j++)
 				for (int k = 0; k < (int)source[j].size(); k++)
 					if (source[j][k].index == right[i].index)
-						source[j].push_back(token(left[i].index, source[j][k].state));
+						source[j].push_back(local_token(left[i].index, source[j][k].state));
 
 			for (int j = 0; j < (int)sink.size(); j++)
 				for (int k = 0; k < (int)sink[j].size(); k++)
 					if (sink[j][k].index == right[i].index)
-						sink[j].push_back(token(left[i].index, source[j][k].state));
+						sink[j].push_back(local_token(left[i].index, source[j][k].state));
 		}
 	}
 
@@ -969,9 +969,9 @@ map<iterator, iterator> graph::merge(int relation, const graph &g)
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
 		{
-			source.push_back(vector<token>());
+			source.push_back(vector<local_token>());
 			for (int j = 0; j < (int)g.source[i].size(); j++)
-				source.back().push_back(token(result[iterator(place::type, g.source[i][j].index)].index, g.source[i][j].state));
+				source.back().push_back(local_token(result[iterator(place::type, g.source[i][j].index)].index, g.source[i][j].state));
 		}
 	}
 	else if (relation == parallel)
@@ -983,23 +983,23 @@ map<iterator, iterator> graph::merge(int relation, const graph &g)
 			{
 				source.push_back(source[j]);
 				for (int k = 0; k < (int)g.source[i].size(); k++)
-					source.back().push_back(token(result[iterator(place::type, g.source[i][k].index)].index, g.source[i][k].state));
+					source.back().push_back(local_token(result[iterator(place::type, g.source[i][k].index)].index, g.source[i][k].state));
 			}
 		}
 
 		if (g.source.size() > 0)
 			for (int j = 0; j < s; j++)
 				for (int k = 0; k < (int)g.source.back().size(); k++)
-					source[j].push_back(token(result[iterator(place::type, g.source.back()[k].index)].index, g.source.back()[k].state));
+					source[j].push_back(local_token(result[iterator(place::type, g.source.back()[k].index)].index, g.source.back()[k].state));
 	}
 
 	if (relation == choice || sink.size() == 0)
 	{
 		for (int i = 0; i < (int)g.sink.size(); i++)
 		{
-			sink.push_back(vector<token>());
+			sink.push_back(vector<local_token>());
 			for (int j = 0; j < (int)g.sink[i].size(); j++)
-				sink.back().push_back(token(result[iterator(place::type, g.sink[i][j].index)].index, g.sink[i][j].state));
+				sink.back().push_back(local_token(result[iterator(place::type, g.sink[i][j].index)].index, g.sink[i][j].state));
 		}
 	}
 	else if (relation == parallel)
@@ -1011,14 +1011,14 @@ map<iterator, iterator> graph::merge(int relation, const graph &g)
 			{
 				sink.push_back(sink[j]);
 				for (int k = 0; k < (int)g.sink[i].size(); k++)
-					sink.back().push_back(token(result[iterator(place::type, g.sink[i][k].index)].index, g.sink[i][k].state));
+					sink.back().push_back(local_token(result[iterator(place::type, g.sink[i][k].index)].index, g.sink[i][k].state));
 			}
 		}
 
 		if (g.sink.size() > 0)
 			for (int j = 0; j < s; j++)
 				for (int k = 0; k < (int)g.sink.back().size(); k++)
-					sink[j].push_back(token(result[iterator(place::type, g.sink.back()[k].index)].index, g.sink.back()[k].state));
+					sink[j].push_back(local_token(result[iterator(place::type, g.sink.back()[k].index)].index, g.sink.back()[k].state));
 	}
 	else if (relation == sequence)
 	{
@@ -1035,9 +1035,9 @@ map<iterator, iterator> graph::merge(int relation, const graph &g)
 		sink.clear();
 		for (int i = 0; i < (int)g.sink.size(); i++)
 		{
-			sink.push_back(vector<token>());
+			sink.push_back(vector<local_token>());
 			for (int j = 0; j < (int)g.sink[i].size(); j++)
-				sink.back().push_back(token(result[iterator(place::type, g.sink[i][j].index)].index, g.sink[i][j].state));
+				sink.back().push_back(local_token(result[iterator(place::type, g.sink[i][j].index)].index, g.sink[i][j].state));
 		}
 	}
 
@@ -1064,7 +1064,7 @@ void graph::wrap()
 		}
 
 		source.clear();
-		source.push_back(vector<token>(1, token(split.index, boolean::cube())));
+		source.push_back(vector<local_token>(1, local_token(split.index, boolean::cube())));
 	}
 
 	if (sink.size() > 1 || (sink.size() > 0 && sink[0].size() > 1))
@@ -1080,7 +1080,7 @@ void graph::wrap()
 		}
 
 		sink.clear();
-		sink.push_back(vector<token>(1, token(merge.index, boolean::cube())));
+		sink.push_back(vector<local_token>(1, local_token(merge.index, boolean::cube())));
 	}
 }
 
@@ -1330,14 +1330,14 @@ void graph::compact(bool proper_nesting)
 
 				for (int j = 0; j < enabled; j++)
 				{
-					bool firable = transitions[sim.ready[j].index].action.cubes.size() <= 1;
-					for (int k = 0; k < (int)sim.ready[j].tokens.size() && firable; k++)
+					bool firable = transitions[sim.local.ready[j].index].action.cubes.size() <= 1;
+					for (int k = 0; k < (int)sim.local.ready[j].tokens.size() && firable; k++)
 					{
 						for (int l = 0; l < (int)arcs[transition::type].size() && firable; l++)
-							if (arcs[transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index)
+							if (arcs[transition::type][l].to.index == sim.local.tokens[sim.local.ready[j].tokens[k]].index)
 								firable = false;
 						for (int l = 0; l < (int)arcs[place::type].size() && firable; l++)
-							if (arcs[place::type][l].from.index == sim.tokens[sim.ready[j].tokens[k]].index && arcs[place::type][l].to.index != sim.ready[j].index)
+							if (arcs[place::type][l].from.index == sim.local.tokens[sim.local.ready[j].tokens[k]].index && arcs[place::type][l].to.index != sim.local.ready[j].index)
 								firable = false;
 					}
 
@@ -1350,10 +1350,10 @@ void graph::compact(bool proper_nesting)
 					}
 				}
 
-				for (int j = 0; j < (int)sim.tokens.size(); j++)
-					sim.tokens[j].guard.clear();
+				for (int j = 0; j < (int)sim.local.tokens.size(); j++)
+					sim.local.tokens[j].guard.clear();
 
-				source[i] = sim.tokens;
+				source[i] = sim.local.tokens;
 			}
 		}
 	}
@@ -1549,10 +1549,10 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		for (int i = 0; i < enabled; i++)
 		{
 			simulations.push_back(sim);
-			enabled_transition e = simulations.back().ready[i];
+			enabled_transition e = simulations.back().local.ready[i];
 
 			for (int j = 0; j < (int)e.tokens.size(); j++)
-				places[simulations.back().tokens[e.tokens[j]].index].predicate |= simulations.back().tokens[e.tokens[j]].state;
+				places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().local.tokens[e.tokens[j]].state;
 
 			// Fire the transition in the simulation
 			simulations.back().fire(i);
@@ -1580,7 +1580,7 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 		if (enabled == 0)
 		{
-			deadlocks.push_back(deadlock(sim.tokens));
+			deadlocks.push_back(deadlock(sim.local.tokens));
 			unstable.insert(unstable.end(), sim.unstable.begin(), sim.unstable.end());
 			interfering.insert(interfering.end(), sim.interfering.begin(), sim.interfering.end());
 			sort(deadlocks.begin(), deadlocks.end());
@@ -1591,26 +1591,26 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 			interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
 		}
 
-		for (int i = 0; i < (int)sim.tokens.size(); i++)
+		for (int i = 0; i < (int)sim.local.tokens.size(); i++)
 		{
-			for (int j = i+1; j < (int)sim.tokens.size(); j++)
-				parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.tokens[i].index), iterator(place::type, sim.tokens[j].index)));
+			for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
+				parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
 			for (int j = 0; j < enabled; j++)
-				if (find(sim.ready[j].tokens.begin(), sim.ready[j].tokens.end(), i) == sim.ready[j].tokens.end())
-					parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.tokens[i].index), iterator(transition::type, sim.ready[j].index)));
+				if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
+					parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
 		}
 
-		vector<pair<bool, boolean::cover> > acting(sim.tokens.size(), pair<bool, boolean::cover>(false, 1));
+		vector<pair<bool, boolean::cover> > acting(sim.local.tokens.size(), pair<bool, boolean::cover>(false, 1));
 		for (int i = 0; i < (int)enabled; i++)
-			for (int j = 0; j < (int)sim.ready[i].tokens.size(); j++)
+			for (int j = 0; j < (int)sim.local.ready[i].tokens.size(); j++)
 			{
-				acting[sim.ready[i].tokens[j]].second &= ~transitions[sim.ready[i].index].action.cubes[sim.ready[i].term];
-				acting[sim.ready[i].tokens[j]].first = true;
+				acting[sim.local.ready[i].tokens[j]].second &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
+				acting[sim.local.ready[i].tokens[j]].first = true;
 			}
 
-		for (int i = 0; i < (int)sim.tokens.size(); i++)
+		for (int i = 0; i < (int)sim.local.tokens.size(); i++)
 			if (acting[i].first)
-				places[sim.tokens[i].index].effective |= (sim.tokens[i].state & acting[i].second);
+				places[sim.local.tokens[i].index].effective |= (sim.local.tokens[i].state & acting[i].second);
 
 		count++;
 	}
@@ -1641,7 +1641,7 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 
 		// Set up the initial state which is determined by the reset behavior
 		iterator init = result.create(place(reset));
-		result.source.push_back(vector<token>(1, token(init.index, reset)));
+		result.source.push_back(vector<local_token>(1, local_token(init.index, reset)));
 
 		// Set up the first simulation that starts at the reset state
 		simulations.push_back(pair<simulator, iterator>(simulator(this, i), init));
@@ -1660,7 +1660,7 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 		for (int i = 0; i < enabled; i++)
 		{
 			simulations.push_back(sim);
-			enabled_transition e = simulations.back().first.ready[i];
+			enabled_transition e = simulations.back().first.local.ready[i];
 
 			if (transitions[e.index].behavior == transition::active)
 			{
@@ -1751,7 +1751,7 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 
 		if (enabled == 0)
 		{
-			deadlocks.push_back(deadlock(sim.first.tokens));
+			deadlocks.push_back(deadlock(sim.first.local.tokens));
 			unstable.insert(unstable.end(), sim.first.unstable.begin(), sim.first.unstable.end());
 			interfering.insert(interfering.end(), sim.first.interfering.begin(), sim.first.interfering.end());
 			sort(deadlocks.begin(), deadlocks.end());

@@ -16,27 +16,45 @@
 namespace hse
 {
 
+/* A remote token is a token that does not maintain its own state but acts only as an environment for a local token.
+ */
+struct remote_token
+{
+	remote_token();
+	remote_token(int index);
+	~remote_token();
+
+	int index;
+};
+
+bool operator<(remote_token i, remote_token j);
+bool operator>(remote_token i, remote_token j);
+bool operator<=(remote_token i, remote_token j);
+bool operator>=(remote_token i, remote_token j);
+bool operator==(remote_token i, remote_token j);
+bool operator!=(remote_token i, remote_token j);
+
 /* A local token maintains its own local state information and cannot access global state
  * except through transformations applied to its local state.
  */
-struct token
+struct local_token
 {
-	token();
-	token(int index, boolean::cube state);
-	token(int index, boolean::cube state, vector<term_index> guard);
-	~token();
+	local_token();
+	local_token(int index, boolean::cube state);
+	local_token(int index, boolean::cube state, vector<term_index> guard);
+	~local_token();
 
 	int index;
 	boolean::cube state;
 	vector<term_index> guard;
 };
 
-bool operator<(token i, token j);
-bool operator>(token i, token j);
-bool operator<=(token i, token j);
-bool operator>=(token i, token j);
-bool operator==(token i, token j);
-bool operator!=(token i, token j);
+bool operator<(local_token i, local_token j);
+bool operator>(local_token i, local_token j);
+bool operator<=(local_token i, local_token j);
+bool operator>=(local_token i, local_token j);
+bool operator==(local_token i, local_token j);
+bool operator!=(local_token i, local_token j);
 
 /* This stores all the information necessary to fire an enabled transition: the local
  * and remote tokens that enable it, and the total state of those tokens.
@@ -90,10 +108,10 @@ bool operator!=(interference i, interference j);
 struct deadlock
 {
 	deadlock();
-	deadlock(vector<token> tokens);
+	deadlock(vector<local_token> tokens);
 	~deadlock();
 
-	vector<token> tokens;
+	vector<local_token> tokens;
 };
 
 bool operator<(deadlock i, deadlock j);
