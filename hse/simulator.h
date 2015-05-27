@@ -17,7 +17,7 @@ namespace hse
 struct simulator
 {
 	simulator();
-	simulator(graph *base, int i);
+	simulator(graph *base, int i, bool environment);
 	~simulator();
 
 	vector<instability> unstable;
@@ -43,7 +43,7 @@ struct simulator
 		// indices for transitions in the graph between the head and the tail
 		deque<term_index> body;
 
-		vector<enabled_transition> ready;
+		vector<enabled_environment> ready;
 
 		bool is_active()
 		{
@@ -53,6 +53,11 @@ struct simulator
 
 	int enabled(bool sorted = false);
 	void fire(int index);
+
+	int possible(bool sorted = false);
+	void begin(int index);
+	void end();
+	void environment();
 
 	struct state
 	{

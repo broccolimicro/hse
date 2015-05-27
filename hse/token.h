@@ -16,15 +16,20 @@
 namespace hse
 {
 
+struct reset_token;
+
 /* A remote token is a token that does not maintain its own state but acts only as an environment for a local token.
  */
 struct remote_token
 {
 	remote_token();
 	remote_token(int index);
+	remote_token(const reset_token &t);
 	~remote_token();
 
 	int index;
+
+	remote_token &operator=(const reset_token &t);
 };
 
 bool operator<(remote_token i, remote_token j);
@@ -41,12 +46,16 @@ struct local_token
 {
 	local_token();
 	local_token(int index, boolean::cube state);
-	local_token(int index, boolean::cube state, vector<term_index> guard);
+	local_token(int index, boolean::cube state, vector<int> guard, bool remotable);
+	local_token(const reset_token &t);
 	~local_token();
 
 	int index;
 	boolean::cube state;
-	vector<term_index> guard;
+	vector<int> guard;
+	bool remotable;
+
+	local_token &operator=(const reset_token &t);
 };
 
 bool operator<(local_token i, local_token j);
@@ -55,6 +64,33 @@ bool operator<=(local_token i, local_token j);
 bool operator>=(local_token i, local_token j);
 bool operator==(local_token i, local_token j);
 bool operator!=(local_token i, local_token j);
+
+/* A local token maintains its own local state information and cannot access global state
+ * except through transformations applied to its local state.
+ */
+struct reset_token
+{
+	reset_token();
+	reset_token(int index, boolean::cube state);
+	reset_token(int index, boolean::cube state, bool remotable);
+	reset_token(const remote_token &t);
+	reset_token(const local_token &t);
+	~reset_token();
+
+	int index;
+	boolean::cube state;
+	bool remotable;
+
+	reset_token &operator=(const remote_token &t);
+	reset_token &operator=(const local_token &t);
+};
+
+bool operator<(reset_token i, reset_token j);
+bool operator>(reset_token i, reset_token j);
+bool operator<=(reset_token i, reset_token j);
+bool operator>=(reset_token i, reset_token j);
+bool operator==(reset_token i, reset_token j);
+bool operator!=(reset_token i, reset_token j);
 
 /* This stores all the information necessary to fire an enabled transition: the local
  * and remote tokens that enable it, and the total state of those tokens.
@@ -68,7 +104,16 @@ struct enabled_transition : term_index
 	vector<int> tokens;
 	boolean::cube state;
 	vector<term_index> history;
-	vector<term_index> guard;
+	vector<int> guard;
+};
+
+struct enabled_environment : term_index
+{
+	enabled_environment();
+	enabled_environment(int index);
+	~enabled_environment();
+
+	vector<int> tokens;
 };
 
 struct instability

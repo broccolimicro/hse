@@ -22,9 +22,20 @@ remote_token::remote_token(int index)
 	this->index = index;
 }
 
+remote_token::remote_token(const reset_token &t)
+{
+	index = t.index;
+}
+
 remote_token::~remote_token()
 {
 
+}
+
+remote_token &remote_token::operator=(const reset_token &t)
+{
+	index = t.index;
+	return *this;
 }
 
 bool operator<(remote_token i, remote_token j)
@@ -61,24 +72,42 @@ local_token::local_token()
 {
 	index = 0;
 	state = 1;
+	remotable = false;
 }
 
 local_token::local_token(int index, boolean::cube state)
 {
 	this->index = index;
 	this->state = state;
+	remotable = false;
 }
 
-local_token::local_token(int index, boolean::cube state, vector<term_index> guard)
+local_token::local_token(int index, boolean::cube state, vector<int> guard, bool remotable)
 {
 	this->index = index;
 	this->state = state;
 	this->guard = guard;
+	this->remotable = remotable;
+}
+
+local_token::local_token(const reset_token &t)
+{
+	index = t.index;
+	state = t.state;
+	remotable = t.remotable;
 }
 
 local_token::~local_token()
 {
 
+}
+
+local_token &local_token::operator=(const reset_token &t)
+{
+	index = t.index;
+	state = t.state;
+	remotable = t.remotable;
+	return *this;
 }
 
 bool operator<(local_token i, local_token j)
@@ -115,6 +144,96 @@ bool operator!=(local_token i, local_token j)
 	return (i.index != j.index || i.state != j.state);
 }
 
+reset_token::reset_token()
+{
+	index = 0;
+	state = 1;
+	remotable = false;
+}
+
+reset_token::reset_token(int index, boolean::cube state)
+{
+	this->index = index;
+	this->state = state;
+	this->remotable = false;
+}
+
+reset_token::reset_token(int index, boolean::cube state, bool remotable)
+{
+	this->index = index;
+	this->state = state;
+	this->remotable = remotable;
+}
+
+reset_token::reset_token(const remote_token &t)
+{
+	index = t.index;
+	state = boolean::cube();
+	remotable = true;
+}
+
+reset_token::reset_token(const local_token &t)
+{
+	index = t.index;
+	state = t.state;
+	remotable = t.remotable;
+}
+
+reset_token::~reset_token()
+{
+
+}
+
+reset_token &reset_token::operator=(const remote_token &t)
+{
+	index = t.index;
+	state = boolean::cube();
+	remotable = true;
+	return *this;
+}
+
+reset_token &reset_token::operator=(const local_token &t)
+{
+	index = t.index;
+	state = t.state;
+	remotable = false;
+	return *this;
+}
+
+bool operator<(reset_token i, reset_token j)
+{
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.state < j.state);
+}
+
+bool operator>(reset_token i, reset_token j)
+{
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.state > j.state);
+}
+
+bool operator<=(reset_token i, reset_token j)
+{
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.state <= j.state);
+}
+
+bool operator>=(reset_token i, reset_token j)
+{
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.state >= j.state);
+}
+
+bool operator==(reset_token i, reset_token j)
+{
+	return (i.index == j.index && i.state == j.state);
+}
+
+bool operator!=(reset_token i, reset_token j)
+{
+	return (i.index != j.index || i.state != j.state);
+}
+
 enabled_transition::enabled_transition()
 {
 	index = 0;
@@ -130,6 +249,23 @@ enabled_transition::enabled_transition(int index)
 }
 
 enabled_transition::~enabled_transition()
+{
+
+}
+
+enabled_environment::enabled_environment()
+{
+	index = 0;
+	term = 0;
+}
+
+enabled_environment::enabled_environment(int index)
+{
+	this->index = index;
+	this->term = 0;
+}
+
+enabled_environment::~enabled_environment()
 {
 
 }

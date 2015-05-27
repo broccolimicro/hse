@@ -24,7 +24,7 @@ struct graph
 	vector<place> places;
 	vector<transition> transitions;
 	vector<arc> arcs[2];
-	vector<vector<local_token> > source, sink;
+	vector<vector<reset_token> > source, sink;
 
 	vector<half_synchronization> synchronizations;
 	vector<int> reach;
@@ -173,7 +173,7 @@ struct graph
 			return transitions[i.index];
 	}
 
-	map<iterator, iterator> merge(int relation, const graph &g);
+	map<iterator, iterator> merge(int relation, const graph &g, bool remote);
 	void wrap();
 
 	vector<vector<iterator> > cycles() const;
@@ -188,7 +188,7 @@ struct graph
 	void petrify();
 
 	// Generated through simulation
-	void elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks);
+	void elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks, bool report);
 	graph to_state_graph(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks);
 	graph to_petri_net();
 };
