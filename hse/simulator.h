@@ -62,9 +62,10 @@ struct simulator
 	struct state
 	{
 		vector<int> tokens;
-		boolean::cube encoding;
+		vector<boolean::cover> encodings;
 
-		pair<vector<int>, boolean::cover> to_pair();
+		void merge(const state &s);
+		bool is_subset_of(const state &s);
 	};
 
 	state get_state();
