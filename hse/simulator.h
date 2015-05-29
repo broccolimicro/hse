@@ -75,6 +75,8 @@ struct simulator
 
 	void merge_errors(const simulator &sim);
 	state get_state();
+
+	vector<pair<int, int> > get_vacuous_choices();
 };
 
 bool operator<(simulator::state s1, simulator::state s2);

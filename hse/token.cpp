@@ -257,6 +257,7 @@ enabled_transition::enabled_transition()
 	index = 0;
 	term = 0;
 	state = 1;
+	vacuous = false;
 }
 
 enabled_transition::enabled_transition(int index)
@@ -264,6 +265,7 @@ enabled_transition::enabled_transition(int index)
 	this->index = index;
 	this->term = 0;
 	this->state = 1;
+	vacuous = false;
 }
 
 enabled_transition::~enabled_transition()

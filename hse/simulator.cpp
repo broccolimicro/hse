@@ -123,11 +123,12 @@ int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 		for (int j = 0; j < base->transitions[potential[i].index].action.size(); j++)
 		{
 			bool pass = true;
+			bool vacuous = false;
 
 			if (base->transitions[potential[i].index].behavior == transition::active)
 			{
 				// If this transition is vacuous then its enabled even if its incoming guards are not firing
-				bool vacuous = are_mutex(potential[i].state, ~base->transitions[potential[i].index].action.cubes[j]);
+				vacuous = are_mutex(potential[i].state, ~base->transitions[potential[i].index].action.cubes[j]);
 
 				// Now we need to check all of the guards leading up to this transition
 				for (vector<int>::iterator l = potential[i].guard.begin(); l != potential[i].guard.end() && pass && !vacuous; l++)
@@ -144,6 +145,7 @@ int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 			{
 				result.push_back(potential[i]);
 				result.back().term = j;
+				result.back().vacuous = vacuous;
 			}
 		}
 	}
@@ -503,6 +505,18 @@ simulator::state simulator::get_state()
 	result.environment.resize(unique(result.environment.begin(), result.environment.end()) - result.environment.begin());
 
 	return result;
+}
+
+vector<pair<int, int> > simulator::get_vacuous_choices()
+{
+	vector<pair<int, int> > vacuous_choices;
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		if (local.ready[i].vacuous)
+			for (int j = i+1; j < (int)local.ready.size(); j++)
+				if (local.ready[j].vacuous && vector_intersection_size(local.ready[i].tokens, local.ready[j].tokens) > 0)
+					vacuous_choices.push_back(pair<int, int>(i, j));
+
+	return vacuous_choices;
 }
 
 void simulator::state::merge(const simulator::state &s)

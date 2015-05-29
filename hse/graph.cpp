@@ -1586,70 +1586,108 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 					states.insert(loc, state);
 
 				enabled = sim.enabled(variables);
-				// Handle the local tokens
-				if (report)
-					progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.size()) + " " + to_string(enabled), __FILE__, __LINE__);
+				vector<pair<int, int> > vacuous_choices = sim.get_vacuous_choices();
+				int index = -1;
+				for (int i = 0; i < (int)sim.local.ready.size() && index == -1; i++)
+					if (sim.local.ready[i].vacuous)
+					{
+						index = i;
+						for (int j = 0; j < (int)vacuous_choices.size() && index != -1; j++)
+							if (vacuous_choices[j].first == i || vacuous_choices[j].second == i)
+								index = -1;
+					}
 
-				for (int i = 0; i < enabled; i++)
+				if (index != -1)
 				{
 					simulations.push_back(sim);
-					enabled_transition e = simulations.back().local.ready[i];
-
-					for (int j = 0; j < (int)e.tokens.size(); j++)
-						places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().local.tokens[e.tokens[j]].state;
-
-					// Fire the transition in the simulation
-					simulations.back().fire(i);
+					simulations.back().fire(index);
 				}
-
-				if (enabled == 0)
+				else if (vacuous_choices.size() > 0)
 				{
-					deadlock d(sim.local.tokens);
-					vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
-					if (dloc == deadlocks.end() || *dloc != d)
+					string err = "vacuous transitions break mutual exclusion ";
+					for (int i = 0; i < (int)vacuous_choices.size(); i++)
+						err += "{" + sim.local.ready[vacuous_choices[i].first].to_string(*this, variables) + ", " + sim.local.ready[vacuous_choices[i].second].to_string(*this, variables) + "} ";
+					error("", err, __FILE__, __LINE__);
+
+					for (int i = 0; i < (int)sim.local.ready.size(); i++)
+						if (sim.local.ready[i].vacuous)
+						{
+							simulations.push_back(sim);
+							enabled_transition e = simulations.back().local.ready[i];
+
+							// Fire the transition in the simulation
+							simulations.back().fire(i);
+						}
+				}
+				else
+				{
+					// Handle the local tokens
+					if (report)
+						progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.size()) + " " + to_string(enabled), __FILE__, __LINE__);
+
+					for (int i = 0; i < (int)sim.local.ready.size(); i++)
 					{
-						error("", d.to_string(variables), __FILE__, __LINE__);
-						deadlocks.insert(dloc, d);
+						simulations.push_back(sim);
+						enabled_transition e = simulations.back().local.ready[i];
+
+						for (int j = 0; j < (int)e.tokens.size(); j++)
+							places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().local.tokens[e.tokens[j]].state;
+
+						// Fire the transition in the simulation
+						simulations.back().fire(i);
 					}
 
-					simulations.back().merge_errors(sim);
-				}
+					if (sim.local.ready.size() == 0)
+					{
+						deadlock d(sim.local.tokens);
+						vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
+						if (dloc == deadlocks.end() || *dloc != d)
+						{
+							error("", d.to_string(variables), __FILE__, __LINE__);
+							deadlocks.insert(dloc, d);
+						}
 
-				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-				{
-					for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
-						parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
-					for (int j = 0; j < enabled; j++)
-						if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
-							parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
-				}
+						simulations.back().merge_errors(sim);
+					}
 
-				/*bool found = false;
-				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-					if (sim.local.tokens[i].index == 5)
-						found = true;
-
-				if (found)
-				{
-					cout << "Saved state " << export_disjunction(sim.global, variables).to_string() << endl << "{" << endl;
 					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-						cout << sim.local.tokens[i].index << " " << export_conjunction(sim.local.tokens[i].state, variables).to_string() << endl;
-					cout << "}" << endl;
-				}*/
-
-				vector<pair<bool, boolean::cover> > acting(sim.local.tokens.size(), pair<bool, boolean::cover>(false, 1));
-				for (int i = 0; i < (int)enabled; i++)
-					for (int j = 0; j < (int)sim.local.ready[i].tokens.size(); j++)
 					{
-						acting[sim.local.ready[i].tokens[j]].second &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
-						acting[sim.local.ready[i].tokens[j]].first = true;
+						for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
+							parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
+						for (int j = 0; j < (int)sim.local.ready.size(); j++)
+							if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
+								parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
 					}
 
-				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-					if (acting[i].first)
-						places[sim.local.tokens[i].index].effective |= (sim.local.tokens[i].state & acting[i].second);
+					/*bool found = false;
+					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+						if (sim.local.tokens[i].index == 5)
+							found = true;
 
-				count++;
+					if (found)
+					{
+						cout << "Saved state " << export_disjunction(sim.global, variables).to_string() << endl << "{" << endl;
+						for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+							cout << sim.local.tokens[i].index << " " << export_conjunction(sim.local.tokens[i].state, variables).to_string() << endl;
+						cout << "}" << endl;
+					}*/
+
+					boolean::cover en = 1;
+					//vector<pair<bool, boolean::cover> > acting(sim.local.tokens.size(), pair<bool, boolean::cover>(false, 1));
+					for (int i = 0; i < (int)sim.local.ready.size(); i++)
+						en &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
+						/*for (int j = 0; j < (int)sim.local.ready[i].tokens.size(); j++)
+						{
+							acting[sim.local.ready[i].tokens[j]].second &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
+							acting[sim.local.ready[i].tokens[j]].first = true;
+						}*/
+
+					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+						//if (acting[i].first)
+							places[sim.local.tokens[i].index].effective |= (sim.local.tokens[i].state & en);//acting[i].second);
+
+					count++;
+				}
 			}
 		}
 	}
@@ -1663,6 +1701,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 	for (int i = 0; i < (int)places.size(); i++)
 	{
 		places[i].effective.espresso();
+		sort(places[i].effective.cubes.begin(), places[i].effective.cubes.end());
 		places[i].predicate.espresso();
 	}
 }

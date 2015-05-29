@@ -111,6 +111,7 @@ struct enabled_transition : term_index
 	boolean::cube state;
 	vector<term_index> history;
 	vector<int> guard;
+	bool vacuous;
 };
 
 struct enabled_environment : term_index
