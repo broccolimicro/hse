@@ -7,6 +7,7 @@
 
 #include <common/standard.h>
 #include <boolean/cover.h>
+#include <boolean/variable.h>
 
 #include "node.h"
 #include "token.h"
@@ -178,18 +179,18 @@ struct graph
 
 	vector<vector<iterator> > cycles() const;
 
-	void compact(bool proper_nesting = false);
+	void compact(const boolean::variable_set &variables, bool proper_nesting = false);
 	void reachability();
 	bool is_reachable(iterator from, iterator to);
 	bool is_parallel(iterator a, iterator b);
 
 	// Generated through syntax
 	void synchronize();
-	void petrify();
+	void petrify(const boolean::variable_set &variables);
 
 	// Generated through simulation
-	void elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks, bool report);
-	graph to_state_graph(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks);
+	void elaborate(const boolean::variable_set &variables, bool report);
+	graph to_state_graph(const boolean::variable_set &variables);
 	graph to_petri_net();
 };
 

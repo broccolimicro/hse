@@ -6,6 +6,8 @@
  */
 
 #include "node.h"
+#include "graph.h"
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -248,6 +250,14 @@ term_index::term_index(int index, int term)
 term_index::~term_index()
 {
 
+}
+
+string term_index::to_string(const graph &g, const boolean::variable_set &v)
+{
+	if (g.transitions[index].behavior == transition::active)
+		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_internal_choice(g.transitions[index].action[term], v).to_string();
+	else
+		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_disjunction(g.transitions[index].action[term], v).to_string();
 }
 
 bool operator<(term_index i, term_index j)

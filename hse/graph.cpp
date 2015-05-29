@@ -9,6 +9,7 @@
 #include "simulator.h"
 #include <common/message.h>
 #include <common/text.h>
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -1120,7 +1121,7 @@ vector<vector<iterator> > graph::cycles() const
 	return result;
 }
 
-void graph::compact(bool proper_nesting)
+void graph::compact(const boolean::variable_set &variables, bool proper_nesting)
 {
 	bool change = true;
 	while (change)
@@ -1326,7 +1327,7 @@ void graph::compact(bool proper_nesting)
 			for (int i = (int)source.size()-1; i >= 0; i--)
 			{
 				simulator sim(this, i, false);
-				int enabled = sim.enabled();
+				int enabled = sim.enabled(variables);
 
 				for (int j = 0; j < enabled; j++)
 				{
@@ -1345,7 +1346,7 @@ void graph::compact(bool proper_nesting)
 					{
 						sim.fire(j);
 						change = true;
-						enabled = sim.enabled();
+						enabled = sim.enabled(variables);
 						j = -1;
 					}
 				}
@@ -1409,7 +1410,7 @@ void graph::synchronize()
 								synchronizations.push_back(sync);
 }
 
-void graph::petrify()
+void graph::petrify(const boolean::variable_set &variables)
 {
 	// Petri nets don't support internal parallelism or choice, so we have to expand those transitions.
 	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
@@ -1511,10 +1512,10 @@ void graph::petrify()
 	synchronizations.clear();
 
 	// Clean up
-	compact();
+	compact(variables);
 }
 
-void graph::elaborate(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks, bool report)
+void graph::elaborate(const boolean::variable_set &variables, bool report)
 {
 	// TODO
 	//cout << "Elaborating" << endl;
@@ -1526,21 +1527,12 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 	vector<simulator::state> states;
 	vector<simulator> simulations;
+	vector<deadlock> deadlocks;
 	simulations.reserve(20000);
 
 	// Set up the first simulation that starts at the reset state
 	for (int i = 0; i < (int)source.size(); i++)
-	{
 		simulations.push_back(simulator(this, i, true));
-
-		// Record the reset state in our map of visited states
-		simulator::state state = simulations.back().get_state();
-		vector<simulator::state>::iterator loc = lower_bound(states.begin(), states.end(), state);
-		if (loc != states.end() && *loc == state)
-			loc->merge(state);
-		else
-			states.insert(loc, state);
-	}
 
 	int count = 0;
 	while (simulations.size() > 0)
@@ -1548,7 +1540,7 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		simulator sim = simulations.back();
 		simulations.pop_back();
 
-		int enabled = sim.possible();
+		int enabled = sim.possible(variables);
 		if (enabled > 0)
 		{
 			for (int i = 0; i < (int)sim.remote.ready.size(); i++)
@@ -1564,78 +1556,101 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 		}
 		else
 		{
-			enabled = sim.enabled();
-			// Handle the local tokens
-			if (report)
-				progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.size()) + " " + to_string(enabled), __FILE__, __LINE__);
-
-			for (int i = 0; i < enabled; i++)
+			// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
+			// and if it is not, then we need to put the state in and continue on our way.
+			simulator::state state = sim.get_state();
+			vector<simulator::state>::iterator loc = lower_bound(states.begin(), states.end(), state);
+			if (loc != states.end() && state == *loc && state.is_subset_of(*loc))
 			{
-				simulations.push_back(sim);
-				enabled_transition e = simulations.back().local.ready[i];
+				if (simulations.size() > 1)
+					simulations.back().merge_errors(sim);
 
-				for (int j = 0; j < (int)e.tokens.size(); j++)
-					places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().local.tokens[e.tokens[j]].state;
+				/*bool found = false;
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+					if (sim.local.tokens[i].index == 5)
+						found = true;
 
-				// Fire the transition in the simulation
-				simulations.back().fire(i);
-
-				// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
-				// and if it is not, then we need to put the state in and continue on our way.
-				simulator::state state = simulations.back().get_state();
-				vector<simulator::state>::iterator loc = lower_bound(states.begin(), states.end(), state);
-				if (loc != states.end() && state.is_subset_of(*loc))
+				if (found)
 				{
-					unstable.insert(unstable.end(), simulations.back().unstable.begin(), simulations.back().unstable.end());
-					interfering.insert(interfering.end(), simulations.back().interfering.begin(), simulations.back().interfering.end());
-					sort(unstable.begin(), unstable.end());
-					sort(interfering.begin(), interfering.end());
-					unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
-					interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
-
-					simulations.pop_back();
-				}
-				else if (loc != states.end() && state == *loc)
+					cout << "Found state " << export_disjunction(sim.global, variables).to_string() << endl << "{" << endl;
+					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+						cout << sim.local.tokens[i].index << " " << export_conjunction(sim.local.tokens[i].state, variables).to_string() << endl;
+					cout << "}" << endl;
+				}*/
+			}
+			else
+			{
+				if (loc != states.end() && state == *loc)
 					loc->merge(state);
 				else
 					states.insert(loc, state);
-			}
 
-			if (enabled == 0)
-			{
-				deadlocks.push_back(deadlock(sim.local.tokens));
-				unstable.insert(unstable.end(), sim.unstable.begin(), sim.unstable.end());
-				interfering.insert(interfering.end(), sim.interfering.begin(), sim.interfering.end());
-				sort(deadlocks.begin(), deadlocks.end());
-				sort(unstable.begin(), unstable.end());
-				sort(interfering.begin(), interfering.end());
-				deadlocks.resize(unique(deadlocks.begin(), deadlocks.end()) - deadlocks.begin());
-				unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
-				interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
-			}
+				enabled = sim.enabled(variables);
+				// Handle the local tokens
+				if (report)
+					progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.size()) + " " + to_string(enabled), __FILE__, __LINE__);
 
-			for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-			{
-				for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
-					parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
-				for (int j = 0; j < enabled; j++)
-					if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
-						parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
-			}
-
-			vector<pair<bool, boolean::cover> > acting(sim.local.tokens.size(), pair<bool, boolean::cover>(false, 1));
-			for (int i = 0; i < (int)enabled; i++)
-				for (int j = 0; j < (int)sim.local.ready[i].tokens.size(); j++)
+				for (int i = 0; i < enabled; i++)
 				{
-					acting[sim.local.ready[i].tokens[j]].second &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
-					acting[sim.local.ready[i].tokens[j]].first = true;
+					simulations.push_back(sim);
+					enabled_transition e = simulations.back().local.ready[i];
+
+					for (int j = 0; j < (int)e.tokens.size(); j++)
+						places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().local.tokens[e.tokens[j]].state;
+
+					// Fire the transition in the simulation
+					simulations.back().fire(i);
 				}
 
-			for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-				if (acting[i].first)
-					places[sim.local.tokens[i].index].effective |= (sim.local.tokens[i].state & acting[i].second);
+				if (enabled == 0)
+				{
+					deadlock d(sim.local.tokens);
+					vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
+					if (dloc == deadlocks.end() || *dloc != d)
+					{
+						error("", d.to_string(variables), __FILE__, __LINE__);
+						deadlocks.insert(dloc, d);
+					}
 
-			count++;
+					simulations.back().merge_errors(sim);
+				}
+
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+				{
+					for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
+						parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
+					for (int j = 0; j < enabled; j++)
+						if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
+							parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
+				}
+
+				/*bool found = false;
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+					if (sim.local.tokens[i].index == 5)
+						found = true;
+
+				if (found)
+				{
+					cout << "Saved state " << export_disjunction(sim.global, variables).to_string() << endl << "{" << endl;
+					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+						cout << sim.local.tokens[i].index << " " << export_conjunction(sim.local.tokens[i].state, variables).to_string() << endl;
+					cout << "}" << endl;
+				}*/
+
+				vector<pair<bool, boolean::cover> > acting(sim.local.tokens.size(), pair<bool, boolean::cover>(false, 1));
+				for (int i = 0; i < (int)enabled; i++)
+					for (int j = 0; j < (int)sim.local.ready[i].tokens.size(); j++)
+					{
+						acting[sim.local.ready[i].tokens[j]].second &= ~transitions[sim.local.ready[i].index].action.cubes[sim.local.ready[i].term];
+						acting[sim.local.ready[i].tokens[j]].first = true;
+					}
+
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+					if (acting[i].first)
+						places[sim.local.tokens[i].index].effective |= (sim.local.tokens[i].state & acting[i].second);
+
+				count++;
+			}
 		}
 	}
 
@@ -1644,6 +1659,12 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
 
 	sort(parallel_nodes.begin(), parallel_nodes.end());
 	parallel_nodes.resize(unique(parallel_nodes.begin(), parallel_nodes.end()) - parallel_nodes.begin());
+
+	for (int i = 0; i < (int)places.size(); i++)
+	{
+		places[i].effective.espresso();
+		places[i].predicate.espresso();
+	}
 }
 
 /** to_state_graph()
@@ -1651,11 +1672,12 @@ void graph::elaborate(vector<instability> &unstable, vector<interference> &inter
  * This converts a given graph to the fully expanded state space through simulation. It systematically
  * simulates all possible transition orderings and determines all of the resulting state information.
  */
-graph graph::to_state_graph(vector<instability> &unstable, vector<interference> &interfering, vector<deadlock> &deadlocks)
+graph graph::to_state_graph(const boolean::variable_set &variables)
 {
-	/*graph result;
-	map<simulator::state, iterator> states;
+	graph result;
+	vector<pair<simulator::state, iterator> > states;
 	vector<pair<simulator, iterator> > simulations;
+	vector<deadlock> deadlocks;
 	vector<pair<int, int> > to_merge;
 
 	for (int i = 0; i < (int)source.size(); i++)
@@ -1673,12 +1695,11 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 
 		// Record the reset state in our map of visited states
 		simulator::state state = simulations.back().first.get_state();
-		map<simulator::state, iterator>::iterator loc = states.find(state);
+		vector<pair<simulator::state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<simulator::state, iterator>(state, iterator()));
 		if (loc != states.end() && loc->first == state)
 			loc->first.merge(state);
 		else
-			states.insert(loc, state);
-		states.insert(pair<simulator::state, iterator>(simulations.back().first.get_state(), init));
+			states.insert(loc, pair<simulator::state, iterator>(state, init));
 	}
 
 	while (simulations.size() > 0)
@@ -1686,7 +1707,7 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 		pair<simulator, iterator> sim = simulations.back();
 		simulations.pop_back();
 
-		int enabled = sim.first.enabled();
+		int enabled = sim.first.enabled(variables);
 		simulations.reserve(simulations.size() + enabled);
 		for (int i = 0; i < enabled; i++)
 		{
@@ -1719,15 +1740,11 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 				// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
 				// and if it is not, then we need to put the state in and continue on our way.
 				simulator::state state = simulations.back().first.get_state();
-				map<simulator::state, iterator>::iterator loc = states.find(state);
-				if (loc != states.end())
+				vector<pair<simulator::state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<simulator::state, iterator>(state, iterator()));
+				if (loc != states.end() && loc->first == state)
 				{
-					unstable.insert(unstable.end(), simulations.back().first.unstable.begin(), simulations.back().first.unstable.end());
-					interfering.insert(interfering.end(), simulations.back().first.interfering.begin(), simulations.back().first.interfering.end());
-					sort(unstable.begin(), unstable.end());
-					sort(interfering.begin(), interfering.end());
-					unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
-					interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+					if (simulations.size() > 1)
+						simulations[simulations.size()-2].first.merge_errors(simulations.back().first);
 
 					if (n.index == -1)
 						result.connect(simulations.back().second, loc->second);
@@ -1742,30 +1759,30 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 
 					simulations.pop_back();
 				}
-				else if (loc == states.end() && n.index == -1)
+				else if ((loc == states.end() || loc->first != state) && n.index == -1)
 				{
-					simulations.back().second = result.push_back(simulations.back().second, place(state.encoding));
-					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+					boolean::cover encodings = 1;
+					for (int j = 0; j < (int)state.encodings.size(); j++)
+						encodings &= state.encodings[j];
+
+					simulations.back().second = result.push_back(simulations.back().second, place(encodings));
+					states.insert(loc, pair<simulator::state, iterator>(state, simulations.back().second));
 				}
 				else
 				{
 					simulations.back().second = n;
-					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+					states.insert(loc, pair<simulator::state, iterator>(state, simulations.back().second));
 				}
 			}
 			else
 			{
 				simulations.back().first.fire(i);
 				simulator::state state = simulations.back().first.get_state();
-				map<simulator::state, iterator>::iterator loc = states.find(state);
-				if (loc != states.end())
+				vector<pair<simulator::state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<simulator::state, iterator>(state, iterator()));
+				if (loc != states.end() && loc->first == state)
 				{
-					unstable.insert(unstable.end(), simulations.back().first.unstable.begin(), simulations.back().first.unstable.end());
-					interfering.insert(interfering.end(), simulations.back().first.interfering.begin(), simulations.back().first.interfering.end());
-					sort(unstable.begin(), unstable.end());
-					sort(interfering.begin(), interfering.end());
-					unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
-					interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+					if (simulations.size() > 1)
+						simulations[simulations.size()-2].first.merge_errors(simulations.back().first);
 
 					// If we find duplicate records of the same state, then we'll need to merge them later.
 					if (loc->second.index > simulations.back().second.index)
@@ -1776,21 +1793,21 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 					simulations.pop_back();
 				}
 				else
-					states.insert(pair<simulator::state, iterator>(state, simulations.back().second));
+					states.insert(loc, pair<simulator::state, iterator>(state, simulations.back().second));
 			}
 		}
 
 		if (enabled == 0)
 		{
-			deadlocks.push_back(deadlock(sim.first.local.tokens));
-			unstable.insert(unstable.end(), sim.first.unstable.begin(), sim.first.unstable.end());
-			interfering.insert(interfering.end(), sim.first.interfering.begin(), sim.first.interfering.end());
-			sort(deadlocks.begin(), deadlocks.end());
-			sort(unstable.begin(), unstable.end());
-			sort(interfering.begin(), interfering.end());
-			deadlocks.resize(unique(deadlocks.begin(), deadlocks.end()) - deadlocks.begin());
-			unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
-			interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+			deadlock d(sim.first.local.tokens);
+			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
+			if (dloc == deadlocks.end() || *dloc != d)
+			{
+				error("", d.to_string(variables), __FILE__, __LINE__);
+				deadlocks.insert(dloc, d);
+			}
+
+			simulations.back().first.merge_errors(sim.first);
 		}
 	}
 
@@ -1832,7 +1849,7 @@ graph graph::to_state_graph(vector<instability> &unstable, vector<interference> 
 		result.places.erase(result.places.begin() + to_merge[i].first);
 	}
 
-	return result;*/
+	return result;
 }
 
 /* to_petri_net()

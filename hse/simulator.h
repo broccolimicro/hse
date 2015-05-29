@@ -7,12 +7,15 @@
 
 #include "token.h"
 #include "graph.h"
+#include "boolean/variable.h"
 
 #ifndef hse_simulator_h
 #define hse_simulator_h
 
 namespace hse
 {
+
+struct graph;
 
 struct simulator
 {
@@ -22,6 +25,7 @@ struct simulator
 
 	vector<instability> unstable;
 	vector<interference> interfering;
+	vector<term_index> unacknowledged;
 	term_index last;
 
 	boolean::cube global;
@@ -51,10 +55,10 @@ struct simulator
 		}
 	} remote;
 
-	int enabled(bool sorted = false);
+	int enabled(const boolean::variable_set &variables, bool sorted = false);
 	void fire(int index);
 
-	int possible(bool sorted = false);
+	int possible(const boolean::variable_set &variables, bool sorted = false);
 	void begin(int index);
 	void end();
 	void environment();
@@ -62,12 +66,14 @@ struct simulator
 	struct state
 	{
 		vector<int> tokens;
+		vector<term_index> environment;
 		vector<boolean::cover> encodings;
 
 		void merge(const state &s);
 		bool is_subset_of(const state &s);
 	};
 
+	void merge_errors(const simulator &sim);
 	state get_state();
 };
 

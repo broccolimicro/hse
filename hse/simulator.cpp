@@ -8,6 +8,7 @@
 #include "simulator.h"
 #include "common/text.h"
 #include "common/message.h"
+#include "boolean/variable.h"
 
 namespace hse
 {
@@ -50,7 +51,7 @@ simulator::~simulator()
  * that this marking enabled and the term of each transition
  * that's enabled.
  */
-int simulator::enabled(bool sorted)
+int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 {
 	if (!sorted)
 		sort(local.tokens.begin(), local.tokens.end());
@@ -157,7 +158,10 @@ int simulator::enabled(bool sorted)
 					interference err(local.ready[i], local.ready[j]);
 					vector<interference>::iterator loc = lower_bound(interfering.begin(), interfering.end(), err);
 					if (loc == interfering.end() || *loc != err)
+					{
 						interfering.insert(loc, err);
+						error("", err.to_string(*base, variables), __FILE__, __LINE__);
+					}
 				}
 
 	// Check for unstable transitions
@@ -170,7 +174,10 @@ int simulator::enabled(bool sorted)
 				instability err = instability(local.ready[i], local.ready[i].history);
 				vector<instability>::iterator loc = lower_bound(unstable.begin(), unstable.end(), err);
 				if (loc == unstable.end() || *loc != err)
+				{
 					unstable.insert(loc, err);
+					error("", err.to_string(*base, variables), __FILE__, __LINE__);
+				}
 			}
 
 			i++;
@@ -196,7 +203,7 @@ int simulator::enabled(bool sorted)
 void simulator::fire(int index)
 {
 	enabled_transition t = local.ready[index];
-	//TODO
+	// TODO
 	//cout << "  T" << t.index << "." << t.term << endl;
 
 	// Update the local.tokens
@@ -244,7 +251,7 @@ void simulator::fire(int index)
 	last = t;
 }
 
-int simulator::possible(bool sorted)
+int simulator::possible(const boolean::variable_set &variables, bool sorted)
 {
 	if (!sorted)
 		sort(remote.head.begin(), remote.head.end());
@@ -307,6 +314,17 @@ int simulator::possible(bool sorted)
 			{
 				result.push_back(potential[i]);
 				result.back().term = j;
+
+				if (find(remote.body.begin(), remote.body.end(), result.back()) != remote.body.end())
+				{
+					term_index err = remote.body[0];
+					vector<term_index>::iterator loc = lower_bound(unacknowledged.begin(), unacknowledged.end(), err);
+					if (loc == unacknowledged.end() || *loc != err)
+					{
+						unacknowledged.insert(loc, err);
+						error("", "unacknowledged transition " + remote.body[0].to_string(*base, variables), __FILE__, __LINE__);
+					}
+				}
 			}
 		}
 	}
@@ -454,6 +472,21 @@ void simulator::environment()
 	global = remote_transition(global, encoding);
 }
 
+void simulator::merge_errors(const simulator &sim)
+{
+	vector<instability> old_unstable;
+	swap(unstable, old_unstable);
+	unstable.resize(old_unstable.size() + sim.unstable.size());
+	merge(sim.unstable.begin(), sim.unstable.end(), old_unstable.begin(), old_unstable.end(), unstable.begin());
+	unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+
+	vector<interference> old_interfering;
+	swap(interfering, old_interfering);
+	interfering.resize(sim.interfering.size() + old_interfering.size());
+	merge(sim.interfering.begin(), sim.interfering.end(), old_interfering.begin(), old_interfering.end(), interfering.begin());
+	interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+}
+
 simulator::state simulator::get_state()
 {
 	simulator::state result;
@@ -465,12 +498,16 @@ simulator::state simulator::get_state()
 		result.encodings.push_back(local.tokens[i].state);
 	}
 
+	result.environment.insert(result.environment.end(), remote.body.begin(), remote.body.end());
+	sort(result.environment.begin(), result.environment.end());
+	result.environment.resize(unique(result.environment.begin(), result.environment.end()) - result.environment.begin());
+
 	return result;
 }
 
 void simulator::state::merge(const simulator::state &s)
 {
-	if (tokens != s.tokens)
+	if (tokens != s.tokens || environment != s.environment)
 		return;
 
 	for (int i = 0; i < (int)encodings.size() && i < (int)s.encodings.size(); i++)
@@ -479,7 +516,7 @@ void simulator::state::merge(const simulator::state &s)
 
 bool simulator::state::is_subset_of(const state &s)
 {
-	if (tokens != s.tokens)
+	if (tokens != s.tokens || environment != s.environment)
 		return false;
 
 	for (int i = 0; i < (int)encodings.size() && i < (int)s.encodings.size(); i++)
@@ -491,32 +528,36 @@ bool simulator::state::is_subset_of(const state &s)
 
 bool operator<(simulator::state s1, simulator::state s2)
 {
-	return (s1.tokens < s2.tokens);
+	return (s1.tokens < s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment < s2.environment);
 }
 
 bool operator>(simulator::state s1, simulator::state s2)
 {
-	return (s1.tokens > s2.tokens);
+	return (s1.tokens > s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment > s2.environment);
 }
 
 bool operator<=(simulator::state s1, simulator::state s2)
 {
-	return (s1.tokens <= s2.tokens);
+	return (s1.tokens < s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment <= s2.environment);
 }
 
 bool operator>=(simulator::state s1, simulator::state s2)
 {
-	return (s1.tokens >= s2.tokens);
+	return (s1.tokens > s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment >= s2.environment);
 }
 
 bool operator==(simulator::state s1, simulator::state s2)
 {
-	return s1.tokens == s2.tokens;
+	return s1.tokens == s2.tokens && s1.environment == s2.environment;
 }
 
 bool operator!=(simulator::state s1, simulator::state s2)
 {
-	return s1.tokens != s2.tokens;
+	return s1.tokens != s2.tokens || s1.environment != s2.environment;
 }
 
 }

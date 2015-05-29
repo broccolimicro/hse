@@ -6,8 +6,11 @@
  */
 
 #include "token.h"
-#include "common/text.h"
-#include "common/message.h"
+#include <common/text.h>
+#include <common/message.h>
+#include <interpret_boolean/export.h>
+#include <boolean/variable.h>
+#include "graph.h"
 
 namespace hse
 {
@@ -36,6 +39,11 @@ remote_token &remote_token::operator=(const reset_token &t)
 {
 	index = t.index;
 	return *this;
+}
+
+string remote_token::to_string()
+{
+	return "P" + ::to_string(index);
 }
 
 bool operator<(remote_token i, remote_token j)
@@ -108,6 +116,11 @@ local_token &local_token::operator=(const reset_token &t)
 	state = t.state;
 	remotable = t.remotable;
 	return *this;
+}
+
+string local_token::to_string(const boolean::variable_set &variables)
+{
+	return "P" + ::to_string(index) + ":" + export_disjunction(state, variables).to_string();
 }
 
 bool operator<(local_token i, local_token j)
@@ -200,6 +213,11 @@ reset_token &reset_token::operator=(const local_token &t)
 	return *this;
 }
 
+string reset_token::to_string(const boolean::variable_set &variables)
+{
+	return "P" + ::to_string(index) + ":" + export_disjunction(state, variables).to_string();
+}
+
 bool operator<(reset_token i, reset_token j)
 {
 	return (i.index < j.index) ||
@@ -286,6 +304,32 @@ instability::~instability()
 
 }
 
+string instability::to_string(const hse::graph &g, const boolean::variable_set &v)
+{
+	string result = "unstable assignment T" + ::to_string(effect.index) + "." + ::to_string(effect.term) + ":";
+	if (g.transitions[effect.index].behavior == hse::transition::active)
+		result += export_internal_choice(g.transitions[effect.index].action[effect.term], v).to_string();
+	else
+		result += "[" + export_disjunction(g.transitions[effect.index].action[effect.term], v).to_string() + "]";
+
+	result += " cause: {";
+
+	for (int j = 0; j < (int)cause.size(); j++)
+	{
+		if (j != 0)
+			result += "; ";
+
+		result += "T" + ::to_string(cause[j].index) + "." + ::to_string(cause[j].term) + ":";
+
+		if (g.transitions[cause[j].index].behavior == hse::transition::active)
+			result += export_internal_choice(g.transitions[cause[j].index].action[cause[j].term], v).to_string();
+		else
+			result += "[" + export_disjunction(g.transitions[cause[j].index].action[cause[j].term], v).to_string() + "]";
+	}
+	result += "}";
+	return result;
+}
+
 bool operator<(instability i, instability j)
 {
 	return (i.effect < j.effect) ||
@@ -336,6 +380,21 @@ interference::~interference()
 
 }
 
+string interference::to_string(const hse::graph &g, const boolean::variable_set &v)
+{
+	string result = "interfering assignments T" + ::to_string(first.index) + "." + ::to_string(first.term) + ":";
+	if (g.transitions[first.index].behavior == hse::transition::active)
+		result += export_internal_choice(g.transitions[first.index].action[first.term], v).to_string();
+	else
+		result += "[" + export_disjunction(g.transitions[first.index].action[first.term], v).to_string() + "]";
+	result += " and T" + ::to_string(second.index) + "." + ::to_string(second.term) + ":";
+	if (g.transitions[second.index].behavior == hse::transition::active)
+		result += export_internal_choice(g.transitions[second.index].action[second.term], v).to_string();
+	else
+		result += "[" + export_disjunction(g.transitions[second.index].action[second.term], v).to_string() + "]";
+	return result;
+}
+
 bool operator<(interference i, interference j)
 {
 	return (i.first < j.first) ||
@@ -383,6 +442,20 @@ deadlock::deadlock(vector<local_token> tokens)
 deadlock::~deadlock()
 {
 
+}
+
+string deadlock::to_string(const boolean::variable_set &v)
+{
+	string result = "deadlock {";
+	for (int i = 0; i < (int)tokens.size(); i++)
+	{
+		if (i != 0)
+			result += "  ";
+		result += tokens[i].to_string(v);
+	}
+	result += "}";
+
+	return result;
 }
 
 bool operator<(deadlock i, deadlock j)

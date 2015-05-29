@@ -6,12 +6,15 @@
  */
 
 #include <boolean/cover.h>
+#include <boolean/variable.h>
 
 #ifndef hse_node_h
 #define hse_node_h
 
 namespace hse
 {
+struct graph;
+
 enum relation
 {
 	parallel = 0,
@@ -109,6 +112,8 @@ struct term_index
 
 	int index;
 	int term;
+
+	string to_string(const graph &g, const boolean::variable_set &v);
 };
 
 bool operator<(term_index i, term_index j);
