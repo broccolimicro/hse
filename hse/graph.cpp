@@ -1326,8 +1326,8 @@ void graph::compact(const boolean::variable_set &variables, bool proper_nesting)
 		{
 			for (int i = (int)source.size()-1; i >= 0; i--)
 			{
-				simulator sim(this, i, false);
-				int enabled = sim.enabled(variables);
+				simulator sim(this, &variables, i, false);
+				int enabled = sim.enabled();
 
 				for (int j = 0; j < enabled; j++)
 				{
@@ -1346,7 +1346,7 @@ void graph::compact(const boolean::variable_set &variables, bool proper_nesting)
 					{
 						sim.fire(j);
 						change = true;
-						enabled = sim.enabled(variables);
+						enabled = sim.enabled();
 						j = -1;
 					}
 				}
@@ -1532,7 +1532,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 
 	// Set up the first simulation that starts at the reset state
 	for (int i = 0; i < (int)source.size(); i++)
-		simulations.push_back(simulator(this, i, true));
+		simulations.push_back(simulator(this, &variables, i, true));
 
 	int count = 0;
 	while (simulations.size() > 0)
@@ -1540,7 +1540,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 		simulator sim = simulations.back();
 		simulations.pop_back();
 
-		int enabled = sim.possible(variables);
+		int enabled = sim.possible();
 		if (enabled > 0)
 		{
 			for (int i = 0; i < (int)sim.remote.ready.size(); i++)
@@ -1585,7 +1585,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 				else
 					states.insert(loc, state);
 
-				enabled = sim.enabled(variables);
+				enabled = sim.enabled();
 				vector<pair<int, int> > vacuous_choices = sim.get_vacuous_choices();
 				int index = -1;
 				for (int i = 0; i < (int)sim.local.ready.size() && index == -1; i++)
@@ -1730,7 +1730,7 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 		result.source.push_back(vector<reset_token>(1, reset_token(init.index, reset, false)));
 
 		// Set up the first simulation that starts at the reset state
-		simulations.push_back(pair<simulator, iterator>(simulator(this, i, false), init));
+		simulations.push_back(pair<simulator, iterator>(simulator(this, &variables, i, false), init));
 
 		// Record the reset state in our map of visited states
 		simulator::state state = simulations.back().first.get_state();
@@ -1746,7 +1746,7 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 		pair<simulator, iterator> sim = simulations.back();
 		simulations.pop_back();
 
-		int enabled = sim.first.enabled(variables);
+		int enabled = sim.first.enabled();
 		simulations.reserve(simulations.size() + enabled);
 		for (int i = 0; i < enabled; i++)
 		{

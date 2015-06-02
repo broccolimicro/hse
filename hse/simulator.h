@@ -20,7 +20,7 @@ struct graph;
 struct simulator
 {
 	simulator();
-	simulator(graph *base, int i, bool environment);
+	simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment);
 	~simulator();
 
 	vector<instability> unstable;
@@ -29,7 +29,9 @@ struct simulator
 	term_index last;
 
 	boolean::cube global;
-	graph *base;
+
+	const graph *base;
+	const boolean::variable_set *variables;
 
 	struct
 	{
@@ -55,10 +57,10 @@ struct simulator
 		}
 	} remote;
 
-	int enabled(const boolean::variable_set &variables, bool sorted = false);
+	int enabled(bool sorted = false);
 	void fire(int index);
 
-	int possible(const boolean::variable_set &variables, bool sorted = false);
+	int possible(bool sorted = false);
 	void begin(int index);
 	void end();
 	void environment();

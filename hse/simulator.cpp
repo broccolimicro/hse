@@ -6,9 +6,10 @@
  */
 
 #include "simulator.h"
-#include "common/text.h"
-#include "common/message.h"
-#include "boolean/variable.h"
+#include <common/text.h>
+#include <common/message.h>
+#include <boolean/variable.h>
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -16,26 +17,43 @@ namespace hse
 simulator::simulator()
 {
 	base = NULL;
+	variables = NULL;
 }
 
-simulator::simulator(graph *base, int i, bool environment)
+simulator::simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment)
 {
 	this->base = base;
+	this->variables = variables;
 	//TODO
 	//cout << "State" << endl;
-	for (int j = 0; j < (int)base->source[i].size(); j++)
+	if (base != NULL)
 	{
-		global &= base->source[i][j].state;
-		if (environment && base->source[i][j].remotable)
+		for (int j = 0; j < (int)base->source[i].size(); j++)
 		{
-			//cout << "Remote " << base->source[i][j].index << endl;
-			remote.head.push_back(base->source[i][j]);
-			remote.tail.push_back(base->source[i][j]);
+			global &= base->source[i][j].state;
+			if (environment && base->source[i][j].remotable)
+			{
+				//cout << "Remote " << base->source[i][j].index << endl;
+				remote.head.push_back(base->source[i][j]);
+				remote.tail.push_back(base->source[i][j]);
+			}
+			else
+			{
+				//cout << "Local " << base->source[i][j].index << endl;
+				local.tokens.push_back(base->source[i][j]);
+			}
 		}
-		else
+
+		if (global.is_null())
 		{
-			//cout << "Local " << base->source[i][j].index << endl;
-			local.tokens.push_back(base->source[i][j]);
+			error("", "state disagreement in reset", __FILE__, __LINE__);
+			if (variables != NULL)
+				for (int j = 0; j < (int)base->source[i].size(); j++)
+					for (int k = j; k < (int)base->source[i].size(); k++)
+					{
+						if (are_mutex(base->source[i][j].state, base->source[i][k].state))
+							note("", export_guard(base->source[i][j].state, *variables).to_string() + " & " + export_guard(base->source[i][k].state, *variables).to_string(), __FILE__, __LINE__);
+					}
 		}
 	}
 }
@@ -51,8 +69,11 @@ simulator::~simulator()
  * that this marking enabled and the term of each transition
  * that's enabled.
  */
-int simulator::enabled(const boolean::variable_set &variables, bool sorted)
+int simulator::enabled(bool sorted)
 {
+	if (base == NULL)
+		return 0;
+
 	if (!sorted)
 		sort(local.tokens.begin(), local.tokens.end());
 
@@ -62,7 +83,7 @@ int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 	// Get the list of transitions have have a sufficient number of local at the input places
 	potential.reserve(local.tokens.size()*2);
 	disabled.reserve(base->transitions.size());
-	for (vector<arc>::iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
+	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
 	{
 		// Check to see if we haven't already determined that this transition can't be enabled
 		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
@@ -162,7 +183,7 @@ int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 					if (loc == interfering.end() || *loc != err)
 					{
 						interfering.insert(loc, err);
-						error("", err.to_string(*base, variables), __FILE__, __LINE__);
+						error("", err.to_string(*base, *variables), __FILE__, __LINE__);
 					}
 				}
 
@@ -178,7 +199,7 @@ int simulator::enabled(const boolean::variable_set &variables, bool sorted)
 				if (loc == unstable.end() || *loc != err)
 				{
 					unstable.insert(loc, err);
-					error("", err.to_string(*base, variables), __FILE__, __LINE__);
+					error("", err.to_string(*base, *variables), __FILE__, __LINE__);
 				}
 			}
 
@@ -253,7 +274,7 @@ void simulator::fire(int index)
 	last = t;
 }
 
-int simulator::possible(const boolean::variable_set &variables, bool sorted)
+int simulator::possible(bool sorted)
 {
 	if (!sorted)
 		sort(remote.head.begin(), remote.head.end());
@@ -264,7 +285,7 @@ int simulator::possible(const boolean::variable_set &variables, bool sorted)
 	// Get the list of transitions have have a sufficient number of remote at the input places
 	potential.reserve(remote.head.size()*2);
 	disabled.reserve(base->transitions.size());
-	for (vector<arc>::iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
+	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
 	{
 		// Check to see if we haven't already determined that this transition can't be enabled
 		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
@@ -324,7 +345,7 @@ int simulator::possible(const boolean::variable_set &variables, bool sorted)
 					if (loc == unacknowledged.end() || *loc != err)
 					{
 						unacknowledged.insert(loc, err);
-						error("", "unacknowledged transition " + remote.body[0].to_string(*base, variables), __FILE__, __LINE__);
+						error("", "unacknowledged transition " + remote.body[0].to_string(*base, *variables), __FILE__, __LINE__);
 					}
 				}
 			}
