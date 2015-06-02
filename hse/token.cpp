@@ -120,7 +120,7 @@ local_token &local_token::operator=(const reset_token &t)
 
 string local_token::to_string(const boolean::variable_set &variables)
 {
-	return "P" + ::to_string(index) + ":" + export_disjunction(state, variables).to_string();
+	return "P" + ::to_string(index) + ":" + export_guard(state, variables).to_string();
 }
 
 bool operator<(local_token i, local_token j)
@@ -215,7 +215,7 @@ reset_token &reset_token::operator=(const local_token &t)
 
 string reset_token::to_string(const boolean::variable_set &variables)
 {
-	return "P" + ::to_string(index) + ":" + export_disjunction(state, variables).to_string();
+	return "P" + ::to_string(index) + ":" + export_guard(state, variables).to_string();
 }
 
 bool operator<(reset_token i, reset_token j)
@@ -310,9 +310,9 @@ string instability::to_string(const hse::graph &g, const boolean::variable_set &
 {
 	string result = "unstable assignment T" + ::to_string(effect.index) + "." + ::to_string(effect.term) + ":";
 	if (g.transitions[effect.index].behavior == hse::transition::active)
-		result += export_internal_choice(g.transitions[effect.index].action[effect.term], v).to_string();
+		result += export_assignment(g.transitions[effect.index].action[effect.term], v).to_string();
 	else
-		result += "[" + export_disjunction(g.transitions[effect.index].action[effect.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[effect.index].action[effect.term], v).to_string() + "]";
 
 	result += " cause: {";
 
@@ -324,9 +324,9 @@ string instability::to_string(const hse::graph &g, const boolean::variable_set &
 		result += "T" + ::to_string(cause[j].index) + "." + ::to_string(cause[j].term) + ":";
 
 		if (g.transitions[cause[j].index].behavior == hse::transition::active)
-			result += export_internal_choice(g.transitions[cause[j].index].action[cause[j].term], v).to_string();
+			result += export_assignment(g.transitions[cause[j].index].action[cause[j].term], v).to_string();
 		else
-			result += "[" + export_disjunction(g.transitions[cause[j].index].action[cause[j].term], v).to_string() + "]";
+			result += "[" + export_guard_xfactor(g.transitions[cause[j].index].action[cause[j].term], v).to_string() + "]";
 	}
 	result += "}";
 	return result;
@@ -386,14 +386,14 @@ string interference::to_string(const hse::graph &g, const boolean::variable_set 
 {
 	string result = "interfering assignments T" + ::to_string(first.index) + "." + ::to_string(first.term) + ":";
 	if (g.transitions[first.index].behavior == hse::transition::active)
-		result += export_internal_choice(g.transitions[first.index].action[first.term], v).to_string();
+		result += export_assignment(g.transitions[first.index].action[first.term], v).to_string();
 	else
-		result += "[" + export_disjunction(g.transitions[first.index].action[first.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[first.index].action[first.term], v).to_string() + "]";
 	result += " and T" + ::to_string(second.index) + "." + ::to_string(second.term) + ":";
 	if (g.transitions[second.index].behavior == hse::transition::active)
-		result += export_internal_choice(g.transitions[second.index].action[second.term], v).to_string();
+		result += export_assignment(g.transitions[second.index].action[second.term], v).to_string();
 	else
-		result += "[" + export_disjunction(g.transitions[second.index].action[second.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[second.index].action[second.term], v).to_string() + "]";
 	return result;
 }
 
