@@ -15,6 +15,78 @@
 namespace hse
 {
 
+local_token::local_token()
+{
+	index = 0;
+	remotable = false;
+}
+
+local_token::local_token(int index, bool remotable)
+{
+	this->index = index;
+	this->remotable = remotable;
+}
+
+local_token::local_token(int index, vector<int> guard, bool remotable)
+{
+	this->index = index;
+	this->guard = guard;
+	this->remotable = remotable;
+}
+
+local_token::local_token(const reset_token &t)
+{
+	index = t.index;
+	remotable = t.remotable;
+}
+
+local_token::~local_token()
+{
+
+}
+
+local_token &local_token::operator=(const reset_token &t)
+{
+	index = t.index;
+	remotable = t.remotable;
+	return *this;
+}
+
+string local_token::to_string()
+{
+	return "P" + ::to_string(index);
+}
+
+bool operator<(local_token i, local_token j)
+{
+	return i.index < j.index;
+}
+
+bool operator>(local_token i, local_token j)
+{
+	return i.index > j.index;
+}
+
+bool operator<=(local_token i, local_token j)
+{
+	return i.index < j.index;
+}
+
+bool operator>=(local_token i, local_token j)
+{
+	return i.index > j.index;
+}
+
+bool operator==(local_token i, local_token j)
+{
+	return i.index == j.index;
+}
+
+bool operator!=(local_token i, local_token j)
+{
+	return i.index != j.index;
+}
+
 remote_token::remote_token()
 {
 	index = 0;
@@ -76,119 +148,27 @@ bool operator!=(remote_token i, remote_token j)
 	return i.index != j.index;
 }
 
-local_token::local_token()
-{
-	index = 0;
-	state = 1;
-	remotable = false;
-}
-
-local_token::local_token(int index, boolean::cube state)
-{
-	this->index = index;
-	this->state = state;
-	remotable = false;
-}
-
-local_token::local_token(int index, boolean::cube state, vector<int> guard, bool remotable)
-{
-	this->index = index;
-	this->state = state;
-	this->guard = guard;
-	this->remotable = remotable;
-}
-
-local_token::local_token(const reset_token &t)
-{
-	index = t.index;
-	state = t.state;
-	remotable = t.remotable;
-}
-
-local_token::~local_token()
-{
-
-}
-
-local_token &local_token::operator=(const reset_token &t)
-{
-	index = t.index;
-	state = t.state;
-	remotable = t.remotable;
-	return *this;
-}
-
-string local_token::to_string(const boolean::variable_set &variables)
-{
-	return "P" + ::to_string(index) + ":" + export_guard(state, variables).to_string();
-}
-
-bool operator<(local_token i, local_token j)
-{
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.state < j.state);
-}
-
-bool operator>(local_token i, local_token j)
-{
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.state > j.state);
-}
-
-bool operator<=(local_token i, local_token j)
-{
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.state <= j.state);
-}
-
-bool operator>=(local_token i, local_token j)
-{
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.state >= j.state);
-}
-
-bool operator==(local_token i, local_token j)
-{
-	return (i.index == j.index && i.state == j.state);
-}
-
-bool operator!=(local_token i, local_token j)
-{
-	return (i.index != j.index || i.state != j.state);
-}
-
 reset_token::reset_token()
 {
 	index = 0;
-	state = 1;
 	remotable = false;
 }
 
-reset_token::reset_token(int index, boolean::cube state)
+reset_token::reset_token(int index, bool remotable)
 {
 	this->index = index;
-	this->state = state;
-	this->remotable = false;
-}
-
-reset_token::reset_token(int index, boolean::cube state, bool remotable)
-{
-	this->index = index;
-	this->state = state;
 	this->remotable = remotable;
 }
 
 reset_token::reset_token(const remote_token &t)
 {
 	index = t.index;
-	state = boolean::cube();
 	remotable = true;
 }
 
 reset_token::reset_token(const local_token &t)
 {
 	index = t.index;
-	state = t.state;
 	remotable = t.remotable;
 }
 
@@ -200,7 +180,6 @@ reset_token::~reset_token()
 reset_token &reset_token::operator=(const remote_token &t)
 {
 	index = t.index;
-	state = boolean::cube();
 	remotable = true;
 	return *this;
 }
@@ -208,55 +187,168 @@ reset_token &reset_token::operator=(const remote_token &t)
 reset_token &reset_token::operator=(const local_token &t)
 {
 	index = t.index;
-	state = t.state;
-	remotable = false;
+	remotable = t.remotable;
 	return *this;
 }
 
 string reset_token::to_string(const boolean::variable_set &variables)
 {
-	return "P" + ::to_string(index) + ":" + export_guard(state, variables).to_string();
+	return "P" + ::to_string(index);
 }
 
 bool operator<(reset_token i, reset_token j)
 {
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.state < j.state);
+	return i.index < j.index;
 }
 
 bool operator>(reset_token i, reset_token j)
 {
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.state > j.state);
+	return i.index > j.index;
 }
 
 bool operator<=(reset_token i, reset_token j)
 {
-	return (i.index < j.index) ||
-		   (i.index == j.index && i.state <= j.state);
+	return i.index <= j.index;
 }
 
 bool operator>=(reset_token i, reset_token j)
 {
-	return (i.index > j.index) ||
-		   (i.index == j.index && i.state >= j.state);
+	return i.index >= j.index;
 }
 
 bool operator==(reset_token i, reset_token j)
 {
-	return (i.index == j.index && i.state == j.state);
+	return i.index == j.index;
 }
 
 bool operator!=(reset_token i, reset_token j)
 {
-	return (i.index != j.index || i.state != j.state);
+	return i.index != j.index;
+}
+
+state::state()
+{
+	encodings = 1;
+}
+
+state::state(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings)
+{
+	this->tokens = tokens;
+	this->environment = environment;
+	this->encodings = encodings;
+}
+
+state::state(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings)
+{
+	this->environment = environment;
+	for (int i = 0; i < (int)tokens.size(); i++)
+		this->tokens.push_back(tokens[i]);
+	this->encodings = encodings;
+}
+
+state::~state()
+{
+
+}
+
+state &state::merge(int relation, const state &s)
+{
+	if (tokens.size() == 0)
+	{
+		tokens = s.tokens;
+		environment = s.environment;
+		encodings = s.encodings;
+	}
+	else if (s.tokens.size() != 0)
+	{
+		if (relation == parallel)
+		{
+			vector<reset_token> oldtokens;
+			swap(tokens, oldtokens);
+			tokens.resize(oldtokens.size() + s.tokens.size());
+			::merge(oldtokens.begin(), oldtokens.end(), s.tokens.begin(), s.tokens.end(), tokens.begin());
+			vector<term_index> oldenvironment;
+			swap(environment, oldenvironment);
+			environment.resize(oldenvironment.size() + s.environment.size());
+			::merge(oldenvironment.begin(), oldenvironment.end(), s.environment.begin(), s.environment.end(), environment.begin());
+			environment.resize(unique(environment.begin(), environment.end()) - environment.begin());
+			encodings &= s.encodings;
+		}
+		else if (relation == choice)
+		{
+			if (tokens != s.tokens && environment != s.environment)
+				return *this;
+
+			encodings |= s.encodings;
+		}
+	}
+
+	return *this;
+}
+
+bool state::is_subset_of(const state &s)
+{
+	return (tokens == s.tokens && environment == s.environment && encodings.is_subset_of(s.encodings));
+}
+
+string state::to_string(const boolean::variable_set &variables)
+{
+	string result = "{";
+	for (int i = 0; i < (int)tokens.size(); i++)
+	{
+		if (i != 0)
+			result += " ";
+		result += tokens[i].to_string(variables);
+	}
+	result += "} {";
+	for (int i = 0; i < (int)environment.size(); i++)
+	{
+		if (i != 0)
+			result += " ";
+		result += "T" + ::to_string(environment[i].index) + "." + ::to_string(environment[i].term);
+	}
+	result += "} " + export_guard_hfactor(encodings, variables).to_string();
+	return result;
+}
+
+bool operator<(state s1, state s2)
+{
+	return (s1.tokens < s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment < s2.environment);
+}
+
+bool operator>(state s1, state s2)
+{
+	return (s1.tokens > s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment > s2.environment);
+}
+
+bool operator<=(state s1, state s2)
+{
+	return (s1.tokens < s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment <= s2.environment);
+}
+
+bool operator>=(state s1, state s2)
+{
+	return (s1.tokens > s2.tokens) ||
+		   (s1.tokens == s2.tokens && s1.environment >= s2.environment);
+}
+
+bool operator==(state s1, state s2)
+{
+	return s1.tokens == s2.tokens && s1.environment == s2.environment;
+}
+
+bool operator!=(state s1, state s2)
+{
+	return s1.tokens != s2.tokens || s1.environment != s2.environment;
 }
 
 enabled_transition::enabled_transition()
 {
 	index = 0;
 	term = 0;
-	state = 1;
 	vacuous = false;
 }
 
@@ -264,7 +356,6 @@ enabled_transition::enabled_transition(int index)
 {
 	this->index = index;
 	this->term = 0;
-	this->state = 1;
 	vacuous = false;
 }
 
@@ -310,9 +401,9 @@ string instability::to_string(const hse::graph &g, const boolean::variable_set &
 {
 	string result = "unstable assignment T" + ::to_string(effect.index) + "." + ::to_string(effect.term) + ":";
 	if (g.transitions[effect.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[effect.index].action[effect.term], v).to_string();
+		result += export_assignment(g.transitions[effect.index].local_action[effect.term], v).to_string();
 	else
-		result += "[" + export_guard_xfactor(g.transitions[effect.index].action[effect.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[effect.index].local_action[effect.term], v).to_string() + "]";
 
 	result += " cause: {";
 
@@ -324,9 +415,9 @@ string instability::to_string(const hse::graph &g, const boolean::variable_set &
 		result += "T" + ::to_string(cause[j].index) + "." + ::to_string(cause[j].term) + ":";
 
 		if (g.transitions[cause[j].index].behavior == hse::transition::active)
-			result += export_assignment(g.transitions[cause[j].index].action[cause[j].term], v).to_string();
+			result += export_assignment(g.transitions[cause[j].index].local_action[cause[j].term], v).to_string();
 		else
-			result += "[" + export_guard_xfactor(g.transitions[cause[j].index].action[cause[j].term], v).to_string() + "]";
+			result += "[" + export_guard_xfactor(g.transitions[cause[j].index].local_action[cause[j].term], v).to_string() + "]";
 	}
 	result += "}";
 	return result;
@@ -371,10 +462,8 @@ interference::interference()
 
 }
 
-interference::interference(term_index first, term_index second)
+interference::interference(term_index first, term_index second) : pair<term_index, term_index>(first, second)
 {
-	this->first = first;
-	this->second = second;
 }
 
 interference::~interference()
@@ -386,49 +475,15 @@ string interference::to_string(const hse::graph &g, const boolean::variable_set 
 {
 	string result = "interfering assignments T" + ::to_string(first.index) + "." + ::to_string(first.term) + ":";
 	if (g.transitions[first.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[first.index].action[first.term], v).to_string();
+		result += export_assignment(g.transitions[first.index].local_action[first.term], v).to_string();
 	else
-		result += "[" + export_guard_xfactor(g.transitions[first.index].action[first.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[first.index].local_action[first.term], v).to_string() + "]";
 	result += " and T" + ::to_string(second.index) + "." + ::to_string(second.term) + ":";
 	if (g.transitions[second.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[second.index].action[second.term], v).to_string();
+		result += export_assignment(g.transitions[second.index].local_action[second.term], v).to_string();
 	else
-		result += "[" + export_guard_xfactor(g.transitions[second.index].action[second.term], v).to_string() + "]";
+		result += "[" + export_guard_xfactor(g.transitions[second.index].local_action[second.term], v).to_string() + "]";
 	return result;
-}
-
-bool operator<(interference i, interference j)
-{
-	return (i.first < j.first) ||
-		   (i.first == j.first && i.second < j.second);
-}
-
-bool operator>(interference i, interference j)
-{
-	return (i.first > j.first) ||
-		   (i.first == j.first && i.second > j.second);
-}
-
-bool operator<=(interference i, interference j)
-{
-	return (i.first < j.first) ||
-		   (i.first == j.first && i.second <= j.second);
-}
-
-bool operator>=(interference i, interference j)
-{
-	return (i.first > j.first) ||
-		   (i.first == j.first && i.second >= j.second);
-}
-
-bool operator==(interference i, interference j)
-{
-	return (i.first == j.first && i.second == j.second);
-}
-
-bool operator!=(interference i, interference j)
-{
-	return (i.first != j.first || i.second != j.second);
 }
 
 deadlock::deadlock()
@@ -436,9 +491,19 @@ deadlock::deadlock()
 
 }
 
-deadlock::deadlock(vector<local_token> tokens)
+deadlock::deadlock(const state &s) : state(s)
 {
-	this->tokens = tokens;
+
+}
+
+deadlock::deadlock(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings) : state(tokens, environment, encodings)
+{
+
+}
+
+deadlock::deadlock(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings) : state(tokens, environment, encodings)
+{
+
 }
 
 deadlock::~deadlock()
@@ -448,46 +513,7 @@ deadlock::~deadlock()
 
 string deadlock::to_string(const boolean::variable_set &v)
 {
-	string result = "deadlock {";
-	for (int i = 0; i < (int)tokens.size(); i++)
-	{
-		if (i != 0)
-			result += "  ";
-		result += tokens[i].to_string(v);
-	}
-	result += "}";
-
-	return result;
-}
-
-bool operator<(deadlock i, deadlock j)
-{
-	return i.tokens < j.tokens;
-}
-
-bool operator>(deadlock i, deadlock j)
-{
-	return i.tokens > j.tokens;
-}
-
-bool operator<=(deadlock i, deadlock j)
-{
-	return i.tokens <= j.tokens;
-}
-
-bool operator>=(deadlock i, deadlock j)
-{
-	return i.tokens >= j.tokens;
-}
-
-bool operator==(deadlock i, deadlock j)
-{
-	return i.tokens == j.tokens;
-}
-
-bool operator!=(deadlock i, deadlock j)
-{
-	return i.tokens != j.tokens;
+	return "deadlock detected at state " + state::to_string(v);
 }
 
 }

@@ -30,13 +30,14 @@ place::~place()
 transition::transition()
 {
 	behavior = active;
-	action = 1;
+	local_action = 1;
+	remote_action = 1;
 }
 
 transition::transition(int behavior, boolean::cover action)
 {
 	this->behavior = behavior;
-	this->action = action;
+	this->local_action = action;
 }
 
 transition::~transition()
@@ -46,7 +47,7 @@ transition::~transition()
 
 transition transition::subdivide(int term)
 {
-	return transition(behavior, boolean::cover(action.cubes[term]));
+	return transition(behavior, boolean::cover(local_action.cubes[term]));
 }
 
 place merge(int relation, place p0, place p1)
@@ -70,12 +71,14 @@ transition merge(int relation, transition t0, transition t1)
 	transition result;
 	if (relation == parallel)
 	{
-		result.action = t0.action & t1.action;
+		result.local_action = t0.local_action & t1.local_action;
+		result.remote_action = t0.remote_action & t1.remote_action;
 		result.behavior = t0.behavior;
 	}
 	else if (relation == choice)
 	{
-		result.action = t0.action | t1.action;
+		result.local_action = t0.local_action | t1.local_action;
+		result.remote_action = t0.remote_action | t1.remote_action;
 		result.behavior = t0.behavior;
 	}
 	return result;
@@ -255,9 +258,9 @@ term_index::~term_index()
 string term_index::to_string(const graph &g, const boolean::variable_set &v)
 {
 	if (g.transitions[index].behavior == transition::active)
-		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_assignment(g.transitions[index].action[term], v).to_string();
+		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_assignment(g.transitions[index].local_action[term], v).to_string();
 	else
-		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_guard_xfactor(g.transitions[index].action[term], v).to_string();
+		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_guard_xfactor(g.transitions[index].local_action[term], v).to_string();
 }
 
 bool operator<(term_index i, term_index j)

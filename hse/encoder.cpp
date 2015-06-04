@@ -90,16 +90,16 @@ void encoder::check(bool senseless)
 		// The transition actively affects the state of the system
 		if (base->transitions[i].behavior == transition::active)
 		{
-			for (int j = 0; j < (int)base->transitions[i].action.cubes.size(); j++)
+			for (int j = 0; j < (int)base->transitions[i].local_action.cubes.size(); j++)
 			{
-				boolean::cube action = base->transitions[i].action.cubes[j];
+				boolean::cube action = base->transitions[i].local_action.cubes[j];
 				boolean::cover inv_action = ~action;
 
 				for (int s = senseless ? -1 : 0; senseless ? s == -1 : s < 2; s++)
 				{
 					// we cannot use the variables affected by the transitions in their rules because that would
 					// make the rules self-invalidating, so we have to mask them out.
-					if (senseless || !base->transitions[i].action.cubes[j].mask(1-s).is_tautology())
+					if (senseless || !base->transitions[i].local_action.cubes[j].mask(1-s).is_tautology())
 					{
 						boolean::cover implicant = si.mask(action.mask()).mask(s);
 
@@ -117,8 +117,8 @@ void encoder::check(bool senseless)
 								for (int l = 0; l < (int)check_transitions.size(); l++)
 								{
 									bool found = false;
-									for (int m = 0; m < (int)base->transitions[check_transitions[l]].action.cubes.size() && !found; m++)
-										if (are_mutex(base->transitions[check_transitions[l]].action.cubes[m], inv_action))
+									for (int m = 0; m < (int)base->transitions[check_transitions[l]].local_action.cubes.size() && !found; m++)
+										if (are_mutex(base->transitions[check_transitions[l]].local_action.cubes[m], inv_action))
 										{
 											found = true;
 											vector<int> check_places = base->prev(hse::transition::type, check_transitions[l]);
@@ -292,56 +292,5 @@ void encoder::check(bool senseless)
 					}
 }
 
-void encoder::print_conflicts(int sense)
-{
-	for (int i = 0; i < (int)conflicts.size(); i++)
-	{
-		if (conflicts[i].sense == sense)
-		{
-			printf("T%d.%d:{", conflicts[i].index.index, conflicts[i].index.term);
-			for (int j = 0; j < (int)conflicts[i].implicant.size(); j++)
-			{
-				if (j != 0)
-					printf(", ");
-				printf("P%d", conflicts[i].implicant[j]);
-			}
-			printf("}\t->\t{");
-			for (int j = 0; j < (int)conflicts[i].region.size(); j++)
-			{
-				if (j != 0)
-					printf(", ");
-				printf("P%d", conflicts[i].region[j]);
-			}
-			printf("}\n");
-		}
-	}
-	printf("\n");
-}
-
-void encoder::print_suspects(int sense)
-{
-	for (int i = 0; i < (int)suspects.size(); i++)
-	{
-		if (suspects[i].sense == sense)
-		{
-			printf("{");
-			for (int j = 0; j < (int)suspects[i].first.size(); j++)
-			{
-				if (j != 0)
-					printf(", ");
-				printf("P%d", suspects[i].first[j]);
-			}
-			printf("}\t->\t{");
-			for (int j = 0; j < (int)suspects[i].second.size(); j++)
-			{
-				if (j != 0)
-					printf(", ");
-				printf("P%d", suspects[i].second[j]);
-			}
-			printf("}\n");
-		}
-	}
-	printf("\n");
-}
 
 }

@@ -17,6 +17,7 @@
 
 namespace hse
 {
+
 struct graph
 {
 	graph();
@@ -25,7 +26,7 @@ struct graph
 	vector<place> places;
 	vector<transition> transitions;
 	vector<arc> arcs[2];
-	vector<vector<reset_token> > source, sink;
+	vector<state> source, sink;
 
 	vector<half_synchronization> synchronizations;
 	vector<int> reach;
@@ -175,11 +176,11 @@ struct graph
 	}
 
 	map<iterator, iterator> merge(int relation, const graph &g, bool remote);
-	void wrap();
+	graph &wrap();
 
 	vector<vector<iterator> > cycles() const;
 
-	void compact(const boolean::variable_set &variables, bool proper_nesting = false);
+	void post_process(const boolean::variable_set &variables, bool proper_nesting = false);
 	void reachability();
 	bool is_reachable(iterator from, iterator to);
 	bool is_parallel(iterator a, iterator b);

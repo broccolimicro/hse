@@ -47,8 +47,6 @@ struct encoder
 	graph *base;
 
 	void check(bool senseless = false);
-	void print_conflicts(int sense = -1);
-	void print_suspects(int sense = -1);
 };
 
 }

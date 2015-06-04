@@ -31,6 +31,7 @@ struct place
 	static const int type = 0;
 	boolean::cover predicate;
 	boolean::cover effective;
+	boolean::cube mask;
 };
 
 struct transition
@@ -46,7 +47,8 @@ struct transition
 	};
 
 	static const int type = 1;
-	boolean::cover action;
+	boolean::cover local_action;
+	boolean::cover remote_action;
 	int behavior;
 
 	transition subdivide(int term);

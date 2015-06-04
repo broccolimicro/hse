@@ -28,10 +28,11 @@ struct simulator
 	vector<term_index> unacknowledged;
 	term_index last;
 
-	boolean::cube global;
-
 	const graph *base;
 	const boolean::variable_set *variables;
+
+	boolean::cube encoding;
+	boolean::cube global;
 
 	struct
 	{
@@ -50,43 +51,21 @@ struct simulator
 		deque<term_index> body;
 
 		vector<enabled_environment> ready;
-
-		bool is_active()
-		{
-			return (head.size() > 0);
-		}
 	} remote;
 
 	int enabled(bool sorted = false);
-	void fire(int index);
+	boolean::cube fire(int index);
 
 	int possible(bool sorted = false);
 	void begin(int index);
 	void end();
 	void environment();
 
-	struct state
-	{
-		vector<int> tokens;
-		vector<term_index> environment;
-		vector<boolean::cover> encodings;
-
-		void merge(const state &s);
-		bool is_subset_of(const state &s);
-	};
-
 	void merge_errors(const simulator &sim);
 	state get_state();
 
 	vector<pair<int, int> > get_vacuous_choices();
 };
-
-bool operator<(simulator::state s1, simulator::state s2);
-bool operator>(simulator::state s1, simulator::state s2);
-bool operator<=(simulator::state s1, simulator::state s2);
-bool operator>=(simulator::state s1, simulator::state s2);
-bool operator==(simulator::state s1, simulator::state s2);
-bool operator!=(simulator::state s1, simulator::state s2);
 
 }
 

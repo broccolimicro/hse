@@ -24,36 +24,28 @@ simulator::simulator(const graph *base, const boolean::variable_set *variables, 
 {
 	this->base = base;
 	this->variables = variables;
-	//TODO
-	//cout << "State" << endl;
 	if (base != NULL)
 	{
-		for (int j = 0; j < (int)base->source[i].size(); j++)
+		int j = i;
+		i = 0;
+		while (i < (int)base->source.size() && j > (int)base->source[i].encodings.cubes.size())
 		{
-			global &= base->source[i][j].state;
-			if (environment && base->source[i][j].remotable)
-			{
-				//cout << "Remote " << base->source[i][j].index << endl;
-				remote.head.push_back(base->source[i][j]);
-				remote.tail.push_back(base->source[i][j]);
-			}
-			else
-			{
-				//cout << "Local " << base->source[i][j].index << endl;
-				local.tokens.push_back(base->source[i][j]);
-			}
+			j -= (int)base->source[i].encodings.cubes.size();
+			i++;
 		}
 
-		if (global.is_null())
+		encoding = base->source[i].encodings[j];
+		global = base->source[i].encodings[j];
+		for (int k = 0; k < (int)base->source[i].tokens.size(); k++)
 		{
-			error("", "state disagreement in reset", __FILE__, __LINE__);
-			if (variables != NULL)
-				for (int j = 0; j < (int)base->source[i].size(); j++)
-					for (int k = j; k < (int)base->source[i].size(); k++)
-					{
-						if (are_mutex(base->source[i][j].state, base->source[i][k].state))
-							note("", export_guard(base->source[i][j].state, *variables).to_string() + " & " + export_guard(base->source[i][k].state, *variables).to_string(), __FILE__, __LINE__);
-					}
+			if (environment && base->source[i].tokens[k].remotable)
+			{
+				//cout << "Remote " << base->source[i][j].index << endl;
+				remote.head.push_back(base->source[i].tokens[k]);
+				remote.tail.push_back(base->source[i].tokens[k]);
+			}
+			else
+				local.tokens.push_back(base->source[i].tokens[k]);
 		}
 	}
 }
@@ -127,21 +119,18 @@ int simulator::enabled(bool sorted)
 	for (int i = 0; i < (int)potential.size(); i++)
 	{
 		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
-		{
-			potential[i].state &= local.tokens[potential[i].tokens[j]].state;
 			potential[i].guard.insert(potential[i].guard.end(), local.tokens[potential[i].tokens[j]].guard.begin(), local.tokens[potential[i].tokens[j]].guard.end());
-		}
 
 		sort(potential[i].guard.begin(), potential[i].guard.end());
 		potential[i].guard.resize(unique(potential[i].guard.begin(), potential[i].guard.end()) - potential[i].guard.begin());
 	}
 
-	// Now we need to check all of the terms against the state and the guard
+	// Now we need to check all of the terms against the state and the guards
 	vector<enabled_transition> result;
 	result.reserve(potential.size()*2);
 	for (int i = 0; i < (int)potential.size(); i++)
 	{
-		for (int j = 0; j < base->transitions[potential[i].index].action.size(); j++)
+		for (int j = 0; j < base->transitions[potential[i].index].local_action.size(); j++)
 		{
 			bool pass = true;
 			bool vacuous = false;
@@ -149,18 +138,22 @@ int simulator::enabled(bool sorted)
 			if (base->transitions[potential[i].index].behavior == transition::active)
 			{
 				// If this transition is vacuous then its enabled even if its incoming guards are not firing
-				vacuous = are_mutex(potential[i].state, ~base->transitions[potential[i].index].action.cubes[j]);
+				// This is global and not encoding for the following reason: if there are two equivalent assignments
+				// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
+				// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
+				// the event rule system.
+				vacuous = (local_transition(global, base->transitions[potential[i].index].local_action.cubes[j]) == global);
 
 				// Now we need to check all of the guards leading up to this transition
 				for (vector<int>::iterator l = potential[i].guard.begin(); l != potential[i].guard.end() && pass && !vacuous; l++)
 				{
 					pass = false;
-					for (int m = 0; m < (int)base->transitions[*l].action.cubes.size() && !pass; m++)
-						pass = (boolean::remote_transition(base->transitions[*l].action.cubes[m], global) == base->transitions[*l].action.cubes[m]);
+					for (int m = 0; m < (int)base->transitions[*l].local_action.cubes.size() && !pass; m++)
+						pass = (remote_transition(base->transitions[*l].local_action.cubes[m], global) == base->transitions[*l].local_action.cubes[m]);
 				}
 			}
 			else
-				pass = !are_mutex(base->transitions[potential[i].index].action[j], potential[i].state);
+				pass = !are_mutex(base->transitions[potential[i].index].local_action[j], encoding);
 
 			if (pass)
 			{
@@ -176,7 +169,7 @@ int simulator::enabled(bool sorted)
 		if (base->transitions[local.ready[i].index].behavior == transition::active)
 			for (int j = i+1; j < (int)local.ready.size(); j++)
 				if (base->transitions[local.ready[j].index].behavior == transition::active &&
-					boolean::are_mutex(base->transitions[local.ready[i].index].action[local.ready[i].term], base->transitions[local.ready[j].index].action[local.ready[j].term]))
+					boolean::are_mutex(base->transitions[local.ready[i].index].local_action[local.ready[i].term], base->transitions[local.ready[j].index].local_action[local.ready[j].term]))
 				{
 					interference err(local.ready[i], local.ready[j]);
 					vector<interference>::iterator loc = lower_bound(interfering.begin(), interfering.end(), err);
@@ -223,10 +216,9 @@ int simulator::enabled(bool sorted)
 	return local.ready.size();
 }
 
-void simulator::fire(int index)
+boolean::cube simulator::fire(int index)
 {
 	enabled_transition t = local.ready[index];
-	// TODO
 	//cout << "  T" << t.index << "." << t.term << endl;
 
 	// Update the local.tokens
@@ -238,21 +230,20 @@ void simulator::fire(int index)
 		remotable = remotable && local.tokens[t.tokens[i]].remotable;
 		local.tokens.erase(local.tokens.begin() + t.tokens[i]);
 	}
+
 	// Update the state
 	if (base->transitions[t.index].behavior == transition::active)
 	{
-		t.state = boolean::local_transition(t.state, base->transitions[t.index].action[t.term]);
-		global = boolean::local_transition(global, base->transitions[t.index].action[t.term]);
-		for (int i = 0; i < (int)local.tokens.size(); i++)
-			local.tokens[i].state = boolean::remote_transition(local.tokens[i].state, global);
-
+		encoding = local_transition(encoding, base->transitions[t.index].local_action[t.term]);
+		if (t.term < base->transitions[t.index].remote_action.size())
+		{
+			global = local_transition(encoding, base->transitions[t.index].remote_action[t.term]);
+			encoding = remote_transition(encoding, global);
+		}
 		t.guard.clear();
 	}
 	else if (base->transitions[t.index].behavior == transition::passive)
-	{
-		boolean::cube temp = t.state & base->transitions[t.index].action[t.term];
-		t.state = boolean::remote_transition(temp, global);
-	}
+		encoding = remote_transition(encoding & base->transitions[t.index].local_action[t.term], global);
 
 	t.guard.push_back(t.index);
 
@@ -260,7 +251,7 @@ void simulator::fire(int index)
 	t.guard.resize(unique(t.guard.begin(), t.guard.end()) - t.guard.begin());
 
 	for (int i = 0; i < (int)next.size(); i++)
-		local.tokens.push_back(local_token(next[i], t.state, t.guard, remotable));
+		local.tokens.push_back(local_token(next[i], t.guard, remotable));
 
 	// disable any transitions that were dependent on at least one of the same local.tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
@@ -272,10 +263,14 @@ void simulator::fire(int index)
 		local.ready[i].history.push_back(t);
 
 	last = t;
+	return base->transitions[t.index].local_action[t.term];
 }
 
 int simulator::possible(bool sorted)
 {
+	if (remote.head.size() == 0)
+		return 0;
+
 	if (!sorted)
 		sort(remote.head.begin(), remote.head.end());
 
@@ -330,10 +325,10 @@ int simulator::possible(bool sorted)
 	result.reserve(potential.size()*2);
 	for (int i = 0; i < (int)potential.size(); i++)
 	{
-		for (int j = 0; j < base->transitions[potential[i].index].action.size(); j++)
+		for (int j = 0; j < base->transitions[potential[i].index].local_action.size(); j++)
 		{
 			if (base->transitions[potential[i].index].behavior == transition::active ||
-				!are_mutex(base->transitions[potential[i].index].action[j], global))
+				!are_mutex(base->transitions[potential[i].index].local_action[j], global))
 			{
 				result.push_back(potential[i]);
 				result.back().term = j;
@@ -369,9 +364,8 @@ void simulator::begin(int index)
 	// Update the state
 	if (base->transitions[t.index].behavior == transition::active)
 	{
-		global = boolean::remote_transition(global, base->transitions[t.index].action[t.term]);
-		for (int i = 0; i < (int)local.tokens.size(); i++)
-			local.tokens[i].state = boolean::remote_transition(local.tokens[i].state, base->transitions[t.index].action[t.term]);
+		encoding = remote_transition(encoding, base->transitions[t.index].remote_action[t.term]);
+		global = remote_transition(global, base->transitions[t.index].remote_action[t.term]);
 	}
 
 	for (int i = 0; i < (int)next.size(); i++)
@@ -379,7 +373,6 @@ void simulator::begin(int index)
 
 	remote.body.push_back(t);
 
-	// TODO
 	/*cout << "+ T" << t.index << "." << t.term << " {";
 	for (int i = 0; i < (int)remote.head.size(); i++)
 		cout << "P" << remote.head[i].index << " ";
@@ -394,10 +387,6 @@ void simulator::begin(int index)
 
 void simulator::end()
 {
-	boolean::cube encoding = 1;
-	for (int i = 0; i < (int)local.tokens.size(); i++)
-		encoding &= local.tokens[i].state;
-
 	sort(remote.tail.begin(), remote.tail.end());
 
 	vector<int> history;
@@ -433,14 +422,13 @@ void simulator::end()
 			}
 		}
 
-		// TODO
 		//cout << "Checking T" << iter->index << "." << iter->term << " " << encoding << " " << base->transitions[iter->index].action[iter->term] << " " << local_transition(encoding, base->transitions[iter->index].action[iter->term]) << endl;
 		// The tail moves up only if it must.
+		// TODO this is wrong... I need to somehow collapse the state
 		if (enabled &&
-			((base->transitions[iter->index].behavior == transition::active && local_transition(encoding, base->transitions[iter->index].action[iter->term]) == encoding) ||
-			 (base->transitions[iter->index].behavior == transition::passive && (encoding & base->transitions[iter->index].action[iter->term]) == encoding)))
+			((base->transitions[iter->index].behavior == transition::active && local_transition(global, base->transitions[iter->index].local_action[iter->term]) == global) ||
+			 (base->transitions[iter->index].behavior == transition::passive && (global & base->transitions[iter->index].local_action[iter->term]) == global)))
 		{
-			// TODO
 			/*cout << "- T" << iter->index << "." << iter->term << " {";
 			for (int i = 0; i < (int)remote.head.size(); i++)
 				cout << "P" << remote.head[i].index << " ";
@@ -480,19 +468,13 @@ void simulator::end()
 
 void simulator::environment()
 {
-	// TODO
-	boolean::cube encoding = 1;
+	boolean::cube action = 1;
 	for (int i = 0; i < (int)remote.body.size(); i++)
 		if (base->transitions[remote.body[i].index].behavior == transition::active)
-			encoding &= base->transitions[remote.body[i].index].action[remote.body[i].term];
-	//cout << "Applying Environment " << global << " -> " << encoding << " = " << remote_transition(global, encoding) << endl;
-	for (int i = 0; i < (int)local.tokens.size(); i++)
-	{
-		//cout << "Token " << i << ": " << local.tokens[i].state << " -> " << encoding;
-		local.tokens[i].state = remote_transition(local.tokens[i].state, encoding);
-		//cout << " = " << local.tokens[i].state << endl;
-	}
-	global = remote_transition(global, encoding);
+			action &= base->transitions[remote.body[i].index].remote_action[remote.body[i].term];
+	//cout << "Applying Environment " << encoding << " -> " << action << " = " << remote_transition(encoding, action) << endl;
+	encoding = remote_transition(encoding, action);
+	global = remote_transition(global, action);
 }
 
 void simulator::merge_errors(const simulator &sim)
@@ -510,22 +492,13 @@ void simulator::merge_errors(const simulator &sim)
 	interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
 }
 
-simulator::state simulator::get_state()
+state simulator::get_state()
 {
-	simulator::state result;
-
-	sort(local.tokens.begin(), local.tokens.end());
-	for (int i = 0; i < (int)local.tokens.size(); i++)
-	{
-		result.tokens.push_back(local.tokens[i].index);
-		result.encodings.push_back(local.tokens[i].state);
-	}
-
-	result.environment.insert(result.environment.end(), remote.body.begin(), remote.body.end());
-	sort(result.environment.begin(), result.environment.end());
-	result.environment.resize(unique(result.environment.begin(), result.environment.end()) - result.environment.begin());
-
-	return result;
+	vector<term_index> body;
+	body.insert(body.end(), remote.body.begin(), remote.body.end());
+	sort(body.begin(), body.end());
+	body.resize(unique(body.begin(), body.end()) - body.begin());
+	return state(local.tokens, body, encoding);
 }
 
 vector<pair<int, int> > simulator::get_vacuous_choices()
@@ -540,59 +513,6 @@ vector<pair<int, int> > simulator::get_vacuous_choices()
 	return vacuous_choices;
 }
 
-void simulator::state::merge(const simulator::state &s)
-{
-	if (tokens != s.tokens || environment != s.environment)
-		return;
 
-	for (int i = 0; i < (int)encodings.size() && i < (int)s.encodings.size(); i++)
-		encodings[i] |= s.encodings[i];
-}
-
-bool simulator::state::is_subset_of(const state &s)
-{
-	if (tokens != s.tokens || environment != s.environment)
-		return false;
-
-	for (int i = 0; i < (int)encodings.size() && i < (int)s.encodings.size(); i++)
-		if (!encodings[i].is_subset_of(s.encodings[i]))
-			return false;
-
-	return true;
-}
-
-bool operator<(simulator::state s1, simulator::state s2)
-{
-	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment < s2.environment);
-}
-
-bool operator>(simulator::state s1, simulator::state s2)
-{
-	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment > s2.environment);
-}
-
-bool operator<=(simulator::state s1, simulator::state s2)
-{
-	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment <= s2.environment);
-}
-
-bool operator>=(simulator::state s1, simulator::state s2)
-{
-	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment >= s2.environment);
-}
-
-bool operator==(simulator::state s1, simulator::state s2)
-{
-	return s1.tokens == s2.tokens && s1.environment == s2.environment;
-}
-
-bool operator!=(simulator::state s1, simulator::state s2)
-{
-	return s1.tokens != s2.tokens || s1.environment != s2.environment;
-}
 
 }
