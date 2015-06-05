@@ -63,7 +63,7 @@ simulator::~simulator()
  */
 int simulator::enabled(bool sorted)
 {
-	if (base == NULL)
+	if (base == NULL || local.tokens.size() == 0)
 		return 0;
 
 	if (!sorted)
@@ -165,13 +165,13 @@ int simulator::enabled(bool sorted)
 	}
 
 	// Check for interfering transitions
-	for (int i = 0; i < (int)local.ready.size(); i++)
-		if (base->transitions[local.ready[i].index].behavior == transition::active)
-			for (int j = i+1; j < (int)local.ready.size(); j++)
-				if (base->transitions[local.ready[j].index].behavior == transition::active &&
-					boolean::are_mutex(base->transitions[local.ready[i].index].local_action[local.ready[i].term], base->transitions[local.ready[j].index].local_action[local.ready[j].term]))
+	for (int i = 0; i < (int)result.size(); i++)
+		if (base->transitions[result[i].index].behavior == transition::active)
+			for (int j = i+1; j < (int)result.size(); j++)
+				if (base->transitions[result[j].index].behavior == transition::active &&
+					boolean::are_mutex(base->transitions[result[i].index].local_action[result[i].term], base->transitions[result[j].index].local_action[result[j].term]))
 				{
-					interference err(local.ready[i], local.ready[j]);
+					interference err(result[i], result[j]);
 					vector<interference>::iterator loc = lower_bound(interfering.begin(), interfering.end(), err);
 					if (loc == interfering.end() || *loc != err)
 					{
@@ -193,6 +193,16 @@ int simulator::enabled(bool sorted)
 				{
 					unstable.insert(loc, err);
 					error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+				}
+			}
+			else if (base->transitions[local.ready[i].index].behavior == hse::transition::passive)
+			{
+				instability err = instability(local.ready[i], local.ready[i].history);
+				vector<instability>::iterator loc = lower_bound(unstable.begin(), unstable.end(), err);
+				if (loc == unstable.end() || *loc != err)
+				{
+					unstable.insert(loc, err);
+					warning("", err.to_string(*base, *variables), __FILE__, __LINE__);
 				}
 			}
 
@@ -218,6 +228,9 @@ int simulator::enabled(bool sorted)
 
 boolean::cube simulator::fire(int index)
 {
+	if (base == NULL || index >= (int)local.ready.size())
+		return boolean::cube();
+
 	enabled_transition t = local.ready[index];
 	//cout << "  T" << t.index << "." << t.term << endl;
 
@@ -268,7 +281,7 @@ boolean::cube simulator::fire(int index)
 
 int simulator::possible(bool sorted)
 {
-	if (remote.head.size() == 0)
+	if (base == NULL || remote.head.size() == 0)
 		return 0;
 
 	if (!sorted)
@@ -328,7 +341,7 @@ int simulator::possible(bool sorted)
 		for (int j = 0; j < base->transitions[potential[i].index].local_action.size(); j++)
 		{
 			if (base->transitions[potential[i].index].behavior == transition::active ||
-				!are_mutex(base->transitions[potential[i].index].local_action[j], global))
+				!are_mutex(base->transitions[potential[i].index].local_action[j], encoding))
 			{
 				result.push_back(potential[i]);
 				result.back().term = j;
@@ -353,6 +366,9 @@ int simulator::possible(bool sorted)
 
 void simulator::begin(int index)
 {
+	if (base == NULL || index >= (int)remote.ready.size())
+		return;
+
 	enabled_environment t = remote.ready[index];
 
 	// Update the tokens
@@ -360,13 +376,6 @@ void simulator::begin(int index)
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	for (int i = 0; i < (int)t.tokens.size(); i++)
 		remote.head.erase(remote.head.begin() + t.tokens[i]);
-
-	// Update the state
-	if (base->transitions[t.index].behavior == transition::active)
-	{
-		encoding = remote_transition(encoding, base->transitions[t.index].remote_action[t.term]);
-		global = remote_transition(global, base->transitions[t.index].remote_action[t.term]);
-	}
 
 	for (int i = 0; i < (int)next.size(); i++)
 		remote.head.push_back(remote_token(next[i]));
@@ -387,6 +396,9 @@ void simulator::begin(int index)
 
 void simulator::end()
 {
+	if (base == NULL)
+		return;
+
 	sort(remote.tail.begin(), remote.tail.end());
 
 	vector<int> history;
@@ -468,13 +480,21 @@ void simulator::end()
 
 void simulator::environment()
 {
-	boolean::cube action = 1;
+	if (base == NULL)
+		return;
+
+	boolean::cube local_action = 1;
+	boolean::cube remote_action = 1;
 	for (int i = 0; i < (int)remote.body.size(); i++)
 		if (base->transitions[remote.body[i].index].behavior == transition::active)
-			action &= base->transitions[remote.body[i].index].remote_action[remote.body[i].term];
+		{
+			local_action &= base->transitions[remote.body[i].index].local_action[remote.body[i].term];
+			remote_action &= base->transitions[remote.body[i].index].remote_action[remote.body[i].term];
+		}
 	//cout << "Applying Environment " << encoding << " -> " << action << " = " << remote_transition(encoding, action) << endl;
-	encoding = remote_transition(encoding, action);
-	global = remote_transition(global, action);
+	encoding = local_transition(encoding, local_action).xoutnulls();
+	global = local_transition(global, remote_action);
+	encoding = remote_transition(encoding, global);
 }
 
 void simulator::merge_errors(const simulator &sim)

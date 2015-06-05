@@ -399,11 +399,11 @@ instability::~instability()
 
 string instability::to_string(const hse::graph &g, const boolean::variable_set &v)
 {
-	string result = "unstable assignment T" + ::to_string(effect.index) + "." + ::to_string(effect.term) + ":";
+	string result;
 	if (g.transitions[effect.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[effect.index].local_action[effect.term], v).to_string();
+		result = "unstable assignment " + effect.to_string(g, v);
 	else
-		result += "[" + export_guard_xfactor(g.transitions[effect.index].local_action[effect.term], v).to_string() + "]";
+		result = "unstable guard " + effect.to_string(g, v);
 
 	result += " cause: {";
 
@@ -412,12 +412,7 @@ string instability::to_string(const hse::graph &g, const boolean::variable_set &
 		if (j != 0)
 			result += "; ";
 
-		result += "T" + ::to_string(cause[j].index) + "." + ::to_string(cause[j].term) + ":";
-
-		if (g.transitions[cause[j].index].behavior == hse::transition::active)
-			result += export_assignment(g.transitions[cause[j].index].local_action[cause[j].term], v).to_string();
-		else
-			result += "[" + export_guard_xfactor(g.transitions[cause[j].index].local_action[cause[j].term], v).to_string() + "]";
+		result += cause[j].to_string(g, v);
 	}
 	result += "}";
 	return result;
@@ -473,17 +468,7 @@ interference::~interference()
 
 string interference::to_string(const hse::graph &g, const boolean::variable_set &v)
 {
-	string result = "interfering assignments T" + ::to_string(first.index) + "." + ::to_string(first.term) + ":";
-	if (g.transitions[first.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[first.index].local_action[first.term], v).to_string();
-	else
-		result += "[" + export_guard_xfactor(g.transitions[first.index].local_action[first.term], v).to_string() + "]";
-	result += " and T" + ::to_string(second.index) + "." + ::to_string(second.term) + ":";
-	if (g.transitions[second.index].behavior == hse::transition::active)
-		result += export_assignment(g.transitions[second.index].local_action[second.term], v).to_string();
-	else
-		result += "[" + export_guard_xfactor(g.transitions[second.index].local_action[second.term], v).to_string() + "]";
-	return result;
+	return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
 }
 
 deadlock::deadlock()

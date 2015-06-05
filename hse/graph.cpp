@@ -1565,15 +1565,6 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 	int count = 0;
 	while (simulations.size() > 0)
 	{
-		if ((states.count % 10000) == 10000-1)
-		{
-			for (int i = 0; i < (int)places.size(); i++)
-			{
-				places[i].effective.espresso();
-				places[i].predicate.espresso();
-			}
-		}
-
 		simulator sim = simulations.back();
 		simulations.pop_back();
 
