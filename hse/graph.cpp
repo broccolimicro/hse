@@ -1387,42 +1387,6 @@ void graph::post_process(const boolean::variable_set &variables, bool proper_nes
 
 	for (int i = 0; i < (int)transitions.size(); i++)
 		transitions[i].remote_action = variables.remote(transitions[i].local_action);
-
-	vector<int> written;
-	vector<int> read;
-
-	for (int i = 0; i < (int)transitions.size(); i++)
-	{
-		if (transitions[i].behavior == transition::active)
-			transitions[i].remote_action.vars(&written);
-		else
-			transitions[i].remote_action.vars(&read);
-	}
-
-	sort(written.begin(), written.end());
-	written.resize(unique(written.begin(), written.end()) - written.begin());
-	sort(read.begin(), read.end());
-	read.resize(unique(read.begin(), read.end()) - read.begin());
-
-	int i = 0, j = 0;
-	while (i < (int)written.size() || j < (int)read.size())
-	{
-		if (j >= read.size() || (i < (int)written.size() && written[i] < read[j]))
-		{
-			warning("", variables.variables[written[i]].to_string() + " read but not written", __FILE__, __LINE__);
-			i++;
-		}
-		else if (i >= (int)written.size() || (j < (int)read.size() && read[j] < written[i]))
-		{
-			warning("", variables.variables[read[j]].to_string() + " written but not read", __FILE__, __LINE__);
-			j++;
-		}
-		else
-		{
-			i++;
-			j++;
-		}
-	}
 }
 
 void graph::reachability()
