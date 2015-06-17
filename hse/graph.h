@@ -27,6 +27,7 @@ struct graph
 	vector<transition> transitions;
 	vector<arc> arcs[2];
 	vector<state> source, sink;
+	vector<state> reset;
 
 	vector<half_synchronization> synchronizations;
 	vector<int> reach;

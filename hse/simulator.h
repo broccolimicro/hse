@@ -20,7 +20,7 @@ struct graph;
 struct simulator
 {
 	simulator();
-	simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment);
+	simulator(const graph *base, const boolean::variable_set *variables, state initial, int index, bool environment);
 	~simulator();
 
 	vector<instability> instability_errors;

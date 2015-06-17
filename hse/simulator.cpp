@@ -20,33 +20,25 @@ simulator::simulator()
 	variables = NULL;
 }
 
-simulator::simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment)
+simulator::simulator(const graph *base, const boolean::variable_set *variables, state initial, int index, bool environment)
 {
 	//cout << "Reset" << endl;
 	this->base = base;
 	this->variables = variables;
 	if (base != NULL)
 	{
-		int j = i;
-		i = 0;
-		while (i < (int)base->source.size() && j > (int)base->source[i].encodings.cubes.size())
+		encoding = initial.encodings[index];
+		global = initial.encodings[index];
+		for (int k = 0; k < (int)initial.tokens.size(); k++)
 		{
-			j -= (int)base->source[i].encodings.cubes.size();
-			i++;
-		}
-
-		encoding = base->source[i].encodings[j];
-		global = base->source[i].encodings[j];
-		for (int k = 0; k < (int)base->source[i].tokens.size(); k++)
-		{
-			if (environment && base->source[i].tokens[k].remotable)
+			if (environment && initial.tokens[k].remotable)
 			{
-				//cout << "Remote " << base->source[i][j].index << endl;
-				remote.head.push_back(base->source[i].tokens[k]);
-				remote.tail.push_back(base->source[i].tokens[k].index);
+				//cout << "Remote " << initial[j].index << endl;
+				remote.head.push_back(initial.tokens[k]);
+				remote.tail.push_back(initial.tokens[k].index);
 			}
 			else
-				local.tokens.push_back(base->source[i].tokens[k]);
+				local.tokens.push_back(initial.tokens[k]);
 		}
 	}
 }
