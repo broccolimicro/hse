@@ -1,5 +1,5 @@
 /*
- * token.h
+1 * token.h
  *
  *  Created on: Feb 2, 2015
  *      Author: nbingham
@@ -18,6 +18,44 @@
 namespace hse
 {
 
+struct graph;
+
+/* This stores all the information necessary to fire an enabled transition: the local
+ * and remote tokens that enable it, and the total state of those tokens.
+ */
+struct enabled_transition : term_index
+{
+	enabled_transition();
+	enabled_transition(int index);
+	~enabled_transition();
+
+	vector<term_index> history;
+	boolean::cube local_action;
+	boolean::cube remote_action;
+	boolean::cube guard_action;
+	boolean::cover guard;
+	vector<int> tokens;
+	bool vacuous;
+	bool stable;
+};
+
+bool operator<(enabled_transition i, enabled_transition j);
+bool operator>(enabled_transition i, enabled_transition j);
+bool operator<=(enabled_transition i, enabled_transition j);
+bool operator>=(enabled_transition i, enabled_transition j);
+bool operator==(enabled_transition i, enabled_transition j);
+bool operator!=(enabled_transition i, enabled_transition j);
+
+struct enabled_environment : term_index
+{
+	enabled_environment();
+	enabled_environment(int index);
+	~enabled_environment();
+
+	boolean::cover guard;
+	vector<int> tokens;
+};
+
 struct reset_token;
 
 /* A local token maintains its own local state information and cannot access global state
@@ -27,12 +65,13 @@ struct local_token
 {
 	local_token();
 	local_token(int index, bool remotable);
-	local_token(int index, vector<int> guard, bool remotable);
+	local_token(int index, boolean::cover guard, vector<enabled_transition> prev, bool remotable);
 	local_token(const reset_token &t);
 	~local_token();
 
 	int index;
-	vector<int> guard;
+	boolean::cover guard;
+	vector<enabled_transition> prev;
 	bool remotable;
 
 	local_token &operator=(const reset_token &t);
@@ -51,11 +90,12 @@ bool operator!=(local_token i, local_token j);
 struct remote_token
 {
 	remote_token();
-	remote_token(int index);
+	remote_token(int index, boolean::cover guard);
 	remote_token(const reset_token &t);
 	~remote_token();
 
 	int index;
+	boolean::cover guard;
 
 	remote_token &operator=(const reset_token &t);
 	string to_string();
@@ -87,6 +127,8 @@ struct reset_token
 	string to_string(const boolean::variable_set &variables);
 };
 
+ostream &operator<<(ostream &os, vector<reset_token> t);
+
 bool operator<(reset_token i, reset_token j);
 bool operator>(reset_token i, reset_token j);
 bool operator<=(reset_token i, reset_token j);
@@ -98,7 +140,7 @@ struct state
 {
 	state();
 	state(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings);
-	state(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings);
+	state(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings);
 	~state();
 
 	vector<reset_token> tokens;
@@ -173,8 +215,19 @@ struct state_map
 
 	unsigned int hash(state s)
 	{
-		return SuperFastHash((const char*)s.tokens.data(), s.tokens.size()*sizeof(reset_token)) ^
-				SuperFastHash((const char*)s.environment.data(), s.environment.size()*sizeof(term_index));
+		vector<int> tokens;
+		tokens.reserve(s.tokens.size());
+		for (int i = 0; i < (int)s.tokens.size(); i++)
+			tokens.push_back(s.tokens[i].index);
+		vector<int> environment;
+		environment.reserve(s.environment.size()*2);
+		for (int i = 0; i < (int)s.environment.size(); i++)
+		{
+			environment.push_back(s.environment[i].index);
+			environment.push_back(s.environment[i].term);
+		}
+		return SuperFastHash((const char*)tokens.data(), tokens.size()*sizeof(int)) ^
+				SuperFastHash((const char*)environment.data(), environment.size()*sizeof(int));
 	}
 
 	bool insert(state s)
@@ -209,56 +262,29 @@ struct state_map
 	}
 };
 
-/* This stores all the information necessary to fire an enabled transition: the local
- * and remote tokens that enable it, and the total state of those tokens.
- */
-struct enabled_transition : term_index
-{
-	enabled_transition();
-	enabled_transition(int index);
-	~enabled_transition();
-
-	vector<int> tokens;
-	vector<term_index> history;
-	vector<int> guard;
-	bool vacuous;
-};
-
-struct enabled_environment : term_index
-{
-	enabled_environment();
-	enabled_environment(int index);
-	~enabled_environment();
-
-	vector<int> tokens;
-};
-
-struct graph;
-
-struct instability
+struct instability : enabled_transition
 {
 	instability();
-	instability(term_index effect, vector<term_index> cause);
+	instability(const enabled_transition &cause);
 	~instability();
-
-	term_index effect;
-	vector<term_index> cause;
 
 	string to_string(const hse::graph &g, const boolean::variable_set &v);
 };
 
-bool operator<(instability i, instability j);
-bool operator>(instability i, instability j);
-bool operator<=(instability i, instability j);
-bool operator>=(instability i, instability j);
-bool operator==(instability i, instability j);
-bool operator!=(instability i, instability j);
-
-struct interference : pair<term_index, term_index>
+struct interference : pair<enabled_transition, enabled_transition>
 {
 	interference();
-	interference(term_index first, term_index second);
+	interference(const enabled_transition &first, const enabled_transition &second);
 	~interference();
+
+	string to_string(const hse::graph &g, const boolean::variable_set &v);
+};
+
+struct mutex : pair<enabled_transition, enabled_transition>
+{
+	mutex();
+	mutex(const enabled_transition &first, const enabled_transition &second);
+	~mutex();
 
 	string to_string(const hse::graph &g, const boolean::variable_set &v);
 };
@@ -268,7 +294,7 @@ struct deadlock : state
 	deadlock();
 	deadlock(const state &s);
 	deadlock(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings);
-	deadlock(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings);
+	deadlock(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings);
 	~deadlock();
 
 	string to_string(const boolean::variable_set &v);

@@ -260,7 +260,7 @@ string term_index::to_string(const graph &g, const boolean::variable_set &v)
 	if (g.transitions[index].behavior == transition::active)
 		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_assignment(g.transitions[index].local_action[term], v).to_string();
 	else
-		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_guard_xfactor(g.transitions[index].local_action[term], v).to_string();
+		return "T" + ::to_string(index) + "." + ::to_string(term) + ":[" + export_guard_xfactor(g.transitions[index].local_action[term], v).to_string() + "]";
 }
 
 bool operator<(term_index i, term_index j)

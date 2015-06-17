@@ -193,6 +193,8 @@ struct graph
 	void elaborate(const boolean::variable_set &variables, bool report);
 	graph to_state_graph(const boolean::variable_set &variables);
 	graph to_petri_net();
+
+	void check_variables(const boolean::variable_set &variables);
 };
 
 }

@@ -15,22 +15,101 @@
 namespace hse
 {
 
+enabled_transition::enabled_transition()
+{
+	index = 0;
+	term = 0;
+	vacuous = false;
+	stable = true;
+	guard = 1;
+}
+
+enabled_transition::enabled_transition(int index)
+{
+	this->index = index;
+	this->term = 0;
+	vacuous = false;
+	stable = true;
+	guard = 1;
+}
+
+enabled_transition::~enabled_transition()
+{
+
+}
+
+bool operator<(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i < (term_index)j) ||
+		   ((term_index)i == (term_index)j && i.history < j.history);
+}
+
+bool operator>(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i > (term_index)j) ||
+		   ((term_index)i == (term_index)j && i.history > j.history);
+}
+
+bool operator<=(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i < (term_index)j) ||
+		   ((term_index)i == (term_index)j && i.history <= j.history);
+}
+
+bool operator>=(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i > (term_index)j) ||
+		   ((term_index)i == (term_index)j && i.history >= j.history);
+}
+
+bool operator==(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i == (term_index)j && i.history == j.history);
+}
+
+bool operator!=(enabled_transition i, enabled_transition j)
+{
+	return ((term_index)i != (term_index)j || i.history != j.history);
+}
+
+enabled_environment::enabled_environment()
+{
+	index = 0;
+	term = 0;
+	guard = 1;
+}
+
+enabled_environment::enabled_environment(int index)
+{
+	this->index = index;
+	this->term = 0;
+	this->guard = 1;
+}
+
+enabled_environment::~enabled_environment()
+{
+
+}
+
 local_token::local_token()
 {
 	index = 0;
 	remotable = false;
+	guard = 1;
 }
 
 local_token::local_token(int index, bool remotable)
 {
 	this->index = index;
 	this->remotable = remotable;
+	this->guard = 1;
 }
 
-local_token::local_token(int index, vector<int> guard, bool remotable)
+local_token::local_token(int index, boolean::cover guard, vector<enabled_transition> prev, bool remotable)
 {
 	this->index = index;
 	this->guard = guard;
+	this->prev = prev;
 	this->remotable = remotable;
 }
 
@@ -38,6 +117,7 @@ local_token::local_token(const reset_token &t)
 {
 	index = t.index;
 	remotable = t.remotable;
+	guard = 1;
 }
 
 local_token::~local_token()
@@ -49,6 +129,7 @@ local_token &local_token::operator=(const reset_token &t)
 {
 	index = t.index;
 	remotable = t.remotable;
+	guard = 1;
 	return *this;
 }
 
@@ -90,16 +171,19 @@ bool operator!=(local_token i, local_token j)
 remote_token::remote_token()
 {
 	index = 0;
+	guard = 1;
 }
 
-remote_token::remote_token(int index)
+remote_token::remote_token(int index, boolean::cover guard)
 {
 	this->index = index;
+	this->guard = guard;
 }
 
 remote_token::remote_token(const reset_token &t)
 {
 	index = t.index;
+	guard = 1;
 }
 
 remote_token::~remote_token()
@@ -110,6 +194,7 @@ remote_token::~remote_token()
 remote_token &remote_token::operator=(const reset_token &t)
 {
 	index = t.index;
+	guard = 1;
 	return *this;
 }
 
@@ -196,6 +281,19 @@ string reset_token::to_string(const boolean::variable_set &variables)
 	return "P" + ::to_string(index);
 }
 
+ostream &operator<<(ostream &os, vector<reset_token> t)
+{
+	os << "{";
+	for (int i = 0; i < (int)t.size(); i++)
+	{
+		if (i != 0)
+			os << " ";
+		os << t[i].index << "," << t[i].remotable;
+	}
+	os << "}";
+	return os;
+}
+
 bool operator<(reset_token i, reset_token j)
 {
 	return i.index < j.index;
@@ -238,11 +336,14 @@ state::state(vector<reset_token> tokens, vector<term_index> environment, boolean
 	this->encodings = encodings;
 }
 
-state::state(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings)
+state::state(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings)
 {
-	this->environment = environment;
+	for (int i = 0; i < (int)environment.size(); i++)
+		this->environment.push_back((term_index)environment[i]);
 	for (int i = 0; i < (int)tokens.size(); i++)
-		this->tokens.push_back(tokens[i]);
+		this->tokens.push_back(reset_token(tokens[i]));
+	sort(this->tokens.begin(), this->tokens.end());
+	sort(this->environment.begin(), this->environment.end());
 	this->encodings = encodings;
 }
 
@@ -345,51 +446,12 @@ bool operator!=(state s1, state s2)
 	return s1.tokens != s2.tokens || s1.environment != s2.environment;
 }
 
-enabled_transition::enabled_transition()
-{
-	index = 0;
-	term = 0;
-	vacuous = false;
-}
-
-enabled_transition::enabled_transition(int index)
-{
-	this->index = index;
-	this->term = 0;
-	vacuous = false;
-}
-
-enabled_transition::~enabled_transition()
-{
-
-}
-
-enabled_environment::enabled_environment()
-{
-	index = 0;
-	term = 0;
-}
-
-enabled_environment::enabled_environment(int index)
-{
-	this->index = index;
-	this->term = 0;
-}
-
-enabled_environment::~enabled_environment()
-{
-
-}
-
 instability::instability()
 {
-
 }
 
-instability::instability(term_index effect, vector<term_index> cause)
+instability::instability(const enabled_transition &cause) : enabled_transition(cause)
 {
-	this->effect = effect;
-	this->cause = cause;
 }
 
 instability::~instability()
@@ -400,56 +462,22 @@ instability::~instability()
 string instability::to_string(const hse::graph &g, const boolean::variable_set &v)
 {
 	string result;
-	if (g.transitions[effect.index].behavior == hse::transition::active)
-		result = "unstable assignment " + effect.to_string(g, v);
+	if (g.transitions[index].behavior == hse::transition::active)
+		result = "unstable assignment " + enabled_transition::to_string(g, v);
 	else
-		result = "unstable guard " + effect.to_string(g, v);
+		result = "unstable guard " + enabled_transition::to_string(g, v);
 
 	result += " cause: {";
 
-	for (int j = 0; j < (int)cause.size(); j++)
+	for (int j = 0; j < (int)history.size(); j++)
 	{
 		if (j != 0)
 			result += "; ";
 
-		result += cause[j].to_string(g, v);
+		result += history[j].to_string(g, v);
 	}
 	result += "}";
 	return result;
-}
-
-bool operator<(instability i, instability j)
-{
-	return (i.effect < j.effect) ||
-		   (i.effect == j.effect && i.cause < j.cause);
-}
-
-bool operator>(instability i, instability j)
-{
-	return (i.effect > j.effect) ||
-		   (i.effect == j.effect && i.cause > j.cause);
-}
-
-bool operator<=(instability i, instability j)
-{
-	return (i.effect < j.effect) ||
-		   (i.effect == j.effect && i.cause <= j.cause);
-}
-
-bool operator>=(instability i, instability j)
-{
-	return (i.effect > j.effect) ||
-		   (i.effect == j.effect && i.cause >= j.cause);
-}
-
-bool operator==(instability i, instability j)
-{
-	return (i.effect == j.effect && i.cause == j.cause);
-}
-
-bool operator!=(instability i, instability j)
-{
-	return (i.effect != j.effect || i.cause != j.cause);
 }
 
 interference::interference()
@@ -457,8 +485,18 @@ interference::interference()
 
 }
 
-interference::interference(term_index first, term_index second) : pair<term_index, term_index>(first, second)
+interference::interference(const enabled_transition &first, const enabled_transition &second)
 {
+	if (first < second)
+	{
+		this->first = first;
+		this->second = second;
+	}
+	else
+	{
+		this->first = second;
+		this->second = first;
+	}
 }
 
 interference::~interference()
@@ -468,7 +506,39 @@ interference::~interference()
 
 string interference::to_string(const hse::graph &g, const boolean::variable_set &v)
 {
-	return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	if (!first.stable || !second.stable)
+		return "weakly interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	else
+		return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+}
+
+mutex::mutex()
+{
+
+}
+
+mutex::mutex(const enabled_transition &first, const enabled_transition &second)
+{
+	if (first < second)
+	{
+		this->first = first;
+		this->second = second;
+	}
+	else
+	{
+		this->first = second;
+		this->second = first;
+	}
+}
+
+mutex::~mutex()
+{
+
+}
+
+string mutex::to_string(const hse::graph &g, const boolean::variable_set &v)
+{
+	return "vacuous firings break mutual exclusion for assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
 }
 
 deadlock::deadlock()
@@ -486,7 +556,7 @@ deadlock::deadlock(vector<reset_token> tokens, vector<term_index> environment, b
 
 }
 
-deadlock::deadlock(vector<local_token> tokens, vector<term_index> environment, boolean::cover encodings) : state(tokens, environment, encodings)
+deadlock::deadlock(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings) : state(tokens, environment, encodings)
 {
 
 }

@@ -23,8 +23,9 @@ struct simulator
 	simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment);
 	~simulator();
 
-	vector<instability> unstable;
-	vector<interference> interfering;
+	vector<instability> instability_errors;
+	vector<interference> interference_errors;
+	vector<mutex> mutex_errors;
 	vector<term_index> unacknowledged;
 	term_index last;
 
@@ -44,20 +45,20 @@ struct simulator
 	{
 		// structures for handling the environment
 		// indexes for places in the graph
-		vector<remote_token> tail;
+		vector<int> tail;
 		vector<remote_token> head;
 
 		// indices for transitions in the graph between the head and the tail
-		deque<term_index> body;
+		deque<enabled_environment> body;
 
 		vector<enabled_environment> ready;
 	} remote;
 
 	int enabled(bool sorted = false);
-	boolean::cube fire(int index);
+	enabled_transition fire(int index);
 
 	int possible(bool sorted = false);
-	void begin(int index);
+	enabled_environment begin(int index);
 	void end();
 	void environment();
 

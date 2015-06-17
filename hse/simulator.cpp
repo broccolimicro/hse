@@ -22,6 +22,7 @@ simulator::simulator()
 
 simulator::simulator(const graph *base, const boolean::variable_set *variables, int i, bool environment)
 {
+	//cout << "Reset" << endl;
 	this->base = base;
 	this->variables = variables;
 	if (base != NULL)
@@ -42,7 +43,7 @@ simulator::simulator(const graph *base, const boolean::variable_set *variables, 
 			{
 				//cout << "Remote " << base->source[i][j].index << endl;
 				remote.head.push_back(base->source[i].tokens[k]);
-				remote.tail.push_back(base->source[i].tokens[k]);
+				remote.tail.push_back(base->source[i].tokens[k].index);
 			}
 			else
 				local.tokens.push_back(base->source[i].tokens[k]);
@@ -63,17 +64,54 @@ simulator::~simulator()
  */
 int simulator::enabled(bool sorted)
 {
-	if (base == NULL || local.tokens.size() == 0)
+	if (base == NULL)
+	{
+		internal("", "NULL pointer to simulator::base", __FILE__, __LINE__);
+		return 0;
+	}
+
+	/*cout << "local:{";
+	for (int i = 0; i < (int)local.tokens.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << local.tokens[i].index;
+	}
+	cout << "} head:{";
+	for (int i = 0; i < (int)remote.head.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.head[i].index;
+	}
+	cout << "} tail:{";
+	for (int i = 0; i < (int)remote.tail.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.tail[i];
+	}
+	cout << "} body:{";
+	for (int i = 0; i < (int)remote.body.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.body[i].to_string(*base, *variables);
+	}
+	cout << "} " << export_assignment(encoding, *variables).to_string() << "\t" << export_assignment(global, *variables).to_string() << endl;*/
+
+
+	if (local.tokens.size() == 0)
 		return 0;
 
 	if (!sorted)
 		sort(local.tokens.begin(), local.tokens.end());
 
-	vector<enabled_transition> potential;
+	// Get the list of transitions have have a sufficient number of local at the input places
+	vector<enabled_transition> loaded;
 	vector<int> disabled;
 
-	// Get the list of transitions have have a sufficient number of local at the input places
-	potential.reserve(local.tokens.size()*2);
+	loaded.reserve(local.tokens.size()*2);
 	disabled.reserve(base->transitions.size());
 	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
 	{
@@ -83,9 +121,9 @@ int simulator::enabled(bool sorted)
 
 		if (d_invalid)
 		{
-			// Find the index of this transition (if any) in the potential pool
-			vector<enabled_transition>::iterator e = lower_bound(potential.begin(), potential.end(), term_index(a->to.index, 0));
-			bool e_invalid = (e == potential.end() || e->index != a->to.index);
+			// Find the index of this transition (if any) in the loaded pool
+			vector<enabled_transition>::iterator e = lower_bound(loaded.begin(), loaded.end(), term_index(a->to.index, 0));
+			bool e_invalid = (e == loaded.end() || e->index != a->to.index);
 
 			// Check to see if there is any token at the input place of this arc and make sure that
 			// this token has not already been consumed by this particular transition
@@ -98,7 +136,7 @@ int simulator::enabled(bool sorted)
 					// We are safe to add this to the list of possibly enabled transitions
 					found = true;
 					if (e_invalid)
-						e = potential.insert(e, enabled_transition(a->to.index));
+						e = loaded.insert(e, enabled_transition(a->to.index));
 
 					e->tokens.push_back(j);
 				}
@@ -110,188 +148,275 @@ int simulator::enabled(bool sorted)
 			{
 				disabled.insert(d, a->to.index);
 				if (!e_invalid)
-					potential.erase(e);
+					loaded.erase(e);
 			}
 		}
 	}
 
-	// Now we have a list of transitions that have enough tokens to consume. We need to figure out their state and their guarding transitions
-	for (int i = 0; i < (int)potential.size(); i++)
+	// Now we need to check the guards of all of the loaded transitions against the state
+	vector<enabled_transition> potential;
+	potential.reserve(loaded.size()*2);
+	for (int i = 0; i < (int)loaded.size(); i++)
 	{
-		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
-			potential[i].guard.insert(potential[i].guard.end(), local.tokens[potential[i].tokens[j]].guard.begin(), local.tokens[potential[i].tokens[j]].guard.end());
+		// If this transition is an assignment, then we need to check to make sure all of the
+		// previous guards pass before we can execute this assignment.
+		for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
+			loaded[i].guard &= local.tokens[loaded[i].tokens[j]].guard;
 
-		sort(potential[i].guard.begin(), potential[i].guard.end());
-		potential[i].guard.resize(unique(potential[i].guard.begin(), potential[i].guard.end()) - potential[i].guard.begin());
-	}
+		if (base->transitions[loaded[i].index].behavior == transition::passive)
+			loaded[i].guard &= base->transitions[loaded[i].index].local_action;
 
-	// Now we need to check all of the terms against the state and the guards
-	vector<enabled_transition> result;
-	result.reserve(potential.size()*2);
-	for (int i = 0; i < (int)potential.size(); i++)
-	{
-		for (int j = 0; j < base->transitions[potential[i].index].local_action.size(); j++)
+		// Now we check to see if the current state passes the guard
+		int pass = boolean::passes_guard(encoding, global, loaded[i].guard, &loaded[i].guard_action);
+
+		// If it does, then this transition may fire.
+		if (pass >= 0)
 		{
-			bool pass = true;
-			bool vacuous = false;
+			loaded[i].stable = (bool)pass;
 
-			if (base->transitions[potential[i].index].behavior == transition::active)
-			{
-				// If this transition is vacuous then its enabled even if its incoming guards are not firing
-				// This is global and not encoding for the following reason: if there are two equivalent assignments
-				// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
-				// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
-				// the event rule system.
-				vacuous = (local_transition(global, base->transitions[potential[i].index].local_action.cubes[j]) == global);
-
-				// Now we need to check all of the guards leading up to this transition
-				for (vector<int>::iterator l = potential[i].guard.begin(); l != potential[i].guard.end() && pass && !vacuous; l++)
+			if (base->transitions[loaded[i].index].behavior == transition::active)
+				for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
 				{
-					pass = false;
-					for (int m = 0; m < (int)base->transitions[*l].local_action.cubes.size() && !pass; m++)
-						pass = (remote_transition(base->transitions[*l].local_action.cubes[m], global) == base->transitions[*l].local_action.cubes[m]);
+					loaded[i].local_action = base->transitions[loaded[i].index].local_action[loaded[i].term];
+					loaded[i].remote_action = base->transitions[loaded[i].index].remote_action[loaded[i].term];
+					potential.push_back(loaded[i]);
 				}
-			}
 			else
-				pass = !are_mutex(base->transitions[potential[i].index].local_action[j], encoding);
-
-			if (pass)
-			{
-				result.push_back(potential[i]);
-				result.back().term = j;
-				result.back().vacuous = vacuous;
-			}
+				potential.push_back(loaded[i]);
 		}
 	}
-
-	// Check for interfering transitions
-	for (int i = 0; i < (int)result.size(); i++)
-		if (base->transitions[result[i].index].behavior == transition::active)
-			for (int j = i+1; j < (int)result.size(); j++)
-				if (base->transitions[result[j].index].behavior == transition::active &&
-					boolean::are_mutex(base->transitions[result[i].index].local_action[result[i].term], base->transitions[result[j].index].local_action[result[j].term]))
-				{
-					interference err(result[i], result[j]);
-					vector<interference>::iterator loc = lower_bound(interfering.begin(), interfering.end(), err);
-					if (loc == interfering.end() || *loc != err)
-					{
-						interfering.insert(loc, err);
-						error("", err.to_string(*base, *variables), __FILE__, __LINE__);
-					}
-				}
 
 	// Check for unstable transitions
-	for (int i = 0, j = 0; i < (int)local.ready.size();)
+	int i = 0, j = 0;
+	while (i < (int)local.ready.size())
 	{
-		if (j >= (int)result.size() || local.ready[i] < result[j])
+		if (j >= (int)potential.size() || (term_index)local.ready[i] < (term_index)potential[j])
 		{
-			if (base->transitions[local.ready[i].index].behavior == hse::transition::active)
+			local.ready[i].stable = false;
+			potential.insert(potential.begin() + j, local.ready[i]);
+			i++;
+			j++;
+		}
+		else if ((term_index)potential[j] < (term_index)local.ready[i])
+			j++;
+		else
+		{
+			potential[j].history = local.ready[i].history;
+			i++;
+			j++;
+		}
+	}
+
+	if (last.index >= 0)
+		for (int i = 0; i < (int)potential.size(); i++)
+			potential[i].history.push_back(last);
+
+	local.ready = potential;
+
+	// TODO we also need to check the remote body
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		if (base->transitions[local.ready[i].index].behavior == transition::active)
+			for (int j = 0; j < (int)local.tokens.size(); j++)
+				if (find(local.ready[i].tokens.begin(), local.ready[i].tokens.end(), j) == local.ready[i].tokens.end())
+					for (int k = 0; k < (int)local.tokens[j].prev.size(); k++)
+						if (!are_mutex(local.ready[i].guard, local.tokens[j].prev[k].guard))
+						{
+							local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, local.tokens[j].prev[k].remote_action);
+							local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, local.tokens[j].prev[k].remote_action);
+						}
+
+	// If this transition is vacuous then its enabled even if its incoming guards are not firing
+	// This is global and not encoding for the following reason: if there are two equivalent assignments
+	// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
+	// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
+	// the event rule system.
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		local.ready[i].vacuous = base->transitions[local.ready[i].index].behavior == transition::active &&
+								 vacuous_assign(global, local.ready[i].remote_action, local.ready[i].stable);
+
+	for (int i = 0; i < (int)local.ready.size(); i++)
+		for (int j = i+1; j < (int)local.ready.size(); j++)
+			if (local.ready[i].vacuous && local.ready[j].vacuous && (local.ready[i].index == local.ready[j].index || vector_intersection_size(local.ready[i].tokens, local.ready[j].tokens) > 0))
 			{
-				instability err = instability(local.ready[i], local.ready[i].history);
-				vector<instability>::iterator loc = lower_bound(unstable.begin(), unstable.end(), err);
-				if (loc == unstable.end() || *loc != err)
+				mutex err(local.ready[i], local.ready[j]);
+				vector<mutex>::iterator loc = lower_bound(mutex_errors.begin(), mutex_errors.end(), err);
+				if (loc == mutex_errors.end() || *loc != err)
 				{
-					unstable.insert(loc, err);
-					error("", err.to_string(*base, *variables), __FILE__, __LINE__);
-				}
-			}
-			else if (base->transitions[local.ready[i].index].behavior == hse::transition::passive)
-			{
-				instability err = instability(local.ready[i], local.ready[i].history);
-				vector<instability>::iterator loc = lower_bound(unstable.begin(), unstable.end(), err);
-				if (loc == unstable.end() || *loc != err)
-				{
-					unstable.insert(loc, err);
+					mutex_errors.insert(loc, err);
 					warning("", err.to_string(*base, *variables), __FILE__, __LINE__);
 				}
 			}
 
-			i++;
-		}
-		else if (result[j] < local.ready[i])
-		{
-			if (last.index >= 0 && last.term >= 0)
-				result[j].history.push_back(last);
-			j++;
-		}
-		else if (local.ready[i] == result[j])
-		{
-			result[j].history = local.ready[i].history;
-			i++;
-			j++;
-		}
-	}
+	// Now in the production rule simulator, here is where I would automatically execute all of the
+	// vacuous transitions, but that leads to some really strange (incorrect?) behavior in an HSE.
 
-	local.ready = result;
+	// For example, we might take both paths of a conditional. Then I would have to add in a bunch of extra stuff
+	// to handle conditional merges. Like if two tokens happen to be on the same place, then they are merged
+	// into one. Luckily, since most conditional splits are guarded, this is unlikely to happen.
+
+	// Unless... I would have to check the next assignment, skipping past any guards. since the assumption is the
+	// execution of the assignment stores all of the information about any previous guards. (this is the weakest
+	// assumption I could make about state encoding. If I made no assumption, about what is needed to encode
+	// a state, then I would not be able to simulate instability). The thing is that most HSE will be resistant
+	// to this because they don't use the previous assignment to entirely encode the next state.
+
+	// So for now, I'm going to just mark them vacuous and let whoever is managing the simulator handle them.
+	// That might be to execute all of the vacuous firings first in a random order (this would prevent taking
+	// two branches of a conditional simultaneously). Or it could be to try and handle it correctly.
+
+	// TODO I don't know how I would treat the case when the execution enters a state that is not part of the HSE.
+	// In this case, all of the transitions in the entire HSE are vacuous (possibly unstable) and the tokens
+	// could just zoom around the HSE making no changes to the state information.
+
 	return local.ready.size();
 }
 
-boolean::cube simulator::fire(int index)
+enabled_transition simulator::fire(int index)
 {
-	if (base == NULL || index >= (int)local.ready.size())
-		return boolean::cube();
+	if (base == NULL)
+	{
+		internal("", "NULL pointer to simulator::base", __FILE__, __LINE__);
+		return enabled_transition();
+	}
 
 	enabled_transition t = local.ready[index];
-	//cout << "  T" << t.index << "." << t.term << endl;
+
+	//cout << "Fire " << t.to_string(*base, *variables) << " " << t.vacuous << " " << t.stable << endl;
+
+	// disable any transitions that were dependent on at least one of the same local tokens
+	// This is only necessary to check for instability_errors transitions in the enabled() function
+	for (int i = (int)local.ready.size()-1; i >= 0; i--)
+		if (vector_intersection_size(local.ready[i].tokens, t.tokens) > 0)
+			local.ready.erase(local.ready.begin() + i);
+
+	// Check to see if this transition is unstable
+	if (!t.stable)
+	{
+		instability err = instability(t);
+		vector<instability>::iterator loc = lower_bound(instability_errors.begin(), instability_errors.end(), err);
+		if (loc == instability_errors.end() || *loc != err)
+		{
+			instability_errors.insert(loc, err);
+			error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+		}
+	}
 
 	// Update the local.tokens
 	vector<int> next = base->next(transition::type, t.index);
+	vector<enabled_transition> prev;
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	bool remotable = true;
 	for (int i = 0; i < (int)t.tokens.size(); i++)
 	{
 		remotable = remotable && local.tokens[t.tokens[i]].remotable;
+
+		// Keep the other enabled transition tokens up to date
+		for (int j = 0; j < (int)local.ready.size(); j++)
+			for (int k = 0; k < (int)local.ready[j].tokens.size(); k++)
+				if (local.ready[j].tokens[k] > t.tokens[i])
+					local.ready[j].tokens[k]--;
+
+		prev.insert(prev.end(), local.tokens[t.tokens[i]].prev.begin(), local.tokens[t.tokens[i]].prev.end());
 		local.tokens.erase(local.tokens.begin() + t.tokens[i]);
 	}
 
+	// Check for interfering transitions. Again, we make the assumption that the previous assignments
+	// are needed to encode the state for the next assignment. This means that it remains active until
+	// the next assignment.
+	if (base->transitions[t.index].behavior == transition::active)
+		for (int i = 0; i < (int)local.tokens.size(); i++)
+			for (int j = 0; j < (int)local.tokens[i].prev.size(); j++)
+			{
+				if (!boolean::are_mutex(t.guard, local.tokens[i].prev[j].guard) && boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[local.tokens[i].prev[j].index].local_action[local.tokens[i].prev[j].term]))
+				{
+					interference err(t, local.tokens[i].prev[j]);
+					vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
+					if (loc == interference_errors.end() || *loc != err)
+					{
+						interference_errors.insert(loc, err);
+						error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+					}
+				}
+			}
+
 	// Update the state
+	boolean::cover guard = t.guard;
 	if (base->transitions[t.index].behavior == transition::active)
 	{
-		encoding = local_transition(encoding, base->transitions[t.index].local_action[t.term]);
-		if (t.term < base->transitions[t.index].remote_action.size())
-		{
-			global = local_transition(encoding, base->transitions[t.index].remote_action[t.term]);
-			encoding = remote_transition(encoding, global);
-		}
-		t.guard.clear();
+		if (t.stable)
+			global &= t.guard_action;
+
+		global = local_assign(global, t.remote_action, t.stable);
+		encoding = remote_assign(local_assign(encoding & t.guard_action, t.local_action, t.stable), global, true);
+
+		guard = base->transitions[t.index].local_action;
+		prev.clear();
+		prev.push_back(t);
 	}
 	else if (base->transitions[t.index].behavior == transition::passive)
-		encoding = remote_transition(encoding & base->transitions[t.index].local_action[t.term], global);
+	{
+		if (t.stable)
+			global &= t.guard_action;
 
-	t.guard.push_back(t.index);
-
-	sort(t.guard.begin(), t.guard.end());
-	t.guard.resize(unique(t.guard.begin(), t.guard.end()) - t.guard.begin());
+		encoding = remote_assign(encoding & t.guard_action, global, true);
+	}
 
 	for (int i = 0; i < (int)next.size(); i++)
-		local.tokens.push_back(local_token(next[i], t.guard, remotable));
-
-	// disable any transitions that were dependent on at least one of the same local.tokens
-	// This is only necessary to check for unstable transitions in the enabled() function
-	for (int i = (int)local.ready.size()-1; i >= 0; i--)
-		if (vector_intersection_size(local.ready[i].tokens, t.tokens) > 0)
-			local.ready.erase(local.ready.begin() + i);
-
-	for (int i = 0; i < (int)local.ready.size(); i++)
-		local.ready[i].history.push_back(t);
+		local.tokens.push_back(local_token(next[i], guard, prev, remotable));
 
 	last = t;
-	return base->transitions[t.index].local_action[t.term];
+	return t;
 }
 
 int simulator::possible(bool sorted)
 {
-	if (base == NULL || remote.head.size() == 0)
+	if (base == NULL)
+	{
+		internal("", "NULL pointer to simulator::base", __FILE__, __LINE__);
+		return 0;
+	}
+
+	/*cout << "local:{";
+	for (int i = 0; i < (int)local.tokens.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << local.tokens[i].index;
+	}
+	cout << "} head:{";
+	for (int i = 0; i < (int)remote.head.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.head[i].index;
+	}
+	cout << "} tail:{";
+	for (int i = 0; i < (int)remote.tail.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.tail[i];
+	}
+	cout << "} body:{";
+	for (int i = 0; i < (int)remote.body.size(); i++)
+	{
+		if (i != 0)
+			cout << " ";
+		cout << remote.body[i].to_string(*base, *variables);
+	}
+	cout << "} " << export_assignment(encoding, *variables).to_string() << "\t" << export_assignment(global, *variables).to_string() << endl;*/
+
+	if (remote.head.size() == 0)
 		return 0;
 
 	if (!sorted)
 		sort(remote.head.begin(), remote.head.end());
 
-	vector<enabled_environment> potential;
+	// Get the list of transitions have have a sufficient number of remote at the input places
+	vector<enabled_environment> loaded;
 	vector<int> disabled;
 
-	// Get the list of transitions have have a sufficient number of remote at the input places
-	potential.reserve(remote.head.size()*2);
+	loaded.reserve(remote.head.size()*2);
 	disabled.reserve(base->transitions.size());
 	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
 	{
@@ -301,9 +426,9 @@ int simulator::possible(bool sorted)
 
 		if (d_invalid)
 		{
-			// Find the index of this transition (if any) in the potential pool
-			vector<enabled_environment>::iterator e = lower_bound(potential.begin(), potential.end(), term_index(a->to.index, 0));
-			bool e_invalid = (e == potential.end() || e->index != a->to.index);
+			// Find the index of this transition (if any) in the loaded pool
+			vector<enabled_environment>::iterator e = lower_bound(loaded.begin(), loaded.end(), term_index(a->to.index, 0));
+			bool e_invalid = (e == loaded.end() || e->index != a->to.index);
 
 			// Check to see if there is any token at the input place of this arc and make sure that
 			// this token has not already been consumed by this particular transition
@@ -316,7 +441,7 @@ int simulator::possible(bool sorted)
 					// We are safe to add this to the list of possibly enabled transitions
 					found = true;
 					if (e_invalid)
-						e = potential.insert(e, enabled_environment(a->to.index));
+						e = loaded.insert(e, enabled_environment(a->to.index));
 
 					e->tokens.push_back(j);
 				}
@@ -328,70 +453,97 @@ int simulator::possible(bool sorted)
 			{
 				disabled.insert(d, a->to.index);
 				if (!e_invalid)
-					potential.erase(e);
+					loaded.erase(e);
 			}
 		}
 	}
 
-	// Now we need to check all of the terms against the state and the guard
-	vector<enabled_environment> result;
-	result.reserve(potential.size()*2);
-	for (int i = 0; i < (int)potential.size(); i++)
+	// Now we need to check the guards of all of the loaded transitions against the state
+	vector<enabled_environment> potential;
+	potential.reserve(loaded.size()*2);
+	for (int i = 0; i < (int)loaded.size(); i++)
 	{
-		for (int j = 0; j < base->transitions[potential[i].index].local_action.size(); j++)
-		{
-			if (base->transitions[potential[i].index].behavior == transition::active ||
-				!are_mutex(base->transitions[potential[i].index].local_action[j], encoding))
-			{
-				result.push_back(potential[i]);
-				result.back().term = j;
+		// If this transition is an assignment, then we need to check to make sure all of the
+		// previous guards pass before we can execute this assignment.
+		for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
+			loaded[i].guard &= remote.head[loaded[i].tokens[j]].guard;
 
-				if (find(remote.body.begin(), remote.body.end(), result.back()) != remote.body.end())
-				{
-					term_index err = remote.body[0];
-					vector<term_index>::iterator loc = lower_bound(unacknowledged.begin(), unacknowledged.end(), err);
-					if (loc == unacknowledged.end() || *loc != err)
-					{
-						unacknowledged.insert(loc, err);
-						error("", "unacknowledged transition " + remote.body[0].to_string(*base, *variables), __FILE__, __LINE__);
-					}
-				}
-			}
+		if (base->transitions[loaded[i].index].behavior == transition::passive)
+			loaded[i].guard &= base->transitions[loaded[i].index].local_action;
+
+		// Now we check to see if the current state passes the guard
+		int pass = boolean::passes_guard(encoding, global, loaded[i].guard);
+
+		// If it does, then this transition may fire.
+		if (pass >= 0)
+		{
+			if (base->transitions[loaded[i].index].behavior == transition::active)
+				for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
+					potential.push_back(loaded[i]);
+			else
+				potential.push_back(loaded[i]);
 		}
 	}
 
-	remote.ready = result;
+	remote.ready = potential;
 	return remote.ready.size();
 }
 
-void simulator::begin(int index)
+enabled_environment simulator::begin(int index)
 {
-	if (base == NULL || index >= (int)remote.ready.size())
-		return;
+	if (base == NULL)
+	{
+		internal("", "NULL pointer to simulator::base", __FILE__, __LINE__);
+		return 0;
+	}
 
 	enabled_environment t = remote.ready[index];
 
-	// Update the tokens
+	//cout << "Begin " << t.to_string(*base, *variables) << endl;
+
+	if (find(remote.body.begin(), remote.body.end(), t) != remote.body.end())
+	{
+		term_index err = remote.body[0];
+		vector<term_index>::iterator loc = lower_bound(unacknowledged.begin(), unacknowledged.end(), err);
+		if (loc == unacknowledged.end() || *loc != err)
+		{
+			unacknowledged.insert(loc, err);
+			error("", "unacknowledged transition " + remote.body[0].to_string(*base, *variables), __FILE__, __LINE__);
+		}
+	}
+
+	// disable any transitions that were dependent on at least one of the same local tokens
+	// This is only necessary to check for instability_errors transitions in the enabled() function
+	for (int i = (int)remote.ready.size()-1; i >= 0; i--)
+		if (vector_intersection_size(remote.ready[i].tokens, t.tokens) > 0)
+			remote.ready.erase(remote.ready.begin() + i);
+
+
+	// Update the local.tokens
 	vector<int> next = base->next(transition::type, t.index);
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	for (int i = 0; i < (int)t.tokens.size(); i++)
+	{
+		// Keep the other enabled transition tokens up to date
+		for (int j = 0; j < (int)remote.ready.size(); j++)
+			for (int k = 0; k < (int)remote.ready[j].tokens.size(); k++)
+				if (remote.ready[j].tokens[k] > t.tokens[i])
+					remote.ready[j].tokens[k]--;
+
 		remote.head.erase(remote.head.begin() + t.tokens[i]);
+	}
+
+	// Update the state
+	boolean::cover guard = t.guard;
+	if (base->transitions[t.index].behavior == transition::active)
+		guard = base->transitions[t.index].local_action;
 
 	for (int i = 0; i < (int)next.size(); i++)
-		remote.head.push_back(remote_token(next[i]));
+		remote.head.push_back(remote_token(next[i], guard));
 
 	remote.body.push_back(t);
 
-	/*cout << "+ T" << t.index << "." << t.term << " {";
-	for (int i = 0; i < (int)remote.head.size(); i++)
-		cout << "P" << remote.head[i].index << " ";
-	cout << "} -> {";
-	for (int i = 0; i < (int)remote.body.size(); i++)
-		cout << "T" << remote.body[i].index << "." << remote.body[i].term << " ";
-	cout << "} -> {";
-	for (int i = 0; i < (int)remote.tail.size(); i++)
-		cout << "P" << remote.tail[i].index << " ";
-	cout << "}" << endl;*/
+	return t;
 }
 
 void simulator::end()
@@ -401,79 +553,65 @@ void simulator::end()
 
 	sort(remote.tail.begin(), remote.tail.end());
 
-	vector<int> history;
-	// We need to be ware of the case where the head loops back around and meets up with the tail.
+	// We need to beware of the case where the head loops back around and meets up with the tail.
 	// If this were to happen, it would look like there might be a choice in the rollback of the tail,
 	// which should never happen.
-	deque<term_index>::iterator iter = remote.body.begin();
-	vector<int> p;
+	deque<enabled_environment>::iterator iter = remote.body.begin();
 	if (iter != remote.body.end())
 	{
-		p = base->prev(hse::transition::type, iter->index);
+		vector<int> p = base->prev(hse::transition::type, iter->index);
 		sort(p.begin(), p.end());
-	}
 
-	// We know that we have reached one of these cases if we reach a transition in the body which
-	// would create such a choice with another transition earlier in the body that has not yet
-	// fired. At which point, we stop looking.
-	while (iter != remote.body.end() && vector_intersection_size(history, p) == 0)
-	{
-		vector<int> tokens;
-		bool enabled = true;
-		for (int j = 0, k = 0; k < (int)p.size() && enabled;)
+		// We know that we have reached one of these cases if we reach a transition in the body which
+		// would create such a choice with another transition earlier in the body that has not yet
+		// fired. At which point, we stop looking.
+		vector<int> history;
+		while (iter != remote.body.end() && vector_intersection_size(history, p) == 0)
 		{
-			if (j >= (int)remote.tail.size() || remote.tail[j].index > p[k])
-				enabled = false;
-			else if (remote.tail[j].index < p[k])
-				j++;
-			else if (remote.tail[j].index == p[k])
+			vector<int> tokens;
+			bool enabled = true;
+			for (int j = 0, k = 0; k < (int)p.size() && enabled;)
 			{
-				tokens.push_back(j);
-				j++;
-				k++;
+				if (j >= (int)remote.tail.size() || remote.tail[j] > p[k])
+					enabled = false;
+				else if (remote.tail[j] < p[k])
+					j++;
+				else
+				{
+					tokens.push_back(j);
+					j++;
+					k++;
+				}
 			}
-		}
 
-		//cout << "Checking T" << iter->index << "." << iter->term << " " << encoding << " " << base->transitions[iter->index].action[iter->term] << " " << local_transition(encoding, base->transitions[iter->index].action[iter->term]) << endl;
-		// The tail moves up only if it must.
-		// TODO this is wrong... I need to somehow collapse the state
-		if (enabled &&
-			((base->transitions[iter->index].behavior == transition::active && local_transition(global, base->transitions[iter->index].local_action[iter->term]) == global) ||
-			 (base->transitions[iter->index].behavior == transition::passive && (global & base->transitions[iter->index].local_action[iter->term]) == global)))
-		{
-			/*cout << "- T" << iter->index << "." << iter->term << " {";
-			for (int i = 0; i < (int)remote.head.size(); i++)
-				cout << "P" << remote.head[i].index << " ";
-			cout << "} -> {";
-			for (int i = 0; i < (int)remote.body.size(); i++)
-				if (i != iter - remote.body.begin())
-					cout << "T" << remote.body[i].index << "." << remote.body[i].term << " ";
-			cout << "} -> {";
-			for (int i = 0; i < (int)remote.tail.size(); i++)
-				cout << "P" << remote.tail[i].index << " ";
-			cout << "}" << endl;*/
+			// The tail moves up only if it must.
+			if (enabled && (base->transitions[iter->index].behavior == transition::passive ||
+				vacuous_assign(global, base->transitions[iter->index].local_action[iter->term], true) ||
+				vacuous_assign(global, base->transitions[iter->index].local_action[iter->term], false)))
+			{
+				for (int j = (int)tokens.size()-1; j >= 0; j--)
+					remote.tail.erase(remote.tail.begin() + tokens[j]);
 
-			for (int j = (int)tokens.size()-1; j >= 0; j--)
-				remote.tail.erase(remote.tail.begin() + tokens[j]);
+				vector<int> n = base->next(hse::transition::type, iter->index);
+				for (int j = 0; j < (int)n.size(); j++)
+					remote.tail.push_back(n[j]);
+				sort(remote.tail.begin(), remote.tail.end());
 
-			vector<int> n = base->next(hse::transition::type, iter->index);
-			for (int j = 0; j < (int)n.size(); j++)
-				remote.tail.push_back(remote_token(n[j]));
-			sort(remote.tail.begin(), remote.tail.end());
+				//cout << "End " << iter->to_string(*base, *variables) << endl;
+				iter = remote.body.erase(iter);
+			}
+			else
+			{
+				history.insert(history.end(), p.begin(), p.end());
+				sort(history.begin(), history.end());
+				iter++;
+			}
 
-			iter = remote.body.erase(iter);
-		}
-		else
-		{
-			history.insert(history.end(), p.begin(), p.end());
-			sort(history.begin(), history.end());
-			iter++;
-		}
-
-		if (iter != remote.body.end())
-		{
-			p = base->prev(hse::transition::type, iter->index);
-			sort(p.begin(), p.end());
+			if (iter != remote.body.end())
+			{
+				p = base->prev(hse::transition::type, iter->index);
+				sort(p.begin(), p.end());
+			}
 		}
 	}
 }
@@ -483,42 +621,66 @@ void simulator::environment()
 	if (base == NULL)
 		return;
 
-	boolean::cube local_action = 1;
-	boolean::cube remote_action = 1;
+	boolean::cover encoding_cubes(encoding);
+	boolean::cover global_cubes(global);
 	for (int i = 0; i < (int)remote.body.size(); i++)
+	{
 		if (base->transitions[remote.body[i].index].behavior == transition::active)
 		{
-			local_action &= base->transitions[remote.body[i].index].local_action[remote.body[i].term];
-			remote_action &= base->transitions[remote.body[i].index].remote_action[remote.body[i].term];
+			boolean::cube guard;
+			int pass = passes_guard(encoding, global, remote.body[i].guard, &guard);
+
+			if (pass >= 0)
+			{
+				global_cubes.cubes.push_back(local_assign(global, base->transitions[remote.body[i].index].remote_action[remote.body[i].term], (bool)pass));
+				encoding_cubes.cubes.push_back(remote_assign(local_assign(encoding & guard, base->transitions[remote.body[i].index].local_action[remote.body[i].term], (bool)pass), base->transitions[remote.body[i].index].remote_action[remote.body[i].term], (bool)pass));
+			}
 		}
-	//cout << "Applying Environment " << encoding << " -> " << action << " = " << remote_transition(encoding, action) << endl;
-	encoding = local_transition(encoding, local_action).xoutnulls();
-	global = local_transition(global, remote_action);
-	encoding = remote_transition(encoding, global);
+	}
+
+	encoding = encoding_cubes.supercube();
+	global = global_cubes.supercube();
 }
 
 void simulator::merge_errors(const simulator &sim)
 {
-	vector<instability> old_unstable;
-	swap(unstable, old_unstable);
-	unstable.resize(old_unstable.size() + sim.unstable.size());
-	merge(sim.unstable.begin(), sim.unstable.end(), old_unstable.begin(), old_unstable.end(), unstable.begin());
-	unstable.resize(unique(unstable.begin(), unstable.end()) - unstable.begin());
+	if (instability_errors.size() > 0)
+	{
+		vector<instability> old_instability_errors;
+		swap(instability_errors, old_instability_errors);
+		instability_errors.resize(old_instability_errors.size() + sim.instability_errors.size());
+		merge(sim.instability_errors.begin(), sim.instability_errors.end(), old_instability_errors.begin(), old_instability_errors.end(), instability_errors.begin());
+		instability_errors.resize(unique(instability_errors.begin(), instability_errors.end()) - instability_errors.begin());
+	}
+	else
+		instability_errors = sim.instability_errors;
 
-	vector<interference> old_interfering;
-	swap(interfering, old_interfering);
-	interfering.resize(sim.interfering.size() + old_interfering.size());
-	merge(sim.interfering.begin(), sim.interfering.end(), old_interfering.begin(), old_interfering.end(), interfering.begin());
-	interfering.resize(unique(interfering.begin(), interfering.end()) - interfering.begin());
+	if (interference_errors.size() > 0)
+	{
+		vector<interference> old_interference_errors;
+		swap(interference_errors, old_interference_errors);
+		interference_errors.resize(sim.interference_errors.size() + old_interference_errors.size());
+		merge(sim.interference_errors.begin(), sim.interference_errors.end(), old_interference_errors.begin(), old_interference_errors.end(), interference_errors.begin());
+		interference_errors.resize(unique(interference_errors.begin(), interference_errors.end()) - interference_errors.begin());
+	}
+	else
+		interference_errors = sim.interference_errors;
+
+	if (mutex_errors.size() > 0)
+	{
+		vector<mutex> old_mutex_errors;
+		swap(mutex_errors, old_mutex_errors);
+		mutex_errors.resize(sim.mutex_errors.size() + old_mutex_errors.size());
+		merge(sim.mutex_errors.begin(), sim.mutex_errors.end(), old_mutex_errors.begin(), old_mutex_errors.end(), mutex_errors.begin());
+		mutex_errors.resize(unique(mutex_errors.begin(), mutex_errors.end()) - mutex_errors.begin());
+	}
+	else
+		mutex_errors = sim.mutex_errors;
 }
 
 state simulator::get_state()
 {
-	vector<term_index> body;
-	body.insert(body.end(), remote.body.begin(), remote.body.end());
-	sort(body.begin(), body.end());
-	body.resize(unique(body.begin(), body.end()) - body.begin());
-	return state(local.tokens, body, encoding);
+	return state(local.tokens, remote.body, encoding);
 }
 
 vector<pair<int, int> > simulator::get_vacuous_choices()
