@@ -5,13 +5,16 @@
  *      Author: nbingham
  */
 
-#include "graph.h"
+#include <common/standard.h>
+#include "state.h"
 
 #ifndef hse_encoder_h
 #define hse_encoder_h
 
 namespace hse
 {
+
+struct graph;
 
 struct conflict
 {

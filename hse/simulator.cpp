@@ -6,13 +6,139 @@
  */
 
 #include "simulator.h"
+#include "graph.h"
 #include <common/text.h>
 #include <common/message.h>
-#include <boolean/variable.h>
-#include <interpret_boolean/export.h>
+#include <ucs/variable.h>
+
 
 namespace hse
 {
+
+instability::instability()
+{
+}
+
+instability::instability(const enabled_transition &cause) : enabled_transition(cause)
+{
+}
+
+instability::~instability()
+{
+
+}
+
+string instability::to_string(const hse::graph &g, const ucs::variable_set &v)
+{
+	string result;
+	if (g.transitions[index].behavior == hse::transition::active)
+		result = "unstable assignment " + enabled_transition::to_string(g, v);
+	else
+		result = "unstable guard " + enabled_transition::to_string(g, v);
+
+	result += " cause: {";
+
+	for (int j = 0; j < (int)history.size(); j++)
+	{
+		if (j != 0)
+			result += "; ";
+
+		result += history[j].to_string(g, v);
+	}
+	result += "}";
+	return result;
+}
+
+interference::interference()
+{
+
+}
+
+interference::interference(const enabled_transition &first, const enabled_transition &second)
+{
+	if (first < second)
+	{
+		this->first = first;
+		this->second = second;
+	}
+	else
+	{
+		this->first = second;
+		this->second = first;
+	}
+}
+
+interference::~interference()
+{
+
+}
+
+string interference::to_string(const hse::graph &g, const ucs::variable_set &v)
+{
+	if (!first.stable || !second.stable)
+		return "weakly interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	else
+		return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+}
+
+mutex::mutex()
+{
+
+}
+
+mutex::mutex(const enabled_transition &first, const enabled_transition &second)
+{
+	if (first < second)
+	{
+		this->first = first;
+		this->second = second;
+	}
+	else
+	{
+		this->first = second;
+		this->second = first;
+	}
+}
+
+mutex::~mutex()
+{
+
+}
+
+string mutex::to_string(const hse::graph &g, const ucs::variable_set &v)
+{
+	return "vacuous firings break mutual exclusion for assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+}
+
+deadlock::deadlock()
+{
+
+}
+
+deadlock::deadlock(const state &s) : state(s)
+{
+
+}
+
+deadlock::deadlock(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings) : state(tokens, environment, encodings)
+{
+
+}
+
+deadlock::deadlock(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings) : state(tokens, environment, encodings)
+{
+
+}
+
+deadlock::~deadlock()
+{
+
+}
+
+string deadlock::to_string(const ucs::variable_set &v)
+{
+	return "deadlock detected at state " + state::to_string(v);
+}
 
 simulator::simulator()
 {
@@ -20,7 +146,7 @@ simulator::simulator()
 	variables = NULL;
 }
 
-simulator::simulator(const graph *base, const boolean::variable_set *variables, state initial, int index, bool environment)
+simulator::simulator(const graph *base, const ucs::variable_set *variables, state initial, int index, bool environment)
 {
 	//cout << "Reset" << endl;
 	this->base = base;
@@ -96,54 +222,8 @@ int simulator::enabled(bool sorted)
 	if (local.tokens.size() == 0)
 		return 0;
 
-	if (!sorted)
-		sort(local.tokens.begin(), local.tokens.end());
-
 	// Get the list of transitions have have a sufficient number of local at the input places
-	vector<enabled_transition> loaded;
-	vector<int> disabled;
-
-	loaded.reserve(local.tokens.size()*2);
-	disabled.reserve(base->transitions.size());
-	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
-	{
-		// Check to see if we haven't already determined that this transition can't be enabled
-		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
-		bool d_invalid = (d == disabled.end() || *d != a->to.index);
-
-		if (d_invalid)
-		{
-			// Find the index of this transition (if any) in the loaded pool
-			vector<enabled_transition>::iterator e = lower_bound(loaded.begin(), loaded.end(), term_index(a->to.index, 0));
-			bool e_invalid = (e == loaded.end() || e->index != a->to.index);
-
-			// Check to see if there is any token at the input place of this arc and make sure that
-			// this token has not already been consumed by this particular transition
-			// Also since we only need one token per arc, we can stop once we've found a token
-			bool found = false;
-			for (int j = 0; j < (int)local.tokens.size() && !found; j++)
-				if (a->from.index == local.tokens[j].index &&
-					(e_invalid || find(e->tokens.begin(), e->tokens.end(), j) == e->tokens.end()))
-				{
-					// We are safe to add this to the list of possibly enabled transitions
-					found = true;
-					if (e_invalid)
-						e = loaded.insert(e, enabled_transition(a->to.index));
-
-					e->tokens.push_back(j);
-				}
-
-			// If we didn't find a token at the input place, then we know that this transition can't
-			// be enabled. So lets remove this from the list of possibly enabled transitions and
-			// remember as much in the disabled list.
-			if (!found)
-			{
-				disabled.insert(d, a->to.index);
-				if (!e_invalid)
-					loaded.erase(e);
-			}
-		}
-	}
+	vector<enabled_transition> loaded = base->enabled<local_token, enabled_transition>(local.tokens, sorted);
 
 	// Now we need to check the guards of all of the loaded transitions against the state
 	vector<enabled_transition> potential;
@@ -161,20 +241,34 @@ int simulator::enabled(bool sorted)
 		// Now we check to see if the current state passes the guard
 		int pass = boolean::passes_guard(encoding, global, loaded[i].guard, &loaded[i].guard_action);
 
-		// If it does, then this transition may fire.
-		if (pass >= 0)
-		{
-			loaded[i].stable = (bool)pass;
+		if (base->transitions[loaded[i].index].behavior == transition::active)
+			for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
+			{
+				loaded[i].local_action = base->transitions[loaded[i].index].local_action[loaded[i].term];
+				loaded[i].remote_action = base->transitions[loaded[i].index].remote_action[loaded[i].term];
 
-			if (base->transitions[loaded[i].index].behavior == transition::active)
-				for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
+				// If this transition is vacuous then its enabled even if its incoming guards are not firing
+				// This is global and not local for the following reason: if there are two equivalent assignments
+				// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
+				// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
+				// the event rule system.
+				loaded[i].vacuous = base->transitions[loaded[i].index].behavior == transition::active &&
+									vacuous_assign(global, loaded[i].remote_action, loaded[i].stable);
+
+				if (pass >= 0 || loaded[i].vacuous)
 				{
-					loaded[i].local_action = base->transitions[loaded[i].index].local_action[loaded[i].term];
-					loaded[i].remote_action = base->transitions[loaded[i].index].remote_action[loaded[i].term];
+					// If it does, then this transition may fire.
+					loaded[i].stable = true;
+					if (!loaded[i].vacuous)
+						loaded[i].stable = (bool)pass;
+
 					potential.push_back(loaded[i]);
 				}
-			else
-				potential.push_back(loaded[i]);
+			}
+		else if (pass >= 0)
+		{
+			loaded[i].stable = (bool)pass;
+			potential.push_back(loaded[i]);
 		}
 	}
 
@@ -216,15 +310,6 @@ int simulator::enabled(bool sorted)
 							local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, local.tokens[j].prev[k].remote_action);
 							local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, local.tokens[j].prev[k].remote_action);
 						}
-
-	// If this transition is vacuous then its enabled even if its incoming guards are not firing
-	// This is global and not encoding for the following reason: if there are two equivalent assignments
-	// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
-	// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
-	// the event rule system.
-	for (int i = 0; i < (int)local.ready.size(); i++)
-		local.ready[i].vacuous = base->transitions[local.ready[i].index].behavior == transition::active &&
-								 vacuous_assign(global, local.ready[i].remote_action, local.ready[i].stable);
 
 	for (int i = 0; i < (int)local.ready.size(); i++)
 		for (int j = i+1; j < (int)local.ready.size(); j++)
@@ -294,7 +379,7 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Update the local.tokens
-	vector<int> next = base->next(transition::type, t.index);
+	vector<int> next = base->next(petri::transition::type, t.index);
 	vector<enabled_transition> prev;
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	bool remotable = true;
@@ -401,54 +486,8 @@ int simulator::possible(bool sorted)
 	if (remote.head.size() == 0)
 		return 0;
 
-	if (!sorted)
-		sort(remote.head.begin(), remote.head.end());
-
 	// Get the list of transitions have have a sufficient number of remote at the input places
-	vector<enabled_environment> loaded;
-	vector<int> disabled;
-
-	loaded.reserve(remote.head.size()*2);
-	disabled.reserve(base->transitions.size());
-	for (vector<arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
-	{
-		// Check to see if we haven't already determined that this transition can't be enabled
-		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
-		bool d_invalid = (d == disabled.end() || *d != a->to.index);
-
-		if (d_invalid)
-		{
-			// Find the index of this transition (if any) in the loaded pool
-			vector<enabled_environment>::iterator e = lower_bound(loaded.begin(), loaded.end(), term_index(a->to.index, 0));
-			bool e_invalid = (e == loaded.end() || e->index != a->to.index);
-
-			// Check to see if there is any token at the input place of this arc and make sure that
-			// this token has not already been consumed by this particular transition
-			// Also since we only need one token per arc, we can stop once we've found a token
-			bool found = false;
-			for (int j = 0; j < (int)remote.head.size() && !found; j++)
-				if (a->from.index == remote.head[j].index &&
-					(e_invalid || find(e->tokens.begin(), e->tokens.end(), j) == e->tokens.end()))
-				{
-					// We are safe to add this to the list of possibly enabled transitions
-					found = true;
-					if (e_invalid)
-						e = loaded.insert(e, enabled_environment(a->to.index));
-
-					e->tokens.push_back(j);
-				}
-
-			// If we didn't find a token at the input place, then we know that this transition can't
-			// be enabled. So lets remove this from the list of possibly enabled transitions and
-			// remember as much in the disabled list.
-			if (!found)
-			{
-				disabled.insert(d, a->to.index);
-				if (!e_invalid)
-					loaded.erase(e);
-			}
-		}
-	}
+	vector<enabled_environment> loaded = base->enabled<remote_token, enabled_environment>(remote.head, sorted);
 
 	// Now we need to check the guards of all of the loaded transitions against the state
 	vector<enabled_environment> potential;
@@ -512,7 +551,7 @@ enabled_environment simulator::begin(int index)
 
 
 	// Update the local.tokens
-	vector<int> next = base->next(transition::type, t.index);
+	vector<int> next = base->next(petri::transition::type, t.index);
 	sort(t.tokens.rbegin(), t.tokens.rend());
 	for (int i = 0; i < (int)t.tokens.size(); i++)
 	{
@@ -551,7 +590,7 @@ void simulator::end()
 	deque<enabled_environment>::iterator iter = remote.body.begin();
 	if (iter != remote.body.end())
 	{
-		vector<int> p = base->prev(hse::transition::type, iter->index);
+		vector<int> p = base->prev(petri::transition::type, iter->index);
 		sort(p.begin(), p.end());
 
 		// We know that we have reached one of these cases if we reach a transition in the body which
@@ -584,7 +623,7 @@ void simulator::end()
 				for (int j = (int)tokens.size()-1; j >= 0; j--)
 					remote.tail.erase(remote.tail.begin() + tokens[j]);
 
-				vector<int> n = base->next(hse::transition::type, iter->index);
+				vector<int> n = base->next(petri::transition::type, iter->index);
 				for (int j = 0; j < (int)n.size(); j++)
 					remote.tail.push_back(n[j]);
 				sort(remote.tail.begin(), remote.tail.end());
@@ -601,7 +640,7 @@ void simulator::end()
 
 			if (iter != remote.body.end())
 			{
-				p = base->prev(hse::transition::type, iter->index);
+				p = base->prev(petri::transition::type, iter->index);
 				sort(p.begin(), p.end());
 			}
 		}

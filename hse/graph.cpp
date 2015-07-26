@@ -13,6 +13,118 @@
 
 namespace hse
 {
+
+half_synchronization::half_synchronization()
+{
+	active.index = 0;
+	active.cube = 0;
+	passive.index = 0;
+	passive.cube = 0;
+}
+
+half_synchronization::~half_synchronization()
+{
+
+}
+
+synchronization_region::synchronization_region()
+{
+
+}
+
+synchronization_region::~synchronization_region()
+{
+
+}
+
+place::place()
+{
+
+}
+
+place::place(boolean::cover predicate)
+{
+	this->predicate = predicate;
+	this->effective = predicate;
+}
+
+place::~place()
+{
+
+}
+
+place place::merge(int composition, const place &p0, const place &p1)
+{
+	place result;
+	if (composition == petri::parallel || composition == petri::sequence)
+	{
+		result.effective = p0.effective & p1.effective;
+		result.predicate = p0.predicate & p1.predicate;
+	}
+	else if (composition == petri::choice)
+	{
+		result.effective = p0.effective | p1.effective;
+		result.predicate = p0.predicate | p1.predicate;
+	}
+	return result;
+}
+
+transition::transition()
+{
+	behavior = active;
+	local_action = 1;
+	remote_action = 1;
+}
+
+transition::transition(int behavior, boolean::cover action)
+{
+	this->behavior = behavior;
+	this->local_action = action;
+}
+
+transition::~transition()
+{
+
+}
+
+transition transition::subdivide(int term)
+{
+	return transition(behavior, boolean::cover(local_action.cubes[term]));
+}
+
+transition transition::merge(int composition, const transition &t0, const transition &t1)
+{
+	transition result;
+	if (composition == petri::parallel || composition == petri::sequence)
+	{
+		result.local_action = t0.local_action & t1.local_action;
+		result.remote_action = t0.remote_action & t1.remote_action;
+		result.behavior = t0.behavior;
+	}
+	else if (composition == petri::choice)
+	{
+		result.local_action = t0.local_action | t1.local_action;
+		result.remote_action = t0.remote_action | t1.remote_action;
+		result.behavior = t0.behavior;
+	}
+	return result;
+}
+
+bool transition::mergeable(int composition, const transition &t0, const transition &t1)
+{
+	return t0.behavior == t1.behavior;
+}
+
+bool transition::is_infeasible()
+{
+	return local_action.is_null();
+}
+
+bool transition::is_vacuous()
+{
+	return local_action.is_tautology();
+}
+
 graph::graph()
 {
 }
@@ -22,1418 +134,15 @@ graph::~graph()
 
 }
 
-iterator graph::begin(int type)
-{
-	return iterator(type, 0);
-}
-
-iterator graph::end(int type)
-{
-	return iterator(type, type == place::type ? (int)places.size() : (int)transitions.size());
-}
-
-iterator graph::begin_arc(int type)
-{
-	return iterator(type, 0);
-}
-
-iterator graph::end_arc(int type)
-{
-	return iterator(type, (int)arcs[type].size());
-}
-
-iterator graph::create(place p)
-{
-	places.push_back(p);
-	return iterator(place::type, (int)places.size()-1);
-}
-
-iterator graph::create(transition t)
-{
-	transitions.push_back(t);
-	return iterator(transition::type, (int)transitions.size()-1);
-}
-
-iterator graph::create(int n)
-{
-	if (n == place::type)
-		return create(place());
-	else if (n == transition::type)
-		return create(transition());
-	else
-		return iterator();
-}
-
-vector<iterator> graph::create(vector<place> p)
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)p.size(); i++)
-	{
-		places.push_back(p[i]);
-		result.push_back(iterator(place::type, (int)places.size()-1));
-	}
-	return result;
-}
-
-vector<iterator> graph::create(vector<transition> t)
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)t.size(); i++)
-	{
-		transitions.push_back(t[i]);
-		result.push_back(iterator(transition::type, (int)transitions.size()-1));
-	}
-	return result;
-}
-
-vector<iterator> graph::create(place p, int num)
-{
-	vector<iterator> result;
-	for (int i = 0; i < num; i++)
-	{
-		places.push_back(p);
-		result.push_back(iterator(place::type, (int)places.size()-1));
-	}
-	return result;
-}
-
-vector<iterator> graph::create(transition t, int num)
-{
-	vector<iterator> result;
-	for (int i = 0; i < num; i++)
-	{
-		transitions.push_back(t);
-		result.push_back(iterator(transition::type, (int)transitions.size()-1));
-	}
-	return result;
-}
-
-vector<iterator> graph::create(int n, int num)
-{
-	if (n == place::type)
-		return create(place(), num);
-	else if (n == transition::type)
-		return create(transition(), num);
-	else
-		return vector<iterator>();
-}
-
-iterator graph::copy(iterator i)
-{
-	if (i.type == place::type)
-	{
-		places.push_back(places[i.index]);
-		return iterator(i.type, places.size()-1);
-	}
-	else
-	{
-		transitions.push_back(transitions[i.index]);
-		return iterator(i.type, transitions.size()-1);
-	}
-}
-
-vector<iterator> graph::copy(iterator i, int num)
-{
-	vector<iterator> result;
-	if (i.type == place::type)
-		for (int j = 0; j < num; j++)
-		{
-			places.push_back(places[i.index]);
-			result.push_back(iterator(i.type, places.size()-1));
-		}
-	else
-		for (int j = 0; j < num; j++)
-		{
-			transitions.push_back(transitions[i.index]);
-			result.push_back(iterator(i.type, transitions.size()-1));
-		}
-	return result;
-}
-
-vector<iterator> graph::copy(vector<iterator> i, int num)
-{
-	vector<iterator> result;
-	for (int j = 0; j < (int)i.size(); j++)
-	{
-		vector<iterator> temp = copy(i[j], num);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-iterator graph::copy_combine(int relation, iterator i0, iterator i1)
-{
-	if (i0.type == place::type && i1.type == place::type)
-		return create(hse::merge(relation, places[i0.index], places[i1.index]));
-	else if (i0.type == transition::type && i1.type == transition::type)
-	{
-		if (transitions[i0.index].behavior == transitions[i1.index].behavior)
-			return create(hse::merge(relation, transitions[i0.index], transitions[i1.index]));
-		else
-		{
-			internal("hse::graph::copy_combine", "transition behaviors do not match", __FILE__, __LINE__);
-			return iterator();
-		}
-	}
-	else
-	{
-		internal("hse::graph::copy_combine", "iterator types do not match", __FILE__, __LINE__);
-		return iterator();
-	}
-}
-
-iterator graph::combine(int relation, iterator i0, iterator i1)
-{
-	if (i0.type == place::type && i1.type == place::type)
-	{
-		places[i0.index] = hse::merge(relation, places[i0.index], places[i1.index]);
-		return i0;
-	}
-	else if (i0.type == transition::type && i1.type == transition::type)
-	{
-		if (transitions[i0.index].behavior == transitions[i1.index].behavior)
-		{
-			transitions[i0.index] = hse::merge(relation, transitions[i0.index], transitions[i1.index]);
-			return i0;
-		}
-		else
-		{
-			internal("hse::graph::copy_combine", "transition behaviors do not match", __FILE__, __LINE__);
-			return iterator();
-		}
-	}
-	else
-	{
-		internal("hse::graph::copy_combine", "iterator types do not match", __FILE__, __LINE__);
-		return iterator();
-	}
-}
-
-iterator graph::connect(iterator from, iterator to)
-{
-	if (from.type == place::type && to.type == place::type)
-	{
-		iterator mid = create(transition());
-		arcs[from.type].push_back(arc(from, mid));
-		arcs[mid.type].push_back(arc(mid, to));
-	}
-	else if (from.type == transition::type && to.type == transition::type)
-	{
-		iterator mid = create(place());
-		arcs[from.type].push_back(arc(from, mid));
-		arcs[mid.type].push_back(arc(mid, to));
-	}
-	else
-		arcs[from.type].push_back(arc(from, to));
-	return to;
-}
-
-vector<iterator> graph::connect(iterator from, vector<iterator> to)
-{
-	for (int i = 0; i < (int)to.size(); i++)
-		connect(from, to[i]);
-	return to;
-}
-
-iterator graph::connect(vector<iterator> from, iterator to)
-{
-	for (int i = 0; i < (int)from.size(); i++)
-		connect(from[i], to);
-	return to;
-}
-
-vector<iterator> graph::connect(vector<iterator> from, vector<iterator> to)
-{
-	for (int i = 0; i < (int)from.size(); i++)
-		for (int j = 0; j < (int)to.size(); j++)
-			connect(from[i], to[i]);
-	return to;
-}
-
-iterator graph::insert(iterator a, place n)
-{
-	iterator i[2];
-	i[place::type] = create(n);
-	i[transition::type] = create(transition());
-	arcs[a.type].push_back(arc(i[a.type], arcs[a.type][a.index].to));
-	arcs[1-a.type].push_back(arc(i[1-a.type], i[a.type]));
-	arcs[a.type][a.index].to = i[1-a.type];
-	return i[place::type];
-}
-
-iterator graph::insert(iterator a, transition n)
-{
-	iterator i[2];
-	i[place::type] = create(place());
-	i[transition::type] = create(n);
-	arcs[a.type].push_back(arc(i[a.type], arcs[a.type][a.index].to));
-	arcs[1-a.type].push_back(arc(i[1-a.type], i[a.type]));
-	arcs[a.type][a.index].to = i[1-a.type];
-	return i[transition::type];
-}
-
-iterator graph::insert(iterator a, int n)
-{
-	if (n == place::type)
-		return insert(a, place());
-	else if (n == transition::type)
-		return insert(a, transition());
-	else
-		return iterator();
-}
-
-iterator graph::insert_alongside(iterator from, iterator to, place n)
-{
-	iterator i = create(n);
-	if (from.type == i.type)
-	{
-		iterator j = create(transition());
-		connect(from, j);
-		connect(j, i);
-	}
-	else
-		connect(from, i);
-
-	if (to.type == i.type)
-	{
-		iterator j = create(transition());
-		connect(i, j);
-		connect(j, to);
-	}
-	else
-		connect(i, to);
-
-	return i;
-}
-
-iterator graph::insert_alongside(iterator from, iterator to, transition n)
-{
-	iterator i = create(n);
-	if (from.type == i.type)
-	{
-		iterator j = create(place());
-		connect(from, j);
-		connect(j, i);
-	}
-	else
-		connect(from, i);
-
-	if (to.type == i.type)
-	{
-		iterator j = create(place());
-		connect(i, j);
-		connect(j, to);
-	}
-	else
-		connect(i, to);
-
-	return i;
-}
-
-iterator graph::insert_alongside(iterator from, iterator to, int n)
-{
-	if (n == place::type)
-		return insert_alongside(from, to, place());
-	else if (n == transition::type)
-		return insert_alongside(from, to, transition());
-	else
-		return iterator();
-}
-
-iterator graph::insert_before(iterator to, place n)
-{
-	iterator i[2];
-	i[transition::type] = create(transition());
-	i[place::type] = create(n);
-	for (int j = 0; j < (int)arcs[1-to.type].size(); j++)
-		if (arcs[1-to.type][j].to.index == to.index)
-			arcs[1-to.type][j].to.index = i[to.type].index;
-	connect(i[1-to.type], to);
-	connect(i[to.type], i[1-to.type]);
-	return i[place::type];
-}
-
-iterator graph::insert_before(iterator to, transition n)
-{
-	iterator i[2];
-	i[transition::type] = create(n);
-	i[place::type] = create(place());
-	for (int j = 0; j < (int)arcs[1-to.type].size(); j++)
-		if (arcs[1-to.type][j].to.index == to.index)
-			arcs[1-to.type][j].to.index = i[to.type].index;
-	connect(i[1-to.type], to);
-	connect(i[to.type], i[1-to.type]);
-	return i[transition::type];
-}
-
-iterator graph::insert_before(iterator to, int n)
-{
-	if (n == place::type)
-		return insert_before(to, place());
-	else if (n == transition::type)
-		return insert_before(to, transition());
-	else
-		return iterator();
-}
-
-iterator graph::insert_after(iterator from, place n)
-{
-	iterator i[2];
-	i[transition::type] = create(transition());
-	i[place::type] = create(n);
-	for (int j = 0; j < (int)arcs[from.type].size(); j++)
-		if (arcs[from.type][j].from.index == from.index)
-			arcs[from.type][j].from.index = i[from.type].index;
-	connect(from, i[1-from.type]);
-	connect(i[1-from.type], i[from.type]);
-	return i[place::type];
-}
-
-
-iterator graph::insert_after(iterator from, transition n)
-{
-	iterator i[2];
-	i[transition::type] = create(n);
-	i[place::type] = create(place());
-	for (int j = 0; j < (int)arcs[from.type].size(); j++)
-		if (arcs[from.type][j].from.index == from.index)
-			arcs[from.type][j].from.index = i[from.type].index;
-	connect(from, i[1-from.type]);
-	connect(i[1-from.type], i[from.type]);
-	return i[transition::type];
-}
-
-iterator graph::insert_after(iterator from, int n)
-{
-	if (n == place::type)
-		return insert_after(from, place());
-	else if (n == transition::type)
-		return insert_after(from, transition());
-	else
-		return iterator();
-}
-
-pair<vector<iterator>, vector<iterator> > graph::cut(iterator n, vector<iterator> *i0, vector<iterator> *i1)
-{
-	pair<vector<iterator>, vector<iterator> > result;
-	for (int i = (int)arcs[n.type].size()-1; i >= 0; i--)
-	{
-		if (arcs[n.type][i].from.index == n.index)
-		{
-			result.second.push_back(arcs[n.type][i].to);
-			arcs[n.type].erase(arcs[n.type].begin() + i);
-		}
-		else if (arcs[n.type][i].from.index > n.index)
-			arcs[n.type][i].from.index--;
-	}
-	for (int i = (int)arcs[1-n.type].size()-1; i >= 0; i--)
-	{
-		if (arcs[1-n.type][i].to.index == n.index)
-		{
-			result.first.push_back(arcs[1-n.type][i].from);
-			arcs[1-n.type].erase(arcs[1-n.type].begin() + i);
-		}
-		else if (arcs[1-n.type][i].to.index > n.index)
-			arcs[1-n.type][i].to.index--;
-	}
-
-	if (n.type == place::type)
-	{
-		for (int j = 0; j < (int)source.size(); j++)
-			for (int i = (int)source[j].tokens.size()-1; i >= 0; i--)
-			{
-				if (source[j].tokens[i].index == n.index)
-					source[j].tokens.erase(source[j].tokens.begin() + i);
-				else if (source[j].tokens[i].index > n.index)
-					source[j].tokens[i].index--;
-			}
-
-		for (int j = 0; j < (int)reset.size(); j++)
-			for (int i = (int)reset[j].tokens.size()-1; i >= 0; i--)
-			{
-				if (reset[j].tokens[i].index == n.index)
-					reset[j].tokens.erase(reset[j].tokens.begin() + i);
-				else if (reset[j].tokens[i].index > n.index)
-					reset[j].tokens[i].index--;
-			}
-
-		for (int j = 0; j < (int)sink.size(); j++)
-			for (int i = (int)sink[j].tokens.size()-1; i >= 0; i--)
-			{
-				if (sink[j].tokens[i].index == n.index)
-					sink[j].tokens.erase(sink[j].tokens.begin() + i);
-				else if (sink[j].tokens[i].index > n.index)
-					sink[j].tokens[i].index--;
-			}
-	}
-
-	if (i0 != NULL)
-	{
-		for (int i = (int)i0->size()-1; i >= 0; i--)
-		{
-			if (i0->at(i) == n)
-				i0->erase(i0->begin() + i);
-			else if (i0->at(i).type == n.type && i0->at(i).index > n.index)
-				i0->at(i).index--;
-		}
-	}
-	if (i1 != NULL)
-	{
-		for (int i = (int)i1->size()-1; i >= 0; i--)
-		{
-			if (i1->at(i) == n)
-				i1->erase(i1->begin() + i);
-			else if (i1->at(i).type == n.type && i1->at(i).index > n.index)
-				i1->at(i).index--;
-		}
-	}
-
-	if (n.type == place::type)
-		places.erase(places.begin() + n.index);
-	else if (n.type == transition::type)
-		transitions.erase(transitions.begin() + n.index);
-
-	return result;
-}
-
-void graph::cut(vector<iterator> n, vector<iterator> *i0, vector<iterator> *i1, bool rsorted)
-{
-	if (!rsorted)
-		sort(n.rbegin(), n.rend());
-	for (int i = 0; i < (int)n.size(); i++)
-		cut(n[i], i0, i1);
-}
-
-iterator graph::duplicate(int relation, iterator i, bool add)
-{
-	iterator d = copy(i);
-	if (i.type == relation)
-	{
-		for (int j = (int)arcs[i.type].size()-1; j >= 0; j--)
-			if (arcs[i.type][j].from == i)
-				connect(d, arcs[i.type][j].to);
-		for (int j = (int)arcs[1-i.type].size()-1; j >= 0; j--)
-			if (arcs[1-i.type][j].to == i)
-				connect(arcs[1-i.type][j].from, d);
-	}
-	else if (add)
-	{
-		vector<iterator> x = create(1-i.type, 4);
-		vector<iterator> y = create(i.type, 2);
-
-		for (int j = (int)arcs[i.type].size()-1; j >= 0; j--)
-			if (arcs[i.type][j].from == i)
-				arcs[i.type][j].from = y[1];
-		for (int j = (int)arcs[1-i.type].size()-1; j >= 0; j--)
-			if (arcs[1-i.type][j].to == i)
-				arcs[1-i.type][j].to = y[0];
-
-		connect(y[0], x[0]);
-		connect(y[0], x[1]);
-		connect(x[0], i);
-		connect(x[1], d);
-		connect(i, x[2]);
-		connect(d, x[3]);
-		connect(x[2], y[1]);
-		connect(x[3], y[1]);
-	}
-	else
-	{
-		vector<iterator> n = next(i);
-		vector<iterator> p = prev(i);
-
-		for (int j = 0; j < 2; j++)
-			for (int k = (int)arcs[j].size()-1; k >= 0; k--)
-				if (arcs[j][k].from == i || arcs[j][k].to == i)
-					arcs[j].erase(arcs[j].begin() + k);
-
-		vector<iterator> n1, p1;
-		for (int l = 0; l < (int)n.size(); l++)
-			n1.push_back(duplicate(relation, n[l]));
-		for (int l = 0; l < (int)p.size(); l++)
-			p1.push_back(duplicate(relation, p[l]));
-
-		connect(p1, d);
-		connect(d, n1);
-		connect(p, i);
-		connect(i, n);
-	}
-
-	if (i.type == place::type)
-	{
-		for (int j = 0; j < (int)source.size(); j++)
-			for (int k = 0; k < (int)source[j].tokens.size(); k++)
-				if (source[j].tokens[k].index == i.index)
-					source[j].tokens.push_back(reset_token(d.index, source[j].tokens[k].remotable));
-
-		for (int j = 0; j < (int)reset.size(); j++)
-			for (int k = 0; k < (int)reset[j].tokens.size(); k++)
-				if (reset[j].tokens[k].index == i.index)
-					reset[j].tokens.push_back(reset_token(d.index, reset[j].tokens[k].remotable));
-
-		for (int j = 0; j < (int)sink.size(); j++)
-			for (int k = 0; k < (int)sink[j].tokens.size(); k++)
-				if (sink[j].tokens[k].index == i.index)
-					sink[j].tokens.push_back(reset_token(d.index, sink[j].tokens[k].remotable));
-	}
-
-	return d;
-}
-
-vector<iterator> graph::duplicate(int relation, iterator i, int num, bool add)
-{
-	vector<iterator> d = copy(i, num-1);
-	if (i.type == relation)
-	{
-		for (int j = (int)arcs[i.type].size()-1; j >= 0; j--)
-			if (arcs[i.type][j].from == i)
-				for (int k = 0; k < (int)d.size(); k++)
-					connect(d[k], arcs[i.type][j].to);
-		for (int j = (int)arcs[1-i.type].size()-1; j >= 0; j--)
-			if (arcs[1-i.type][j].to == i)
-				for (int k = 0; k < (int)d.size(); k++)
-					connect(arcs[1-i.type][j].from, d[k]);
-	}
-	else if (add)
-	{
-		vector<iterator> x = create(1-i.type, 2*(num-1));
-		vector<iterator> y = create(i.type, 2);
-		vector<iterator> z = create(1-i.type, 2);
-
-		for (int j = (int)arcs[i.type].size()-1; j >= 0; j--)
-			if (arcs[i.type][j].from == i)
-				arcs[i.type][j].from = y[1];
-		for (int j = (int)arcs[1-i.type].size()-1; j >= 0; j--)
-			if (arcs[1-i.type][j].to == i)
-				arcs[1-i.type][j].to = y[0];
-
-		connect(y[0], z[0]);
-		connect(z[0], i);
-		connect(i, z[1]);
-		connect(z[1], y[1]);
-
-		for (int k = 0; k < (int)d.size(); k++)
-		{
-			connect(y[0], x[k*2 + 0]);
-			connect(x[k*2 + 0], d[k]);
-			connect(d[k], x[k*2 + 1]);
-			connect(x[k*2 + 1], y[1]);
-		}
-	}
-	else
-	{
-		vector<iterator> n = next(i);
-		vector<iterator> p = prev(i);
-
-		for (int j = 0; j < 2; j++)
-			for (int k = (int)arcs[j].size()-1; k >= 0; k--)
-				if (arcs[j][k].from == i || arcs[j][k].to == i)
-					arcs[j].erase(arcs[j].begin() + k);
-
-		for (int k = 0; k < num-1; k++)
-		{
-			vector<iterator> n1, p1;
-			for (int l = 0; l < (int)n.size(); l++)
-				n1.push_back(duplicate(relation, n[l]));
-			for (int l = 0; l < (int)p.size(); l++)
-				p1.push_back(duplicate(relation, p[l]));
-
-			connect(p1, d[k]);
-			connect(d[k], n1);
-		}
-		connect(p, i);
-		connect(i, n);
-	}
-
-	if (i.type == place::type)
-	{
-		for (int j = 0; j < (int)source.size(); j++)
-			for (int k = 0; k < (int)source[j].tokens.size(); k++)
-				if (source[j].tokens[k].index == i.index)
-					for (int l = 0; l < (int)d.size(); l++)
-						source[j].tokens.push_back(reset_token(d[l].index, source[j].tokens[k].remotable));
-
-		for (int j = 0; j < (int)reset.size(); j++)
-			for (int k = 0; k < (int)reset[j].tokens.size(); k++)
-				if (reset[j].tokens[k].index == i.index)
-					for (int l = 0; l < (int)d.size(); l++)
-						reset[j].tokens.push_back(reset_token(d[l].index, reset[j].tokens[k].remotable));
-
-		for (int j = 0; j < (int)sink.size(); j++)
-			for (int k = 0; k < (int)sink[j].tokens.size(); k++)
-				if (sink[j].tokens[k].index == i.index)
-					for (int l = 0; l < (int)d.size(); l++)
-						sink[j].tokens.push_back(reset_token(d[l].index, sink[j].tokens[k].remotable));
-	}
-
-	d.push_back(i);
-
-	return d;
-}
-
-vector<iterator> graph::duplicate(int relation, vector<iterator> n, int num, bool interleaved, bool add)
-{
-	vector<iterator> result;
-	result.reserve(n.size()*num);
-	for (int i = 0; i < (int)n.size(); i++)
-	{
-		vector<iterator> temp = duplicate(relation, n[i], num, add);
-		if (interleaved && i > 0)
-			for (int j = 0; j < (int)temp.size(); j++)
-				result.insert(result.begin() + j*(i+1) + 1, temp[j]);
-		else
-			result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-void graph::pinch(iterator n, vector<iterator> *i0, vector<iterator> *i1)
-{
-	pair<vector<iterator>, vector<iterator> > neighbors = cut(n, i0, i1);
-
-	vector<iterator> left = duplicate(1-n.type, neighbors.first, neighbors.second.size(), false);
-	vector<iterator> right = duplicate(1-n.type, neighbors.second, neighbors.first.size(), true);
-
-	for (int i = 0; i < (int)right.size(); i++)
-	{
-		combine(right[i].type, left[i], right[i]);
-
-		for (int j = 0; j < (int)arcs[right[i].type].size(); j++)
-			if (arcs[right[i].type][j].from == right[i])
-				arcs[right[i].type][j].from = left[i];
-
-		for (int j = 0; j < (int)arcs[1-right[i].type].size(); j++)
-			if (arcs[1-right[i].type][j].to == right[i])
-				arcs[1-right[i].type][j].to = left[i];
-
-		if (right[i].type == place::type)
-		{
-			for (int j = 0; j < (int)source.size(); j++)
-				for (int k = 0; k < (int)source[j].tokens.size(); k++)
-					if (source[j].tokens[k].index == right[i].index)
-						source[j].tokens.push_back(reset_token(left[i].index, source[j].tokens[k].remotable));
-
-			for (int j = 0; j < (int)reset.size(); j++)
-				for (int k = 0; k < (int)reset[j].tokens.size(); k++)
-					if (reset[j].tokens[k].index == right[i].index)
-						reset[j].tokens.push_back(reset_token(left[i].index, reset[j].tokens[k].remotable));
-
-			for (int j = 0; j < (int)sink.size(); j++)
-				for (int k = 0; k < (int)sink[j].tokens.size(); k++)
-					if (sink[j].tokens[k].index == right[i].index)
-						sink[j].tokens.push_back(reset_token(left[i].index, sink[j].tokens[k].remotable));
-		}
-	}
-
-	cut(right, i0, i1);
-}
-
-vector<iterator> graph::next(iterator n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[n.type].size(); i++)
-		if (arcs[n.type][i].from.index == n.index)
-			result.push_back(arcs[n.type][i].to);
-	return result;
-}
-
-vector<iterator> graph::next(vector<iterator> n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)n.size(); i++)
-	{
-		vector<iterator> temp = next(n[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<iterator> graph::prev(iterator n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[1-n.type].size(); i++)
-		if (arcs[1-n.type][i].to.index == n.index)
-			result.push_back(arcs[1-n.type][i].from);
-	return result;
-}
-
-vector<iterator> graph::prev(vector<iterator> n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)n.size(); i++)
-	{
-		vector<iterator> temp = prev(n[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<int> graph::next(int type, int n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[type].size(); i++)
-		if (arcs[type][i].from.index == n)
-			result.push_back(arcs[type][i].to.index);
-	return result;
-}
-
-vector<int> graph::next(int type, vector<int> n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[type].size(); i++)
-		if (find(n.begin(), n.end(), arcs[type][i].from.index) != n.end())
-			result.push_back(arcs[type][i].to.index);
-	return result;
-}
-
-vector<int> graph::prev(int type, int n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (arcs[1-type][i].to.index == n)
-			result.push_back(arcs[1-type][i].from.index);
-	return result;
-}
-
-vector<int> graph::prev(int type, vector<int> n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (find(n.begin(), n.end(), arcs[1-type][i].to.index) != n.end())
-			result.push_back(arcs[1-type][i].from.index);
-	return result;
-}
-
-vector<iterator> graph::out(iterator n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[n.type].size(); i++)
-		if (arcs[n.type][i].from.index == n.index)
-			result.push_back(iterator(n.type, i));
-	return result;
-}
-
-vector<iterator> graph::out(vector<iterator> n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)n.size(); i++)
-	{
-		vector<iterator> temp = out(n[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<iterator> graph::in(iterator n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[1-n.type].size(); i++)
-		if (arcs[1-n.type][i].to.index == n.index)
-			result.push_back(iterator(1-n.type, i));
-	return result;
-}
-
-vector<iterator> graph::in(vector<iterator> n) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)n.size(); i++)
-	{
-		vector<iterator> temp = in(n[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<int> graph::out(int type, int n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[type].size(); i++)
-		if (arcs[type][i].from.index == n)
-			result.push_back(i);
-	return result;
-}
-
-vector<int> graph::out(int type, vector<int> n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[type].size(); i++)
-		if (find(n.begin(), n.end(), arcs[type][i].from.index) != n.end())
-			result.push_back(i);
-	return result;
-}
-
-vector<int> graph::in(int type, int n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (arcs[1-type][i].to.index == n)
-			result.push_back(i);
-	return result;
-}
-
-vector<int> graph::in(int type, vector<int> n) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (find(n.begin(), n.end(), arcs[1-type][i].to.index) != n.end())
-			result.push_back(i);
-	return result;
-}
-
-vector<iterator> graph::next_arcs(iterator a) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[1-a.type].size(); i++)
-		if (arcs[1-a.type][i].from == arcs[a.type][a.index].to)
-			result.push_back(iterator(1-a.type, i));
-	return result;
-}
-
-vector<iterator> graph::next_arcs(vector<iterator> a) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)a.size(); i++)
-	{
-		vector<iterator> temp = next_arcs(a[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<iterator> graph::prev_arcs(iterator a) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)arcs[1-a.type].size(); i++)
-		if (arcs[1-a.type][i].to == arcs[a.type][a.index].from)
-			result.push_back(iterator(1-a.type, i));
-	return result;
-}
-
-vector<iterator> graph::prev_arcs(vector<iterator> a) const
-{
-	vector<iterator> result;
-	for (int i = 0; i < (int)a.size(); i++)
-	{
-		vector<iterator> temp = prev_arcs(a[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<int> graph::next_arcs(int type, int a) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (arcs[1-type][i].from == arcs[type][a].to)
-			result.push_back(i);
-	return result;
-}
-
-vector<int> graph::next_arcs(int type, vector<int> a) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)a.size(); i++)
-	{
-		vector<int> temp = next_arcs(type, a[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-vector<int> graph::prev_arcs(int type, int a) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)arcs[1-type].size(); i++)
-		if (arcs[1-type][i].to == arcs[type][a].from)
-			result.push_back(i);
-	return result;
-}
-
-vector<int> graph::prev_arcs(int type, vector<int> a) const
-{
-	vector<int> result;
-	for (int i = 0; i < (int)a.size(); i++)
-	{
-		vector<int> temp = prev_arcs(type, a[i]);
-		result.insert(result.end(), temp.begin(), temp.end());
-	}
-	return result;
-}
-
-bool graph::is_floating(iterator n) const
-{
-	for (int i = 0; i < 2; i++)
-		for (int j = 0; j < (int)arcs[i].size(); j++)
-			if (arcs[i][j].from == n || arcs[i][j].to == n)
-				return false;
-	return true;
-}
-
-map<iterator, iterator> graph::merge(int relation, const graph &g, bool remote)
-{
-	map<iterator, iterator> result;
-
-	places.reserve(places.size() + g.places.size());
-	for (int i = 0; i < (int)g.places.size(); i++)
-	{
-		result.insert(pair<iterator, iterator>(iterator(place::type, i), iterator(place::type, (int)places.size())));
-		places.push_back(g.places[i]);
-	}
-
-	transitions.reserve(transitions.size() + g.transitions.size());
-	for (int i = 0; i < (int)g.transitions.size(); i++)
-	{
-		result.insert(pair<iterator, iterator>(iterator(transition::type, i), iterator(transition::type, (int)transitions.size())));
-		transitions.push_back(g.transitions[i]);
-	}
-
-	for (int i = 0; i < 2; i++)
-		for (int j = 0; j < (int)g.arcs[i].size(); j++)
-			arcs[i].push_back(arc(result[g.arcs[i][j].from], result[g.arcs[i][j].to]));
-
-	vector<state> converted_source;
-	vector<state> converted_sink;
-	vector<state> converted_reset;
-
-	for (int i = 0; i < (int)g.source.size(); i++)
-	{
-		vector<reset_token> tokens;
-		for (int j = 0; j < (int)g.source[i].tokens.size(); j++)
-			tokens.push_back(reset_token(result[iterator(place::type, g.source[i].tokens[j].index)].index, g.source[i].tokens[j].remotable || remote));
-		sort(tokens.begin(), tokens.end());
-		vector<term_index> environment;
-		for (int j = 0; j < (int)g.source[i].environment.size(); j++)
-			environment.push_back(term_index(result[iterator(transition::type, g.source[i].environment[j].index)].index, g.source[i].environment[j].term));
-		sort(environment.begin(), environment.end());
-		converted_source.push_back(state(tokens, environment, g.source[i].encodings));
-	}
-
-	for (int i = 0; i < (int)g.sink.size(); i++)
-	{
-		vector<reset_token> tokens;
-		for (int j = 0; j < (int)g.sink[i].tokens.size(); j++)
-			tokens.push_back(reset_token(result[iterator(place::type, g.sink[i].tokens[j].index)].index, g.sink[i].tokens[j].remotable || remote));
-		sort(tokens.begin(), tokens.end());
-		vector<term_index> environment;
-		for (int j = 0; j < (int)g.sink[i].environment.size(); j++)
-			environment.push_back(term_index(result[iterator(transition::type, g.sink[i].environment[j].index)].index, g.sink[i].environment[j].term));
-		sort(environment.begin(), environment.end());
-		converted_sink.push_back(state(tokens, environment, g.sink[i].encodings));
-	}
-
-	for (int i = 0; i < (int)g.reset.size(); i++)
-	{
-		vector<reset_token> tokens;
-		for (int j = 0; j < (int)g.reset[i].tokens.size(); j++)
-			tokens.push_back(reset_token(result[iterator(place::type, g.reset[i].tokens[j].index)].index, g.reset[i].tokens[j].remotable || remote));
-		sort(tokens.begin(), tokens.end());
-		vector<term_index> environment;
-		for (int j = 0; j < (int)g.reset[i].environment.size(); j++)
-			environment.push_back(term_index(result[iterator(transition::type, g.reset[i].environment[j].index)].index, g.reset[i].environment[j].term));
-		sort(environment.begin(), environment.end());
-		converted_reset.push_back(state(tokens, environment, g.reset[i].encodings));
-	}
-
-	if (relation == choice || source.size() == 0)
-	{
-		for (int i = 0; i < (int)converted_source.size(); i++)
-		{
-			vector<state>::iterator iter = lower_bound(source.begin(), source.end(), converted_source[i]);
-			if (iter != source.end() && *iter == converted_source[i])
-				iter->merge(choice, converted_source[i]);
-			else
-				source.insert(iter, converted_source[i]);
-		}
-
-		for (int i = 0; i < (int)converted_reset.size(); i++)
-		{
-			vector<state>::iterator iter = lower_bound(reset.begin(), reset.end(), converted_reset[i]);
-			if (iter != reset.end() && *iter == converted_reset[i])
-				iter->merge(choice, converted_reset[i]);
-			else
-				reset.insert(iter, converted_reset[i]);
-		}
-	}
-	else if (relation == parallel)
-	{
-		if (reset.size() == 0 && converted_reset.size() > 0)
-			reset = source;
-		else if (reset.size() > 0 && converted_reset.size() == 0)
-			converted_reset = converted_source;
-
-		if (reset.size() > 0 || converted_reset.size() > 0)
-		{
-			int s = (int)reset.size();
-			for (int i = 0; i < (int)converted_reset.size()-1; i++)
-				for (int j = 0; j < s; j++)
-					reset.push_back(reset[j].merge(parallel, converted_reset[i]));
-
-			if (converted_reset.size() > 0)
-				for (int j = 0; j < s; j++)
-					reset[j].merge(parallel, converted_reset.back());
-		}
-
-		int s = (int)source.size();
-		for (int i = 0; i < (int)converted_source.size()-1; i++)
-			for (int j = 0; j < s; j++)
-				source.push_back(source[j].merge(parallel, converted_source[i]));
-
-		if (converted_source.size() > 0)
-			for (int j = 0; j < s; j++)
-				source[j].merge(parallel, converted_source.back());
-	}
-
-	if (relation == choice || sink.size() == 0)
-	{
-		for (int i = 0; i < (int)g.sink.size(); i++)
-		{
-			vector<state>::iterator iter = lower_bound(sink.begin(), sink.end(), converted_sink[i]);
-			if (iter != sink.end() && *iter == converted_sink[i])
-				iter->merge(choice, converted_sink[i]);
-			else
-				sink.insert(iter, converted_sink[i]);
-		}
-	}
-	else if (relation == parallel)
-	{
-		int s = (int)sink.size();
-		for (int i = 0; i < (int)converted_sink.size()-1; i++)
-			for (int j = 0; j < s; j++)
-				sink.push_back(sink[j].merge(parallel, converted_sink[i]));
-
-		if (converted_sink.size() > 0)
-			for (int j = 0; j < s; j++)
-				sink[j].merge(parallel, converted_sink.back());
-	}
-	else if (relation == sequence)
-	{
-		if (reset.size() > 0 && converted_reset.size() > 0)
-			error("", "only one reset token allowed per sequential", __FILE__, __LINE__);
-		else if (reset.size() == 0)
-			reset = converted_reset;
-
-		for (int i = 0; i < (int)sink.size(); i++)
-			for (int j = 0; j < (int)converted_source.size(); j++)
-			{
-				iterator c = create(transition());
-				for (int k = 0; k < (int)sink[i].tokens.size(); k++)
-					connect(iterator(place::type, sink[i].tokens[k].index), c);
-				for (int k = 0; k < (int)converted_source[j].tokens.size(); k++)
-					connect(c, iterator(place::type, converted_source[j].tokens[k].index));
-			}
-
-		sink = converted_sink;
-	}
-
-	return result;
-}
-
-graph &graph::wrap()
-{
-	if (source.size() > 1 || (source.size() > 0 && source[0].tokens.size() > 1))
-	{
-		iterator split = create(place());
-
-		bool remotable = true;
-		for (int i = 0; i < (int)source.size(); i++)
-		{
-			iterator split_t = create(transition(transition::active, source[i].encodings));
-			connect(split, split_t);
-
-			for (int j = 0; j < (int)source[i].tokens.size(); j++)
-			{
-				connect(split_t, iterator(place::type, source[i].tokens[j].index));
-				remotable = remotable && source[i].tokens[j].remotable;
-			}
-		}
-
-		source.clear();
-		source.push_back(state(vector<reset_token>(1, reset_token(split.index, remotable)), vector<term_index>(), boolean::cover(1)));
-	}
-
-	if (sink.size() > 1 || (sink.size() > 0 && sink[0].tokens.size() > 1))
-	{
-		iterator merge = create(place());
-		bool remotable = true;
-		for (int i = 0; i < (int)sink.size(); i++)
-		{
-			iterator merge_t = create(transition());
-			connect(merge_t, merge);
-
-			for (int j = 0; j < (int)sink[i].tokens.size(); j++)
-			{
-				connect(iterator(place::type, sink[i].tokens[j].index), merge_t);
-				remotable = remotable && sink[i].tokens[j].remotable;
-			}
-		}
-
-		sink.clear();
-		sink.push_back(state(vector<reset_token>(1, reset_token(merge.index, remotable)), vector<term_index>(), boolean::cover(1)));
-	}
-
-	return *this;
-}
-
-vector<vector<iterator> > graph::cycles() const
-{
-	vector<vector<hse::iterator> > curr;
-	vector<vector<hse::iterator> > result;
-	for (int i = 0; i < (int)source.size(); i++)
-		for (int j = 0; j < (int)source[i].tokens.size(); j++)
-			curr.push_back(vector<hse::iterator>(1, hse::iterator(hse::place::type, source[i].tokens[j].index)));
-
-	sort(curr.begin(), curr.end());
-	curr.resize(unique(curr.begin(), curr.end()) - curr.begin());
-
-	while (curr.size() > 0)
-	{
-		vector<hse::iterator> x = curr.back();
-		curr.pop_back();
-
-		vector<hse::iterator> n = next(x.back());
-		for (int j = 0; j < (int)n.size(); j++)
-		{
-			vector<hse::iterator>::iterator loopback = find(x.begin(), x.end(), n[j]);
-			if (loopback != x.end())
-			{
-				result.push_back(x);
-				result.back().erase(result.back().begin(), result.back().begin() + (loopback - x.begin()));
-			}
-			else
-			{
-				curr.push_back(x);
-				curr.back().push_back(n[j]);
-			}
-		}
-	}
-
-	return result;
-}
-
-void graph::post_process(const boolean::variable_set &variables, bool proper_nesting)
+void graph::post_process(const ucs::variable_set &variables, bool proper_nesting)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
-		transitions[i].remote_action = variables.remote(transitions[i].local_action);
+		transitions[i].remote_action = transitions[i].local_action.remote(variables.get_groups());
 
 	bool change = true;
 	while (change)
 	{
-		change = false;
-
-		for (iterator i(transition::type, 0); i < (int)transitions.size() && !change; )
-		{
-			vector<iterator> n = next(i);
-			vector<iterator> p = prev(i);
-
-			sort(n.begin(), n.end());
-			sort(p.begin(), p.end());
-
-			bool affect = false;
-			// If it doesn't have any input places, then we need to add one.
-			if (!affect && p.size() == 0)
-			{
-				p.push_back(create(place::type));
-				connect(p, i);
-				affect = true;
-			}
-
-			// If it doesn't have any output places, then we need to add one.
-			if (!affect && n.size() == 0)
-			{
-				n.push_back(create(place::type));
-				connect(i, n);
-				affect = true;
-			}
-
-			// A transition will never be enabled if its local_action is not physically possible.
-			// These transitions may be removed while preserving proper nesting, token flow
-			// stability, non interference, and deadlock freedom. At this point, it is not
-			// possible for this transition to be in the source list.
-			if (!affect && transitions[i.index].local_action == 0)
-			{
-				cut(i);
-				affect = true;
-			}
-
-			// We can know for sure if a transition is vacuous before we've elaborated the state space if
-			// the transition is the universal cube. These transitions may be pinched while preserving token flow,
-			// stability, non interference, and deadlock freedom. However, proper nesting is not necessarily
-			// preserved. We have to take special precautions if we want to preserver proper nesting.
-			if (!affect && transitions[i.index].local_action == 1)
-			{
-				if (!proper_nesting)
-				{
-					pinch(i);
-					affect = true;
-				}
-				else
-				{
-					vector<iterator> np = next(p);
-					vector<iterator> pn = prev(n);
-
-					if (p.size() == 1 && n.size() == 1 && (np.size() == 1 || pn.size() == 1))
-					{
-						pinch(i);
-						affect = true;
-					}
-					else
-					{
-						vector<iterator> nn = next(n);
-						vector<iterator> nnp = next(np);
-						vector<iterator> pp = prev(p);
-						vector<iterator> ppn = prev(pn);
-
-						if ((n.size() == 1 && nn.size() == 1 && nnp.size() == 1 && np.size() == 1) ||
-							(p.size() == 1 && pp.size() == 1 && ppn.size() == 1 && pn.size() == 1))
-						{
-							pinch(i);
-							affect = true;
-						}
-					}
-				}
-			}
-
-			if (!affect)
-				i++;
-			else
-				change = true;
-		}
-
-		for (iterator i(place::type, 0); i < (int)places.size() && !change; )
-		{
-			bool i_is_reset = false;
-			if (reset.size() == 0)
-			{
-				for (int j = 0; j < (int)source.size() && !i_is_reset; j++)
-					for (int k = 0; k < (int)source[j].tokens.size() && !i_is_reset; k++)
-						if (source[j].tokens[k].index == i.index)
-							i_is_reset = true;
-			}
-			else
-			{
-				for (int j = 0; j < (int)reset.size() && !i_is_reset; j++)
-					for (int k = 0; k < (int)reset[j].tokens.size() && !i_is_reset; k++)
-						if (reset[j].tokens[k].index == i.index)
-							i_is_reset = true;
-			}
-
-			vector<iterator> n = next(i);
-			vector<iterator> p = prev(i);
-
-			sort(n.begin(), n.end());
-			sort(p.begin(), p.end());
-
-			bool affect = false;
-
-			// We know a place will never be marked if it is not in the initial marking and it has no input arcs.
-			// This means that its output transitions will never fire.
-			if (p.size() == 0 && (!i_is_reset || n.size() == 0))
-			{
-				cut(n);
-				cut(i);
-				affect = true;
-			}
-
-			// Check to see if there are any excess places whose existence doesn't affect the behavior of the circuit
-			for (iterator j = i+1; j < (int)places.size(); )
-			{
-				bool j_is_reset = false;
-				if (reset.size() == 0)
-				{
-					for (int k = 0; k < (int)source.size() && !j_is_reset; k++)
-						for (int l = 0; l < (int)source[k].tokens.size() && !j_is_reset; l++)
-							if (source[k].tokens[l].index == j.index)
-								j_is_reset = true;
-				}
-				else
-				{
-					for (int k = 0; k < (int)reset.size() && !j_is_reset; k++)
-						for (int l = 0; l < (int)reset[k].tokens.size() && !j_is_reset; l++)
-							if (reset[k].tokens[l].index == j.index)
-								j_is_reset = true;
-				}
-
-				vector<iterator> n2 = next(j);
-				vector<iterator> p2 = prev(j);
-
-				sort(n2.begin(), n2.end());
-				sort(p2.begin(), p2.end());
-
-				if (n == n2 && p == p2 && i_is_reset == j_is_reset)
-				{
-					cut(j);
-					affect = true;
-				}
-				else
-					j++;
-			}
-
-			if (!affect)
-				i++;
-			else
-				change = true;
-		}
-
-
-		vector<iterator> left;
-		vector<iterator> right;
-
-		vector<vector<iterator> > n, p;
-		vector<vector<pair<vector<iterator>, vector<iterator> > > > nx, px;
-
-		for (iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++)
-		{
-			n.push_back(next(i));
-			p.push_back(prev(i));
-
-			sort(n.back().begin(), n.back().end());
-			sort(p.back().begin(), p.back().end());
-
-			nx.push_back(vector<pair<vector<iterator>, vector<iterator> > >());
-			px.push_back(vector<pair<vector<iterator>, vector<iterator> > >());
-			for (int j = 0; j < (int)n.back().size(); j++)
-			{
-				nx.back().push_back(pair<vector<iterator>, vector<iterator> >(prev(n.back()[j]), next(n.back()[j])));
-				sort(nx.back().back().first.begin(), nx.back().back().first.end());
-				sort(nx.back().back().second.begin(), nx.back().back().second.end());
-			}
-			for (int j = 0; j < (int)p.back().size(); j++)
-			{
-				px.back().push_back(pair<vector<iterator>, vector<iterator> >(prev(p.back()[j]), next(p.back()[j])));
-				sort(px.back().back().first.begin(), px.back().back().first.end());
-				sort(px.back().back().second.begin(), px.back().back().second.end());
-			}
-
-			for (iterator j = i-1; j >= 0 && !change; j--)
-			{
-				// TODO Once internal parallelism stops assuming isochronic forks we can reenable this for active transitions
-				if (transitions[j.index].behavior == transitions[i.index].behavior && transitions[i.index].behavior == transition::passive)
-				{
-					// Find internally conditioned transitions. Transitions are internally conditioned if they are the same type
-					// share all of the same input and output places.
-					if (n[j.index] == n[i.index] && p[j.index] == p[i.index])
-					{
-						transitions[j.index] = hse::merge(choice, transitions[i.index], transitions[j.index]);
-						cut(i);
-						change = true;
-					}
-
-					// Find internally parallel transitions. A pair of transitions A and B are internally parallel if
-					// they are the same type, have disjoint sets of input and output places that share a single input
-					// or output transition and have no output or input transitions other than A or B.
-					else if (vector_intersection_size(n[i.index], n[j.index]) == 0 && vector_intersection_size(p[i.index], p[j.index]) == 0 && nx[i.index] == nx[j.index] && px[i.index] == px[j.index])
-					{
-						transitions[j.index] = hse::merge(parallel, transitions[i.index], transitions[j.index]);
-						vector<iterator> tocut;
-						tocut.push_back(i);
-						tocut.insert(tocut.end(), n[i.index].begin(), n[i.index].end());
-						tocut.insert(tocut.end(), p[i.index].begin(), p[i.index].end());
-						cut(tocut);
-						change = true;
-					}
-				}
-			}
-		}
+		change = super::reduce(proper_nesting);
 
 		if (!change)
 		{
@@ -1479,11 +188,11 @@ void graph::post_process(const boolean::variable_set &variables, bool proper_nes
 					bool firable = transitions[enabled[j].first.index].local_action.cubes.size() <= 1;
 					for (int k = 0; k < (int)sim[0].local.ready[j].tokens.size() && firable; k++)
 					{
-						for (int l = 0; l < (int)arcs[transition::type].size() && firable; l++)
-							if (arcs[transition::type][l].to.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index)
+						for (int l = 0; l < (int)arcs[petri::transition::type].size() && firable; l++)
+							if (arcs[petri::transition::type][l].to.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index)
 								firable = false;
-						for (int l = 0; l < (int)arcs[place::type].size() && firable; l++)
-							if (arcs[place::type][l].from.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index && arcs[place::type][l].to.index != enabled[j].first.index)
+						for (int l = 0; l < (int)arcs[petri::place::type].size() && firable; l++)
+							if (arcs[petri::place::type][l].from.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index && arcs[petri::place::type][l].to.index != enabled[j].first.index)
 								firable = false;
 					}
 
@@ -1523,7 +232,7 @@ void graph::post_process(const boolean::variable_set &variables, bool proper_nes
 
 				state result = sim[0].get_state();
 				for (int j = 1; j < (int)sim.size(); j++)
-					result.merge(choice, sim[j].get_state());
+					result = state::merge(petri::choice, result, sim[j].get_state());
 
 				if (reset.size() == 0)
 					source[i] = result;
@@ -1534,11 +243,9 @@ void graph::post_process(const boolean::variable_set &variables, bool proper_nes
 		}
 	}
 
-	reachability();
-
-	for (iterator i = begin(place::type); i < end(place::type); i++)
+	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
 	{
-		for (iterator j = begin(transition::type); j < end(transition::type); j++)
+		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++)
 			if (is_reachable(j, i))
 				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].local_action.mask());
 		places[i.index].mask = places[i.index].mask.flip();
@@ -1546,42 +253,6 @@ void graph::post_process(const boolean::variable_set &variables, bool proper_nes
 
 	if (reset.size() == 0)
 		reset = source;
-}
-
-void graph::reachability()
-{
-	int nodes = (int)(places.size() + transitions.size());
-	reach.assign(nodes*nodes, nodes);
-	for (int i = 0; i < (int)places.size(); i++)
-		reach[i*nodes + i] = 0;
-	for (int i = 0; i < (int)transitions.size(); i++)
-		reach[(places.size() + i)*nodes + (places.size() + i)] = 0;
-
-	bool change = true;
-	while (change)
-	{
-		change = false;
-		for (int i = 0; i < 2; i++)
-			for (int j = 0; j < (int)arcs[i].size(); j++)
-				for (int k = 0; k < nodes; k++)
-				{
-					int m = min(reach[(places.size()*arcs[i][j].from.type + arcs[i][j].from.index)*nodes + k] + 1, reach[(places.size()*arcs[i][j].to.type + arcs[i][j].to.index)*nodes + k]);
-					if (m > nodes)
-						m = nodes;
-					change = change || (reach[(places.size()*arcs[i][j].to.type + arcs[i][j].to.index)*nodes + k] != m);
-					reach[(places.size()*arcs[i][j].to.type + arcs[i][j].to.index)*nodes + k] = m;
-				}
-	}
-}
-
-bool graph::is_reachable(iterator from, iterator to)
-{
-	return (reach[(places.size()*to.type + to.index)*(places.size() + transitions.size()) + (places.size()*from.type + from.index)] < (int)(places.size() + transitions.size()));
-}
-
-bool graph::is_parallel(iterator a, iterator b)
-{
-	return (find(parallel_nodes.begin(), parallel_nodes.end(), pair<iterator, iterator>(a, b)) != parallel_nodes.end());
 }
 
 void graph::synchronize()
@@ -1597,27 +268,27 @@ void graph::synchronize()
 								synchronizations.push_back(sync);
 }
 
-void graph::petrify(const boolean::variable_set &variables)
+void graph::petrify(const ucs::variable_set &variables)
 {
 	// Petri nets don't support internal parallelism or choice, so we have to expand those transitions.
-	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+	for (petri::iterator i(petri::transition::type, transitions.size()-1); i >= 0; i--)
 	{
 		if (transitions[i.index].behavior == transition::active && transitions[i.index].local_action.cubes.size() > 1)
 		{
-			vector<iterator> k = duplicate(choice, i, transitions[i.index].local_action.cubes.size(), false);
+			vector<petri::iterator> k = duplicate(petri::choice, i, transitions[i.index].local_action.cubes.size(), false);
 			for (int j = 0; j < (int)k.size(); j++)
 				transitions[k[j].index].local_action = boolean::cover(transitions[k[j].index].local_action.cubes[j]);
 		}
 	}
 
-	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+	for (petri::iterator i(petri::transition::type, transitions.size()-1); i >= 0; i--)
 	{
 		if (transitions[i.index].behavior == transition::active && transitions[i.index].local_action.cubes.size() == 1)
 		{
 			vector<int> vars = transitions[i.index].local_action.cubes[0].vars();
 			if (vars.size() > 1)
 			{
-				vector<iterator> k = duplicate(parallel, i, vars.size(), false);
+				vector<petri::iterator> k = duplicate(petri::parallel, i, vars.size(), false);
 				for (int j = 0; j < (int)k.size(); j++)
 					transitions[k[j].index].local_action.cubes[0] = boolean::cube(vars[j], transitions[k[j].index].local_action.cubes[0].get(vars[j]));
 			}
@@ -1625,8 +296,8 @@ void graph::petrify(const boolean::variable_set &variables)
 	}
 
 	// Find all of the guards
-	vector<iterator> passive;
-	for (iterator i(transition::type, transitions.size()-1); i >= 0; i--)
+	vector<petri::iterator> passive;
+	for (petri::iterator i(petri::transition::type, transitions.size()-1); i >= 0; i--)
 		if (transitions[i.index].behavior == transition::passive)
 			passive.push_back(i);
 
@@ -1648,7 +319,7 @@ void graph::petrify(const boolean::variable_set &variables)
 		{
 			// Find all of the half synchronization local_actions for this guard and group them accordingly:
 			// outside group is by disjunction, middle group is by conjunction, and inside group is by value and variable.
-			vector<vector<vector<iterator> > > sync;
+			vector<vector<vector<petri::iterator> > > sync;
 			sync.resize(transitions[passive[i].index].local_action.cubes.size());
 			for (int j = 0; j < (int)synchronizations.size(); j++)
 				if (synchronizations[j].passive.index == passive[i].index)
@@ -1658,28 +329,28 @@ void graph::petrify(const boolean::variable_set &variables)
 						if (similarity_g0(transitions[sync[synchronizations[j].passive.cube][l][0].index].local_action.cubes[0], transitions[synchronizations[j].active.index].local_action.cubes[0]))
 						{
 							found = true;
-							sync[synchronizations[j].passive.cube][l].push_back(iterator(transition::type, synchronizations[j].active.index));
+							sync[synchronizations[j].passive.cube][l].push_back(petri::iterator(petri::transition::type, synchronizations[j].active.index));
 						}
 
 					if (!found)
-						sync[synchronizations[j].passive.cube].push_back(vector<iterator>(1, iterator(transition::type, synchronizations[j].active.index)));
+						sync[synchronizations[j].passive.cube].push_back(vector<petri::iterator>(1, petri::iterator(petri::transition::type, synchronizations[j].active.index)));
 				}
 
 			/* Finally implement the connections. The basic observation being that a guard affects when the next
 			 * transition can fire.
 			 */
-			vector<iterator> n = next(passive[i]);
-			vector<iterator> g = create(place(), n.size());
+			vector<petri::iterator> n = next(passive[i]);
+			vector<petri::iterator> g = create(place(), n.size());
 			for (int j = 0; j < (int)n.size(); j++)
 				connect(g[j], next(n[j]));
 
 			for (int j = 0; j < (int)sync.size(); j++)
 			{
-				iterator t = create(transition());
+				petri::iterator t = create(transition());
 				connect(t, g);
 				for (int k = 0; k < (int)sync[j].size(); k++)
 				{
-					iterator p = create(place());
+					petri::iterator p = create(place());
 					connect(p, t);
 					connect(sync[j][k], p);
 				}
@@ -1688,13 +359,13 @@ void graph::petrify(const boolean::variable_set &variables)
 	}
 
 	// Remove the guards from the graph
-	vector<iterator> n = next(passive), p = prev(passive);
+	vector<petri::iterator> n = next(passive), p = prev(passive);
 	passive.insert(passive.end(), n.begin(), n.end());
 	passive.insert(passive.end(), p.begin(), p.end());
 	sort(passive.begin(), passive.end());
 	passive.resize(unique(passive.begin(), passive.end()) - passive.begin());
 
-	cut(passive);
+	erase(passive);
 
 	synchronizations.clear();
 
@@ -1702,15 +373,17 @@ void graph::petrify(const boolean::variable_set &variables)
 	post_process(variables);
 }
 
-void graph::elaborate(const boolean::variable_set &variables, bool report)
+void graph::elaborate(const ucs::variable_set &variables, bool report)
 {
+	parallel_nodes.clear();
+
 	for (int i = 0; i < (int)places.size(); i++)
 	{
 		places[i].predicate = boolean::cover();
 		places[i].effective = boolean::cover();
 	}
 
-	state_map<100000> states;
+	hashtable<state, 100000> states;
 	vector<simulator> simulations;
 	vector<deadlock> deadlocks;
 	simulations.reserve(20000);
@@ -1744,9 +417,17 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 		{
 			// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
 			// and if it is not, then we need to put the state in and continue on our way.
-			state s = sim.get_state();
-			s.encodings.cubes[0] = s.encodings.cubes[0].xoutnulls();
-			bool found = states.insert(s);
+			state s0 = sim.get_state();
+			state *s1 = NULL;
+			s0.encodings.cubes[0] = s0.encodings.cubes[0].xoutnulls();
+
+			bool found = !states.insert(s0, &s1);
+			if (found && s1 != NULL && !s0.encodings.is_subset_of(s1->encodings))
+			{
+				*s1 = state::merge(petri::choice, *s1, s0);
+				found = false;
+			}
+
 			if (found && simulations.size() > 0)
 				simulations.back().merge_errors(sim);
 			else if (!found)
@@ -1784,7 +465,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 				{
 					// Handle the local tokens
 					if (report)
-						progress("", to_string(count) + " " + to_string(simulations.size()) + " " + states.check() + " " + to_string(enabled), __FILE__, __LINE__);
+						progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.max_bucket_size()) + "/" + to_string(states.count) + " " + to_string(enabled), __FILE__, __LINE__);
 
 					for (int i = 0; i < (int)sim.local.ready.size(); i++)
 					{
@@ -1815,10 +496,10 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
 					{
 						for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
-							parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(place::type, sim.local.tokens[j].index)));
+							parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[i].index), petri::iterator(petri::place::type, sim.local.tokens[j].index)));
 						for (int j = 0; j < (int)sim.local.ready.size(); j++)
 							if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
-								parallel_nodes.push_back(pair<iterator, iterator>(iterator(place::type, sim.local.tokens[i].index), iterator(transition::type, sim.local.ready[j].index)));
+								parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[i].index), petri::iterator(petri::transition::type, sim.local.ready[j].index)));
 					}
 
 					/* The effective predicate represents the state encodings that don't have duplicates
@@ -1849,6 +530,7 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
 
 	sort(parallel_nodes.begin(), parallel_nodes.end());
 	parallel_nodes.resize(unique(parallel_nodes.begin(), parallel_nodes.end()) - parallel_nodes.begin());
+	parallel_nodes_ready = true;
 
 	for (int i = 0; i < (int)places.size(); i++)
 	{
@@ -1863,11 +545,11 @@ void graph::elaborate(const boolean::variable_set &variables, bool report)
  * This converts a given graph to the fully expanded state space through simulation. It systematically
  * simulates all possible transition orderings and determines all of the resulting state information.
  */
-graph graph::to_state_graph(const boolean::variable_set &variables)
+graph graph::to_state_graph(const ucs::variable_set &variables)
 {
 	graph result;
-	vector<pair<state, iterator> > states;
-	vector<pair<simulator, iterator> > simulations;
+	vector<pair<state, petri::iterator> > states;
+	vector<pair<simulator, petri::iterator> > simulations;
 	vector<deadlock> deadlocks;
 	vector<pair<int, int> > to_merge;
 
@@ -1876,25 +558,25 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 		for (int j = 0; j < (int)source[i].encodings.cubes.size(); j++)
 		{
 			// Set up the initial state which is determined by the reset behavior
-			iterator init = result.create(place(source[i].encodings.cubes[j]));
+			petri::iterator init = result.create(place(source[i].encodings.cubes[j]));
 			result.source.push_back(state(vector<reset_token>(1, reset_token(init.index, false)), vector<term_index>(), source[i].encodings.cubes[j]));
 
 			// Set up the first simulation that starts at the reset state
-			simulations.push_back(pair<simulator, iterator>(simulator(this, &variables, source[i], j, false), init));
+			simulations.push_back(pair<simulator, petri::iterator>(simulator(this, &variables, source[i], j, false), init));
 
 			// Record the reset state in our map of visited states
 			state s = simulations.back().first.get_state();
-			vector<pair<state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, iterator>(s, iterator()));
+			vector<pair<state, petri::iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, petri::iterator>(s, petri::iterator()));
 			if (loc != states.end() && loc->first == s)
-				loc->first.merge(choice, s);
+				loc->first = state::merge(petri::choice, loc->first, s);
 			else
-				states.insert(loc, pair<state, iterator>(s, init));
+				states.insert(loc, pair<state, petri::iterator>(s, init));
 		}
 	}
 
 	while (simulations.size() > 0)
 	{
-		pair<simulator, iterator> sim = simulations.back();
+		pair<simulator, petri::iterator> sim = simulations.back();
 		simulations.pop_back();
 
 		int enabled = sim.first.enabled();
@@ -1909,15 +591,15 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 				// Look to see if this transition has already been drawn in the state graph
 				// We know by construction that every transition in the state graph will have exactly one cube
 				// and that every transition will be active
-				iterator n(place::type, -1);
-				for (int j = 0; j < (int)result.arcs[place::type].size() && n.index == -1; j++)
-					if (result.arcs[place::type][j].from == simulations.back().second &&
-						result.transitions[result.arcs[place::type][j].to.index].local_action.cubes[0] == transitions[e.index].local_action.cubes[e.term])
+				petri::iterator n(petri::place::type, -1);
+				for (int j = 0; j < (int)result.arcs[petri::place::type].size() && n.index == -1; j++)
+					if (result.arcs[petri::place::type][j].from == simulations.back().second &&
+						result.transitions[result.arcs[petri::place::type][j].to.index].local_action.cubes[0] == transitions[e.index].local_action.cubes[e.term])
 					{
-						simulations.back().second = result.arcs[place::type][j].to;
-						for (int k = 0; k < (int)result.arcs[transition::type].size() && n == -1; k++)
-							if (result.arcs[transition::type][k].from == simulations.back().second)
-								n = result.arcs[transition::type][k].to;
+						simulations.back().second = result.arcs[petri::place::type][j].to;
+						for (int k = 0; k < (int)result.arcs[petri::transition::type].size() && n == -1; k++)
+							if (result.arcs[petri::transition::type][k].from == simulations.back().second)
+								n = result.arcs[petri::transition::type][k].to;
 					}
 
 				// Since it isn't already in the state graph, we need to draw it
@@ -1930,7 +612,7 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 				// Look the see if the resulting state is already in the state graph. If it is, then we are done with this simulation,
 				// and if it is not, then we need to put the state in and continue on our way.
 				state s = simulations.back().first.get_state();
-				vector<pair<state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, iterator>(s, iterator()));
+				vector<pair<state, petri::iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, petri::iterator>(s, petri::iterator()));
 				if (loc != states.end() && loc->first == s)
 				{
 					if (simulations.size() > 1)
@@ -1952,19 +634,19 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 				else if ((loc == states.end() || loc->first != s) && n.index == -1)
 				{
 					simulations.back().second = result.push_back(simulations.back().second, place(s.encodings));
-					states.insert(loc, pair<state, iterator>(s, simulations.back().second));
+					states.insert(loc, pair<state, petri::iterator>(s, simulations.back().second));
 				}
 				else
 				{
 					simulations.back().second = n;
-					states.insert(loc, pair<state, iterator>(s, simulations.back().second));
+					states.insert(loc, pair<state, petri::iterator>(s, simulations.back().second));
 				}
 			}
 			else
 			{
 				simulations.back().first.fire(i);
 				state s = simulations.back().first.get_state();
-				vector<pair<state, iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, iterator>(s, iterator()));
+				vector<pair<state, petri::iterator> >::iterator loc = lower_bound(states.begin(), states.end(), pair<state, petri::iterator>(s, petri::iterator()));
 				if (loc != states.end() && loc->first == s)
 				{
 					if (simulations.size() > 1)
@@ -1979,7 +661,7 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 					simulations.pop_back();
 				}
 				else
-					states.insert(loc, pair<state, iterator>(s, simulations.back().second));
+					states.insert(loc, pair<state, petri::iterator>(s, simulations.back().second));
 			}
 		}
 
@@ -2001,19 +683,19 @@ graph graph::to_state_graph(const boolean::variable_set &variables)
 	to_merge.resize(unique(to_merge.begin(), to_merge.end()) - to_merge.begin());
 	for (int i = 0; i < (int)to_merge.size(); i++)
 	{
-		for (int j = 0; j < (int)result.arcs[place::type].size(); j++)
+		for (int j = 0; j < (int)result.arcs[petri::place::type].size(); j++)
 		{
-			if (result.arcs[place::type][j].from.index == to_merge[i].first)
-				result.arcs[place::type][j].from.index = to_merge[i].second;
-			else if (result.arcs[place::type][j].from.index > to_merge[i].first)
-				result.arcs[place::type][j].from.index--;
+			if (result.arcs[petri::place::type][j].from.index == to_merge[i].first)
+				result.arcs[petri::place::type][j].from.index = to_merge[i].second;
+			else if (result.arcs[petri::place::type][j].from.index > to_merge[i].first)
+				result.arcs[petri::place::type][j].from.index--;
 		}
-		for (int j = 0; j < (int)result.arcs[transition::type].size(); j++)
+		for (int j = 0; j < (int)result.arcs[petri::transition::type].size(); j++)
 		{
-			if (result.arcs[transition::type][j].to.index == to_merge[i].first)
-				result.arcs[transition::type][j].to.index = to_merge[i].second;
-			else if (result.arcs[transition::type][j].to.index > to_merge[i].first)
-				result.arcs[transition::type][j].to.index--;
+			if (result.arcs[petri::transition::type][j].to.index == to_merge[i].first)
+				result.arcs[petri::transition::type][j].to.index = to_merge[i].second;
+			else if (result.arcs[petri::transition::type][j].to.index > to_merge[i].first)
+				result.arcs[petri::transition::type][j].to.index--;
 		}
 		for (int j = 0; j < (int)result.source.size(); j++)
 			for (int k = 0; k < (int)result.source[j].tokens.size(); k++)
@@ -2050,9 +732,9 @@ graph graph::to_petri_net()
 	return result;
 }
 
-void graph::check_variables(const boolean::variable_set &variables)
+void graph::check_variables(const ucs::variable_set &variables)
 {
-	for (int i = 0; i < (int)variables.variables.size(); i++)
+	for (int i = 0; i < (int)variables.nodes.size(); i++)
 	{
 		vector<int> written;
 		vector<int> read;
@@ -2070,9 +752,9 @@ void graph::check_variables(const boolean::variable_set &variables)
 		}
 
 		if (written.size() == 0 && read.size() > 0)
-			warning("", variables.variables[i].to_string() + " never assigned", __FILE__, __LINE__);
+			warning("", variables.nodes[i].to_string() + " never assigned", __FILE__, __LINE__);
 		else if (written.size() == 0 && read.size() == 0)
-			warning("", "unused variable " + variables.variables[i].to_string(), __FILE__, __LINE__);
+			warning("", "unused variable " + variables.nodes[i].to_string(), __FILE__, __LINE__);
 	}
 }
 

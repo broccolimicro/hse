@@ -6,7 +6,7 @@
  */
 
 #include "encoder.h"
-#include <common/standard.h>
+#include "graph.h"
 
 namespace hse
 {
@@ -75,7 +75,7 @@ void encoder::check(bool senseless)
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
 	for (int i = 0; i < (int)base->transitions.size(); i++)
 	{
-		vector<int> p = base->prev(transition::type, i);
+		vector<int> p = base->prev(petri::transition::type, i);
 		boolean::cover si = 1;
 
 		if (base->transitions[i].behavior == transition::active || p.size() > 1)
@@ -106,14 +106,14 @@ void encoder::check(bool senseless)
 						for (int k = 0; k < (int)base->places.size(); k++)
 						{
 							// The place is in the same process as the implicant set of states and it isn't part of any implicant state
-							if ((base->is_reachable(iterator(transition::type, i), iterator(place::type, k)) || base->is_reachable(iterator(place::type, k), iterator(transition::type, i))) &&
-								find(p.begin(), p.end(), k) == p.end() && !base->is_parallel(iterator(place::type, k), iterator(transition::type, i)))
+							if ((base->is_reachable(petri::iterator(petri::transition::type, i), petri::iterator(petri::place::type, k)) || base->is_reachable(petri::iterator(petri::place::type, k), petri::iterator(petri::transition::type, i))) &&
+								find(p.begin(), p.end(), k) == p.end() && !base->is_parallel(petri::iterator(petri::place::type, k), petri::iterator(petri::transition::type, i)))
 							{
 								// Get only the state encodings for the place for which the transition is invacuous and
 								// there is no other vacuous transition that would take a token off the place.
 								boolean::cover check = (base->places[k].effective & ~action);
 
-								vector<int> check_transitions = base->next(hse::place::type, k);
+								vector<int> check_transitions = base->next(petri::place::type, k);
 								for (int l = 0; l < (int)check_transitions.size(); l++)
 								{
 									bool found = false;
@@ -121,7 +121,7 @@ void encoder::check(bool senseless)
 										if (are_mutex(base->transitions[check_transitions[l]].local_action.cubes[m], inv_action))
 										{
 											found = true;
-											vector<int> check_places = base->prev(hse::transition::type, check_transitions[l]);
+											vector<int> check_places = base->prev(petri::transition::type, check_transitions[l]);
 											boolean::cover invalid_check = 1;
 											for (int n = 0; n < (int)check_places.size(); n++)
 												invalid_check &= base->places[check_places[n]].effective;
@@ -140,12 +140,12 @@ void encoder::check(bool senseless)
 									// eliminate entire regions of these conflicts with a single state variable.
 
 									vector<int> r;
-									for (int m = 0; m < (int)base->arcs[place::type].size(); m++)
-										if (base->arcs[place::type][m].from.index == k)
-											r.push_back(base->arcs[place::type][m].to.index);
-									for (int m = 0; m < (int)base->arcs[transition::type].size(); m++)
-										if (base->arcs[transition::type][m].to.index == k)
-											r.push_back(base->arcs[transition::type][m].from.index);
+									for (int m = 0; m < (int)base->arcs[petri::place::type].size(); m++)
+										if (base->arcs[petri::place::type][m].from.index == k)
+											r.push_back(base->arcs[petri::place::type][m].to.index);
+									for (int m = 0; m < (int)base->arcs[petri::transition::type].size(); m++)
+										if (base->arcs[petri::transition::type][m].to.index == k)
+											r.push_back(base->arcs[petri::transition::type][m].from.index);
 
 									sort(r.begin(), r.end());
 
@@ -189,8 +189,8 @@ void encoder::check(bool senseless)
 		if (p.size() > 1)
 		{
 			for (int j = 0; j < (int)base->places.size(); j++)
-				if (find(p.begin(), p.end(), j) == p.end() && (base->is_reachable(iterator(place::type, i), iterator(place::type, j)) || base->is_reachable(iterator(place::type, j), iterator(place::type, i))) &&
-					!base->is_parallel(iterator(place::type, i), iterator(place::type, j)))
+				if (find(p.begin(), p.end(), j) == p.end() && (base->is_reachable(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) || base->is_reachable(petri::iterator(petri::place::type, j), petri::iterator(petri::place::type, i))) &&
+					!base->is_parallel(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)))
 					for (int s = senseless ? -1 : 0; senseless ? s == -1 : s < 2; s++)
 						if (!are_mutex(si.mask(s), base->places[j].effective))
 						{
@@ -198,12 +198,12 @@ void encoder::check(bool senseless)
 							// eliminate entire regions of these conflicts with a single state variable.
 
 							vector<int> r;
-							for (int m = 0; m < (int)base->arcs[place::type].size(); m++)
-								if (base->arcs[place::type][m].from.index == j)
-									r.push_back(base->arcs[place::type][m].to.index);
-							for (int m = 0; m < (int)base->arcs[transition::type].size(); m++)
-								if (base->arcs[transition::type][m].to.index == j)
-									r.push_back(base->arcs[transition::type][m].from.index);
+							for (int m = 0; m < (int)base->arcs[petri::place::type].size(); m++)
+								if (base->arcs[petri::place::type][m].from.index == j)
+									r.push_back(base->arcs[petri::place::type][m].to.index);
+							for (int m = 0; m < (int)base->arcs[petri::transition::type].size(); m++)
+								if (base->arcs[petri::transition::type][m].to.index == j)
+									r.push_back(base->arcs[petri::transition::type][m].from.index);
 
 							sort(r.begin(), r.end());
 
@@ -242,8 +242,8 @@ void encoder::check(bool senseless)
 
 	for (int i = 0; i < (int)base->places.size(); i++)
 		for (int j = 0; j < (int)base->places.size(); j++)
-			if (j != i && (base->is_reachable(iterator(place::type, i), iterator(place::type, j)) || base->is_reachable(iterator(place::type, j), iterator(place::type, i))) &&
-				!base->is_parallel(iterator(place::type, i), iterator(place::type, j)))
+			if (j != i && (base->is_reachable(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) || base->is_reachable(petri::iterator(petri::place::type, j), petri::iterator(petri::place::type, i))) &&
+				!base->is_parallel(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)))
 				for (int s = senseless ? -1 : 0; senseless ? s == -1 : s < 2; s++)
 					if (!are_mutex(base->places[i].effective.mask(s), base->places[j].effective))
 					{
@@ -251,12 +251,12 @@ void encoder::check(bool senseless)
 						// eliminate entire regions of these conflicts with a single state variable.
 
 						vector<int> r;
-						for (int m = 0; m < (int)base->arcs[place::type].size(); m++)
-							if (base->arcs[place::type][m].from.index == j)
-								r.push_back(base->arcs[place::type][m].to.index);
-						for (int m = 0; m < (int)base->arcs[transition::type].size(); m++)
-							if (base->arcs[transition::type][m].to.index == j)
-								r.push_back(base->arcs[transition::type][m].from.index);
+						for (int m = 0; m < (int)base->arcs[petri::place::type].size(); m++)
+							if (base->arcs[petri::place::type][m].from.index == j)
+								r.push_back(base->arcs[petri::place::type][m].to.index);
+						for (int m = 0; m < (int)base->arcs[petri::transition::type].size(); m++)
+							if (base->arcs[petri::transition::type][m].to.index == j)
+								r.push_back(base->arcs[petri::transition::type][m].from.index);
 
 						sort(r.begin(), r.end());
 
