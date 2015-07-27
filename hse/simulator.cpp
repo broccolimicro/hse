@@ -404,7 +404,13 @@ enabled_transition simulator::fire(int index)
 		for (int i = 0; i < (int)local.tokens.size(); i++)
 			for (int j = 0; j < (int)local.tokens[i].prev.size(); j++)
 			{
-				if (!boolean::are_mutex(t.guard, local.tokens[i].prev[j].guard) && boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[local.tokens[i].prev[j].index].local_action[local.tokens[i].prev[j].term]))
+				bool found = false;
+				for (int k = 0; k < (int)prev.size() && !found; k++)
+					found = ((term_index)prev[k] == (term_index)local.tokens[i].prev[j]);
+
+
+				if (!found && !boolean::are_mutex(t.guard, local.tokens[i].prev[j].guard) &&
+					boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[local.tokens[i].prev[j].index].local_action[local.tokens[i].prev[j].term]))
 				{
 					interference err(t, local.tokens[i].prev[j]);
 					vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
@@ -420,13 +426,17 @@ enabled_transition simulator::fire(int index)
 	boolean::cover guard = t.guard;
 	if (base->transitions[t.index].behavior == transition::active)
 	{
-		if (t.stable)
+		if (t.stable && !t.vacuous)
+		{
 			global &= t.guard_action;
+			encoding &= t.guard_action;
+		}
 
 		global = local_assign(global, t.remote_action, t.stable);
-		encoding = remote_assign(local_assign(encoding & t.guard_action, t.local_action, t.stable), global, true);
+		encoding = remote_assign(local_assign(encoding, t.local_action, t.stable), global, true);
 
 		guard = base->transitions[t.index].local_action;
+
 		prev.clear();
 		prev.push_back(t);
 	}
