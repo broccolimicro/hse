@@ -239,7 +239,11 @@ int simulator::enabled(bool sorted)
 			loaded[i].guard &= base->transitions[loaded[i].index].local_action;
 
 		// Now we check to see if the current state passes the guard
+		/*cout << encoding << endl;
+		cout << global << endl;
+		cout << loaded[i].guard << endl;*/
 		int pass = boolean::passes_guard(encoding, global, loaded[i].guard, &loaded[i].guard_action);
+		//cout << pass << endl;
 
 		if (base->transitions[loaded[i].index].behavior == transition::active)
 			for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
@@ -305,11 +309,18 @@ int simulator::enabled(bool sorted)
 			for (int j = 0; j < (int)local.tokens.size(); j++)
 				if (find(local.ready[i].tokens.begin(), local.ready[i].tokens.end(), j) == local.ready[i].tokens.end())
 					for (int k = 0; k < (int)local.tokens[j].prev.size(); k++)
-						if (!are_mutex(local.ready[i].guard, local.tokens[j].prev[k].guard))
+					{
+						bool found = false;
+						for (int l = 0; l < (int)local.ready[i].tokens.size() && !found; l++)
+							for (int m = 0; m < (int)local.tokens[local.ready[i].tokens[l]].prev.size() && !found; m++)
+								found = (term_index)local.tokens[local.ready[i].tokens[l]].prev[m] == (term_index)local.tokens[j].prev[k];
+
+						if (!found && vacuous_assign(global, local.tokens[j].prev[k].remote_action, local.tokens[j].prev[k].stable) && !are_mutex(local.ready[i].guard, local.tokens[j].prev[k].guard))
 						{
 							local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, local.tokens[j].prev[k].remote_action);
 							local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, local.tokens[j].prev[k].remote_action);
 						}
+					}
 
 	for (int i = 0; i < (int)local.ready.size(); i++)
 		for (int j = i+1; j < (int)local.ready.size(); j++)
@@ -426,6 +437,14 @@ enabled_transition simulator::fire(int index)
 	boolean::cover guard = t.guard;
 	if (base->transitions[t.index].behavior == transition::active)
 	{
+		/*cout << "Before" << endl;
+		cout << "Global " << global << endl;
+		cout << "Encoding " << encoding << endl;
+		cout << "Guard " << t.guard_action << endl;
+		cout << "Local " << t.local_action << endl;
+		cout << "Remote " << t.remote_action << endl;
+		cout << "Stable " << t.stable << endl;
+		cout << "Vacuous " << t.vacuous << endl;*/
 		if (t.stable && !t.vacuous)
 		{
 			global &= t.guard_action;
@@ -435,6 +454,10 @@ enabled_transition simulator::fire(int index)
 		global = local_assign(global, t.remote_action, t.stable);
 		encoding = remote_assign(local_assign(encoding, t.local_action, t.stable), global, true);
 
+		/*cout << "After" << endl;
+		cout << "Global " << global << endl;
+		cout << "Encoding " << encoding << endl;*/
+
 		guard = base->transitions[t.index].local_action;
 
 		prev.clear();
@@ -443,9 +466,12 @@ enabled_transition simulator::fire(int index)
 	else if (base->transitions[t.index].behavior == transition::passive)
 	{
 		if (t.stable)
+		{
 			global &= t.guard_action;
+			encoding &= t.guard_action;
+		}
 
-		encoding = remote_assign(encoding & t.guard_action, global, true);
+		encoding = remote_assign(encoding, global, true);
 	}
 
 	for (int i = 0; i < (int)next.size(); i++)
