@@ -26,10 +26,10 @@ struct instability : enabled_transition
 	string to_string(const hse::graph &g, const ucs::variable_set &v);
 };
 
-struct interference : pair<enabled_transition, enabled_transition>
+struct interference : pair<term_index, term_index>
 {
 	interference();
-	interference(const enabled_transition &first, const enabled_transition &second);
+	interference(const term_index &first, const term_index &second);
 	~interference();
 
 	string to_string(const hse::graph &g, const ucs::variable_set &v);
