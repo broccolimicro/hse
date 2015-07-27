@@ -304,23 +304,16 @@ int simulator::enabled(bool sorted)
 	local.ready = potential;
 
 	// TODO we also need to check the remote body
+	// interfering transitions are the active transitions that have fired since this
+	// active transition was enabled.
 	for (int i = 0; i < (int)local.ready.size(); i++)
 		if (base->transitions[local.ready[i].index].behavior == transition::active)
-			for (int j = 0; j < (int)local.tokens.size(); j++)
-				if (find(local.ready[i].tokens.begin(), local.ready[i].tokens.end(), j) == local.ready[i].tokens.end())
-					for (int k = 0; k < (int)local.tokens[j].prev.size(); k++)
-					{
-						bool found = false;
-						for (int l = 0; l < (int)local.ready[i].tokens.size() && !found; l++)
-							for (int m = 0; m < (int)local.tokens[local.ready[i].tokens[l]].prev.size() && !found; m++)
-								found = (term_index)local.tokens[local.ready[i].tokens[l]].prev[m] == (term_index)local.tokens[j].prev[k];
-
-						if (!found && vacuous_assign(global, local.tokens[j].prev[k].remote_action, local.tokens[j].prev[k].stable) && !are_mutex(local.ready[i].guard, local.tokens[j].prev[k].guard))
-						{
-							local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, local.tokens[j].prev[k].remote_action);
-							local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, local.tokens[j].prev[k].remote_action);
-						}
-					}
+			for (int j = 0; j < (int)local.ready[i].history.size(); j++)
+				if (base->transitions[local.ready[i].history[j].index].behavior == transition::active)
+				{
+					local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, base->transitions[local.ready[i].history[j].index].remote_action[local.ready[i].history[j].term]);
+					local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, base->transitions[local.ready[i].history[j].index].remote_action[local.ready[i].history[j].term]);
+				}
 
 	for (int i = 0; i < (int)local.ready.size(); i++)
 		for (int j = i+1; j < (int)local.ready.size(); j++)
