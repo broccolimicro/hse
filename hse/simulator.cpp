@@ -54,7 +54,7 @@ interference::interference()
 
 }
 
-interference::interference(const enabled_transition &first, const enabled_transition &second)
+interference::interference(const term_index &first, const term_index &second)
 {
 	if (first < second)
 	{
@@ -75,10 +75,7 @@ interference::~interference()
 
 string interference::to_string(const hse::graph &g, const ucs::variable_set &v)
 {
-	if (!first.stable || !second.stable)
-		return "weakly interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
-	else
-		return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
 }
 
 mutex::mutex()
@@ -303,18 +300,6 @@ int simulator::enabled(bool sorted)
 
 	local.ready = potential;
 
-	// TODO we also need to check the remote body
-	// interfering transitions are the active transitions that have fired since this
-	// active transition was enabled.
-	for (int i = 0; i < (int)local.ready.size(); i++)
-		if (base->transitions[local.ready[i].index].behavior == transition::active)
-			for (int j = 0; j < (int)local.ready[i].history.size(); j++)
-				if (base->transitions[local.ready[i].history[j].index].behavior == transition::active)
-				{
-					local.ready[i].local_action = boolean::interfere(local.ready[i].local_action, base->transitions[local.ready[i].history[j].index].remote_action[local.ready[i].history[j].term]);
-					local.ready[i].remote_action = boolean::interfere(local.ready[i].remote_action, base->transitions[local.ready[i].history[j].index].remote_action[local.ready[i].history[j].term]);
-				}
-
 	for (int i = 0; i < (int)local.ready.size(); i++)
 		for (int j = i+1; j < (int)local.ready.size(); j++)
 			if (local.ready[i].vacuous && local.ready[j].vacuous && (local.ready[i].index == local.ready[j].index || vector_intersection_size(local.ready[i].tokens, local.ready[j].tokens) > 0))
@@ -401,22 +386,15 @@ enabled_transition simulator::fire(int index)
 		local.tokens.erase(local.tokens.begin() + t.tokens[i]);
 	}
 
-	// Check for interfering transitions. Again, we make the assumption that the previous assignments
-	// are needed to encode the state for the next assignment. This means that it remains active until
-	// the next assignment.
+	// Check for interfering transitions. Interfering transitions are the active transitions that have fired since this
+	// active transition was enabled.
 	if (base->transitions[t.index].behavior == transition::active)
-		for (int i = 0; i < (int)local.tokens.size(); i++)
-			for (int j = 0; j < (int)local.tokens[i].prev.size(); j++)
+		for (int j = 0; j < (int)t.history.size(); j++)
+			if (base->transitions[t.history[j].index].behavior == transition::active)
 			{
-				bool found = false;
-				for (int k = 0; k < (int)prev.size() && !found; k++)
-					found = ((term_index)prev[k] == (term_index)local.tokens[i].prev[j]);
-
-
-				if (!found && !boolean::are_mutex(t.guard, local.tokens[i].prev[j].guard) &&
-					boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[local.tokens[i].prev[j].index].local_action[local.tokens[i].prev[j].term]))
+				if (boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
 				{
-					interference err(t, local.tokens[i].prev[j]);
+					interference err(t, t.history[j]);
 					vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
 					if (loc == interference_errors.end() || *loc != err)
 					{
@@ -424,6 +402,9 @@ enabled_transition simulator::fire(int index)
 						error("", err.to_string(*base, *variables), __FILE__, __LINE__);
 					}
 				}
+
+				t.local_action = boolean::interfere(t.local_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
+				t.remote_action = boolean::interfere(t.remote_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
 			}
 
 	// Update the state
