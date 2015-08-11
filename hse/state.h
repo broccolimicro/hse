@@ -50,13 +50,16 @@ struct enabled_transition : petri::enabled_transition<term_index>
 {
 	enabled_transition();
 	enabled_transition(int index);
+	enabled_transition(int index, int term);
 	~enabled_transition();
 
+	vector<int> output_marking;
 	vector<term_index> history;
 	boolean::cube local_action;
 	boolean::cube remote_action;
 	boolean::cube guard_action;
 	boolean::cover guard;
+	bool remotable;
 	bool vacuous;
 	bool stable;
 };
@@ -86,12 +89,12 @@ struct local_token : petri::token
 {
 	local_token();
 	local_token(int index, bool remotable);
-	local_token(int index, boolean::cover guard, vector<enabled_transition> prev, bool remotable);
+	local_token(int index, boolean::cover guard, int cause = -1, bool remotable = false);
 	local_token(const reset_token &t);
 	~local_token();
 
 	boolean::cover guard;
-	vector<enabled_transition> prev;
+	int cause;
 	bool remotable;
 
 	local_token &operator=(const reset_token &t);

@@ -185,122 +185,291 @@ int simulator::enabled(bool sorted)
 		return 0;
 	}
 
-	/*cout << "local:{";
-	for (int i = 0; i < (int)local.tokens.size(); i++)
-	{
-		if (i != 0)
-			cout << " ";
-		cout << local.tokens[i].index;
-	}
-	cout << "} head:{";
-	for (int i = 0; i < (int)remote.head.size(); i++)
-	{
-		if (i != 0)
-			cout << " ";
-		cout << remote.head[i].index;
-	}
-	cout << "} tail:{";
-	for (int i = 0; i < (int)remote.tail.size(); i++)
-	{
-		if (i != 0)
-			cout << " ";
-		cout << remote.tail[i];
-	}
-	cout << "} body:{";
-	for (int i = 0; i < (int)remote.body.size(); i++)
-	{
-		if (i != 0)
-			cout << " ";
-		cout << remote.body[i].to_string(*base, *variables);
-	}
-	cout << "} " << export_assignment(encoding, *variables).to_string() << "\t" << export_assignment(global, *variables).to_string() << endl;*/
-
+	// Do a pre-screen
+	for (int i = (int)local.tokens.size()-1; i >= 0; i--)
+		if (local.tokens[i].cause >= 0)
+			local.tokens.erase(local.tokens.begin() + i);
 
 	if (local.tokens.size() == 0)
 		return 0;
 
 	// Get the list of transitions have have a sufficient number of local at the input places
-	vector<enabled_transition> loaded = base->enabled<local_token, enabled_transition>(local.tokens, sorted);
-
-	// Now we need to check the guards of all of the loaded transitions against the state
+	vector<enabled_transition> preload;
 	vector<enabled_transition> potential;
-	potential.reserve(loaded.size()*2);
-	for (int i = 0; i < (int)loaded.size(); i++)
+	vector<int> global_disabled;
+
+	int preload_size = 0;
+	do
 	{
-		// If this transition is an assignment, then we need to check to make sure all of the
-		// previous guards pass before we can execute this assignment.
-		for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
-			loaded[i].guard &= local.tokens[loaded[i].tokens[j]].guard;
-
-		if (base->transitions[loaded[i].index].behavior == transition::passive)
-			loaded[i].guard &= base->transitions[loaded[i].index].local_action;
-
-		// Now we check to see if the current state passes the guard
-		/*cout << encoding << endl;
-		cout << global << endl;
-		cout << loaded[i].guard << endl;*/
-		int pass = boolean::passes_guard(encoding, global, loaded[i].guard, &loaded[i].guard_action);
-		//cout << pass << endl;
-
-		if (base->transitions[loaded[i].index].behavior == transition::active)
-			for (loaded[i].term = 0; loaded[i].term < base->transitions[loaded[i].index].local_action.size(); loaded[i].term++)
+		vector<int> disabled = global_disabled;
+		disabled.reserve(max(0, (int)base->transitions.size() - (int)preload.size()));
+		preload_size = preload.size();
+		for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
+		{
+			// Check to see if we haven't already determined that this transition can't be enabled
+			vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
+			if (d == disabled.end() || *d != a->to.index)
 			{
-				loaded[i].local_action = base->transitions[loaded[i].index].local_action[loaded[i].term];
-				loaded[i].remote_action = base->transitions[loaded[i].index].remote_action[loaded[i].term];
-
-				// If this transition is vacuous then its enabled even if its incoming guards are not firing
-				// This is global and not local for the following reason: if there are two equivalent assignments
-				// on the same net: x'0+ and x'1+ such that x'0+ happens first and x'1+ happens before it can observe
-				// the value on x'0, is x'1+ vacuous? I assume yes because the two assignments are not differentiable in
-				// the event rule system.
-				loaded[i].vacuous = base->transitions[loaded[i].index].behavior == transition::active &&
-									vacuous_assign(global, loaded[i].remote_action, loaded[i].stable);
-
-				if (pass >= 0 || loaded[i].vacuous)
+				// Find the index of this transition (if any) in the preload pool
+				bool preload_found = false;
+				for (int i = (int)preload.size()-1; i >= 0; i--)
 				{
-					// If it does, then this transition may fire.
-					loaded[i].stable = true;
-					if (!loaded[i].vacuous)
-						loaded[i].stable = (bool)pass;
+					if (preload[i].index == a->to.index)
+					{
+						preload_found = true;
 
-					potential.push_back(loaded[i]);
+						// Check to make sure that this enabled transition isn't from a previous iteration.
+						if (i >= preload_size)
+						{
+							// Check to see if there is any token at the input place of this arc and make sure that
+							// this token has not already been consumed by this particular transition
+							// Also since we only need one token per arc, we can stop once we've found a token
+							vector<int> matching_tokens;
+							for (int j = 0; j < (int)local.tokens.size(); j++)
+							{
+								if (a->from.index == local.tokens[j].index)
+								{
+									// We have to implement a recursive...ish algorithm here
+									// to check to see if this token has already been used by
+									// any of the transitions in the chain
+									bool used = false;
+									vector<int> test = preload[i].tokens;
+									for (int k = 0; k < (int)test.size() && !used; k++)
+									{
+										used = (test[k] == j);
+										if (local.tokens[test[k]].cause >= 0)
+											test.insert(test.end(), preload[local.tokens[test[k]].cause].tokens.begin(), preload[local.tokens[test[k]].cause].tokens.end());
+									}
+
+									if (!used)
+										matching_tokens.push_back(j);
+								}
+							}
+
+							// there might be more than one matching token
+							for (int j = (int)matching_tokens.size()-1; j >= 1; j--)
+							{
+								preload.push_back(preload[i]);
+								preload.back().tokens.push_back(matching_tokens[j]);
+							}
+
+							if ((int)matching_tokens.size() > 0)
+								preload[i].tokens.push_back(matching_tokens[0]);
+							else
+							{
+								// If we didn't find a token at the input place, then we know that this transition can't
+								// be enabled. So lets remove this from the list of possibly enabled transitions and
+								// remember as much in the disabled list.
+								disabled.insert(d, a->to.index);
+								preload.erase(preload.begin() + i);
+							}
+						}
+					}
+				}
+
+				// If we didn't find this transition in the preload list, then this is our
+				// first encounter with this transition being possibly enabled for all of the
+				// previous iterations. We need to add it to the preload list.
+				if (!preload_found)
+				{
+					bool token_found = false;
+					for (int j = 0; j < (int)local.tokens.size(); j++)
+						if (a->from.index == local.tokens[j].index)
+						{
+							token_found = true;
+							preload.push_back(enabled_transition(a->to.index));
+							preload.back().tokens.push_back(j);
+						}
+
+					if (!token_found)
+						disabled.insert(d, a->to.index);
 				}
 			}
-		else if (pass >= 0)
+		}
+
+		// Now we need to check the guards of all of the loaded transitions against the state
+		for (int i = (int)preload.size()-1; i >= preload_size; i--)
 		{
-			loaded[i].stable = (bool)pass;
-			potential.push_back(loaded[i]);
+			preload[i].remotable = true;
+			for (int j = 0; j < (int)preload[i].tokens.size(); j++)
+				preload[i].remotable = preload[i].remotable && local.tokens[preload[i].tokens[j]].remotable;
+
+			// If this transition is a guard, we check to see if it passes (either stable or unstable)
+			// if it is an assignment, then we check to see if it is vacuous. If either of these hold
+			// true, then we can keep going.
+
+			// If this transition is an assignment, then we need to check to make sure all of the
+			// previous guards pass before we can execute this assignment.
+			for (int j = 0; j < (int)preload[i].tokens.size(); j++)
+				preload[i].guard &= local.tokens[preload[i].tokens[j]].guard;
+
+			if (base->transitions[preload[i].index].behavior == transition::passive)
+				preload[i].guard &= base->transitions[preload[i].index].local_action;
+
+			// Check for unstable transitions
+			bool previously_enabled = false;
+			for (int j = 0; j < (int)local.ready.size() && !previously_enabled; j++)
+				if (local.ready[j].index == preload[i].index)
+				{
+					preload[i].history = local.ready[j].history;
+					previously_enabled = true;
+				}
+
+			// Now we check to see if the current state passes the guard
+			int ready = boolean::passes_guard(encoding, global, preload[i].guard, &preload[i].guard_action);
+			if (ready < 0 && previously_enabled)
+				ready = 0;
+
+			preload[i].stable = (ready > 0);
+
+			bool pass = true;
+			if (base->transitions[preload[i].index].behavior == transition::active)
+				pass = boolean::vacuous_assign(global, base->transitions[preload[i].index].remote_action, preload[i].stable);
+
+			if (!pass)
+			{
+				if (ready >= 0)
+					potential.push_back(preload[i]);
+
+				for (int j = 0; j < (int)local.tokens.size(); j++)
+					if (local.tokens[j].cause > i)
+						local.tokens[j].cause--;
+
+				global_disabled.push_back(preload[i].index);
+				sort(global_disabled.begin(), global_disabled.end());
+				preload.erase(preload.begin() + i);
+			}
+			else
+			{
+				vector<int> output = base->next(transition::type, preload[i].index);
+				bool loop = false;
+				for (int j = 0; j < (int)output.size() && !loop; j++)
+					for (int k = 0; k < (int)local.tokens.size() && !loop; k++)
+						if (local.tokens[k].cause == -1 && local.tokens[k].index == output[j])
+							loop = true;
+
+				if (!loop)
+				{
+					boolean::cover guard = preload[i].guard;
+					if (base->transitions[preload[i].index].behavior == transition::active)
+						guard = 1;//base->transitions[preload[i].index].local_action; //TODO assumption about prs guards
+
+
+					for (int j = 0; j < (int)output.size(); j++)
+					{
+						preload[i].output_marking.push_back((int)local.tokens.size());
+						local.tokens.push_back(local_token(output[j], guard, i, preload[i].remotable));
+					}
+				}
+				else
+				{
+					for (int j = 0; j < (int)local.tokens.size(); j++)
+						if (local.tokens[j].cause > i)
+							local.tokens[j].cause--;
+
+					global_disabled.push_back(preload[i].index);
+					sort(global_disabled.begin(), global_disabled.end());
+					preload.erase(preload.begin() + i);
+				}
+			}
+		}
+	} while ((int)preload.size() != preload_size);
+
+	for (int i = 0; i < (int)potential.size(); i++)
+	{
+		// Get the output marking of the potential
+		boolean::cover guard = potential[i].guard;
+		if (base->transitions[potential[i].index].behavior == transition::active)
+			guard = 1;//base->transitions[potential[i].index].local_action; //TODO assumption about prs guards
+
+		vector<int> output = base->next(transition::type, potential[i].index);
+		for (int j = 0; j < (int)output.size(); j++)
+		{
+			potential[i].output_marking.push_back((int)local.tokens.size());
+			local.tokens.push_back(local_token(output[j], guard, preload.size(), potential[i].remotable));
+		}
+		preload.push_back(potential[i]);
+
+		// We need to go through the potential list of transitions and flatten their input and output tokens.
+		// Since we know that no transition can use the same token twice, we can simply mush them all
+		// into one big list and then remove duplicates.
+		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
+			if (local.tokens[potential[i].tokens[j]].cause >= 0 && local.tokens[potential[i].tokens[j]].cause < (int)preload.size())
+			{
+				potential[i].tokens.insert(potential[i].tokens.end(), preload[local.tokens[potential[i].tokens[j]].cause].tokens.begin(), preload[local.tokens[potential[i].tokens[j]].cause].tokens.end());
+				potential[i].output_marking.insert(potential[i].output_marking.end(), preload[local.tokens[potential[i].tokens[j]].cause].output_marking.begin(), preload[local.tokens[potential[i].tokens[j]].cause].output_marking.end());
+			}
+		sort(potential[i].tokens.begin(), potential[i].tokens.end());
+		potential[i].tokens.resize(unique(potential[i].tokens.begin(), potential[i].tokens.end()) - potential[i].tokens.begin());
+		sort(potential[i].output_marking.begin(), potential[i].output_marking.end());
+		potential[i].output_marking.resize(unique(potential[i].output_marking.begin(), potential[i].output_marking.end()) - potential[i].output_marking.begin());
+
+		// take the set symmetric difference, but leave the two sets separate.
+		for (int j = 0, k = 0; j < (int)potential[i].tokens.size() && k < (int)potential[i].output_marking.size(); )
+		{
+			if (potential[i].tokens[j] == potential[i].output_marking[k])
+			{
+				potential[i].tokens.erase(potential[i].tokens.begin() + j);
+				potential[i].output_marking.erase(potential[i].output_marking.begin() + k);
+			}
+			else if (potential[i].tokens[j] > potential[i].output_marking[k])
+				k++;
+			else if (potential[i].tokens[j] < potential[i].output_marking[k])
+				j++;
 		}
 	}
 
-	// Check for unstable transitions
-	int i = 0, j = 0;
-	while (i < (int)local.ready.size())
+	for (int i = (int)potential.size()-1; i >= 0; i--)
 	{
-		if (j >= (int)potential.size() || (term_index)local.ready[i] < (term_index)potential[j])
+		for (int j = (int)base->transitions[potential[i].index].local_action.cubes.size()-1; j > 0; j--)
 		{
-			local.ready[i].stable = false;
-			potential.insert(potential.begin() + j, local.ready[i]);
-			i++;
-			j++;
+			potential.push_back(potential[i]);
+			potential.back().term = j;
+			potential.back().local_action = base->transitions[potential[i].index].local_action.cubes[j];
+			potential.back().remote_action = base->transitions[potential[i].index].remote_action.cubes[j];
 		}
-		else if ((term_index)potential[j] < (term_index)local.ready[i])
-			j++;
-		else
-		{
-			potential[j].history = local.ready[i].history;
-			i++;
-			j++;
-		}
+
+		potential[i].term = 0;
+		potential[i].local_action = base->transitions[potential[i].index].local_action.cubes[0];
+		potential[i].remote_action = base->transitions[potential[i].index].remote_action.cubes[0];
 	}
+	sort(potential.begin(), potential.end());
+
+	/*for (int i = 0; i < (int)local.tokens.size(); i++)
+		cout << "Token     " << i << ": " << local.tokens[i].index << " " << local.tokens[i].cause << " " << local.tokens[i].guard << endl;
+
+	for (int i = 0; i < (int)preload.size(); i++)
+	{
+		cout << "Preload   " << i << ":\t" << preload[i].index << "\t{";
+		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
+			cout << preload[i].tokens[j] << " ";
+			//cout << "\ttoken " << local.tokens[preload[i].tokens[j]].index << " " << local.tokens[preload[i].tokens[j]].cause << " " << local.tokens[preload[i].tokens[j]].guard << endl;
+		cout << "} {";
+		for (int j = 0; j < (int)preload[i].output_marking.size(); j++)
+			cout << preload[i].output_marking[j] << " ";
+			//cout << "\ttoken " << local.tokens[preload[i].output_marking[j]].index << " " << local.tokens[preload[i].output_marking[j]].cause << " " << local.tokens[preload[i].output_marking[j]].guard << endl;
+		cout << "}" << endl;
+	}
+
+	for (int i = 0; i < (int)potential.size(); i++)
+	{
+		cout << "Potential " << i << ":\t" << potential[i].index << "\t{";
+		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
+			cout << potential[i].tokens[j] << " ";
+			//cout << "\ttoken " << local.tokens[potential[i].tokens[j]].index << " " << local.tokens[potential[i].tokens[j]].cause << " " << local.tokens[potential[i].tokens[j]].guard << endl;
+		cout << "} {";
+		for (int j = 0; j < (int)potential[i].output_marking.size(); j++)
+			cout << potential[i].output_marking[j] << " ";
+			//cout << "\ttoken " << local.tokens[potential[i].output_marking[j]].index << " " << local.tokens[potential[i].output_marking[j]].cause << " " << local.tokens[potential[i].output_marking[j]].guard << endl;
+		cout << "}" << endl;
+	}*/
 
 	if (last.index >= 0)
 		for (int i = 0; i < (int)potential.size(); i++)
 			potential[i].history.push_back(last);
 
 	local.ready = potential;
-
-	for (int i = 0; i < (int)local.ready.size(); i++)
+	/*for (int i = 0; i < (int)local.ready.size(); i++)
 		for (int j = i+1; j < (int)local.ready.size(); j++)
 			if (local.ready[i].vacuous && local.ready[j].vacuous && (local.ready[i].index == local.ready[j].index || vector_intersection_size(local.ready[i].tokens, local.ready[j].tokens) > 0))
 			{
@@ -311,7 +480,7 @@ int simulator::enabled(bool sorted)
 					mutex_errors.insert(loc, err);
 					warning("", err.to_string(*base, *variables), __FILE__, __LINE__);
 				}
-			}
+			}*/
 
 	// Now in the production rule simulator, here is where I would automatically execute all of the
 	// vacuous transitions, but that leads to some really strange (incorrect?) behavior in an HSE.
@@ -368,23 +537,16 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Update the local.tokens
-	vector<int> next = base->next(petri::transition::type, t.index);
-	vector<enabled_transition> prev;
-	sort(t.tokens.rbegin(), t.tokens.rend());
-	bool remotable = true;
-	for (int i = 0; i < (int)t.tokens.size(); i++)
-	{
-		remotable = remotable && local.tokens[t.tokens[i]].remotable;
+	for (int i = 0; i < (int)t.output_marking.size(); i++)
+		local.tokens[t.output_marking[i]].cause = -1;
 
-		// Keep the other enabled transition tokens up to date
-		for (int j = 0; j < (int)local.ready.size(); j++)
-			for (int k = 0; k < (int)local.ready[j].tokens.size(); k++)
-				if (local.ready[j].tokens[k] > t.tokens[i])
-					local.ready[j].tokens[k]--;
-
-		prev.insert(prev.end(), local.tokens[t.tokens[i]].prev.begin(), local.tokens[t.tokens[i]].prev.end());
+	sort(t.tokens.begin(), t.tokens.end());
+	for (int i = t.tokens.size()-1; i >= 0; i--)
 		local.tokens.erase(local.tokens.begin() + t.tokens[i]);
-	}
+
+	for (int i = local.tokens.size()-1; i >= 0; i--)
+		if (local.tokens[i].cause >= 0)
+			local.tokens.erase(local.tokens.begin() + i);
 
 	// Check for interfering transitions. Interfering transitions are the active transitions that have fired since this
 	// active transition was enabled.
@@ -408,48 +570,14 @@ enabled_transition simulator::fire(int index)
 			}
 
 	// Update the state
-	boolean::cover guard = t.guard;
-	if (base->transitions[t.index].behavior == transition::active)
+	if (t.stable && !t.vacuous)
 	{
-		/*cout << "Before" << endl;
-		cout << "Global " << global << endl;
-		cout << "Encoding " << encoding << endl;
-		cout << "Guard " << t.guard_action << endl;
-		cout << "Local " << t.local_action << endl;
-		cout << "Remote " << t.remote_action << endl;
-		cout << "Stable " << t.stable << endl;
-		cout << "Vacuous " << t.vacuous << endl;*/
-		if (t.stable && !t.vacuous)
-		{
-			global &= t.guard_action;
-			encoding &= t.guard_action;
-		}
-
-		global = local_assign(global, t.remote_action, t.stable);
-		encoding = remote_assign(local_assign(encoding, t.local_action, t.stable), global, true);
-
-		/*cout << "After" << endl;
-		cout << "Global " << global << endl;
-		cout << "Encoding " << encoding << endl;*/
-
-		guard = base->transitions[t.index].local_action;
-
-		prev.clear();
-		prev.push_back(t);
-	}
-	else if (base->transitions[t.index].behavior == transition::passive)
-	{
-		if (t.stable)
-		{
-			global &= t.guard_action;
-			encoding &= t.guard_action;
-		}
-
-		encoding = remote_assign(encoding, global, true);
+		global &= t.guard_action;
+		encoding &= t.guard_action;
 	}
 
-	for (int i = 0; i < (int)next.size(); i++)
-		local.tokens.push_back(local_token(next[i], guard, prev, remotable));
+	global = local_assign(global, t.remote_action, t.stable);
+	encoding = remote_assign(local_assign(encoding, t.local_action, t.stable), global, true);
 
 	last = t;
 	return t;

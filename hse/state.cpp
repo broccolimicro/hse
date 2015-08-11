@@ -82,6 +82,7 @@ enabled_transition::enabled_transition()
 	term = 0;
 	vacuous = false;
 	stable = true;
+	remotable = true;
 	guard = 1;
 }
 
@@ -91,6 +92,17 @@ enabled_transition::enabled_transition(int index)
 	this->term = 0;
 	vacuous = false;
 	stable = true;
+	remotable = true;
+	guard = 1;
+}
+
+enabled_transition::enabled_transition(int index, int term)
+{
+	this->index = index;
+	this->term = term;
+	vacuous = false;
+	stable = true;
+	remotable = true;
 	guard = 1;
 }
 
@@ -157,6 +169,7 @@ local_token::local_token()
 	index = 0;
 	remotable = false;
 	guard = 1;
+	cause = -1;
 }
 
 local_token::local_token(int index, bool remotable)
@@ -164,13 +177,14 @@ local_token::local_token(int index, bool remotable)
 	this->index = index;
 	this->remotable = remotable;
 	this->guard = 1;
+	this->cause = -1;
 }
 
-local_token::local_token(int index, boolean::cover guard, vector<enabled_transition> prev, bool remotable)
+local_token::local_token(int index, boolean::cover guard, int cause, bool remotable)
 {
 	this->index = index;
 	this->guard = guard;
-	this->prev = prev;
+	this->cause = cause;
 	this->remotable = remotable;
 }
 
@@ -179,6 +193,7 @@ local_token::local_token(const reset_token &t)
 	index = t.index;
 	remotable = t.remotable;
 	guard = 1;
+	cause = -1;
 }
 
 local_token::~local_token()
@@ -312,7 +327,9 @@ state::state(vector<local_token> tokens, deque<enabled_environment> environment,
 	for (int i = 0; i < (int)environment.size(); i++)
 		this->environment.push_back((term_index)environment[i]);
 	for (int i = 0; i < (int)tokens.size(); i++)
-		this->tokens.push_back(reset_token(tokens[i]));
+		if (tokens[i].cause < 0)
+			this->tokens.push_back(reset_token(tokens[i]));
+
 	sort(this->tokens.begin(), this->tokens.end());
 	sort(this->environment.begin(), this->environment.end());
 	this->encodings = encodings;
