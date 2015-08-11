@@ -139,106 +139,100 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	for (int i = 0; i < (int)transitions.size(); i++)
 		transitions[i].remote_action = transitions[i].local_action.remote(variables.get_groups());
 
+	// Handle Reset Behavior
 	bool change = true;
 	while (change)
 	{
-		change = super::reduce(proper_nesting);
+		super::reduce(proper_nesting);
 
-		if (!change)
+		change = false;
+		for (int i = 0; i < (int)source.size(); i++)
 		{
-			int i = 0;
-			while (i < (int)reset.size() || (reset.size() == 0 && i < (int)source.size()))
+			vector<petri::enabled_transition<term_index> > enabled = this->enabled<reset_token, petri::enabled_transition<term_index> >(source[i].tokens, false);
+
+			change = false;
+			for (int j = 0; j < (int)enabled.size() && !change; j++)
 			{
-				vector<simulator> sim;
-
-				if (reset.size() == 0)
-					for (int j = 0; j < source[i].encodings.size(); j++)
-						sim.push_back(simulator(this, &variables, source[i], j, false));
-				else
-					for (int j = 0; j < reset[i].encodings.size(); j++)
-						sim.push_back(simulator(this, &variables, reset[i], j, false));
-
-				vector<pair<term_index, vector<int> > > enabled;
-				for (int j = 0; j < (int)sim.size(); j++)
-					sim[j].enabled();
-
-				for (int j = 0; j < (int)sim[0].local.ready.size(); j++)
+				bool firable = transitions[enabled[j].index].local_action.cubes.size() <= 1;
+				for (int k = 0; k < (int)enabled[j].tokens.size() && firable; k++)
 				{
-					vector<int> locs;
-					locs.push_back(j);
-					bool found = true;
-					for (int k = 1; k < (int)sim.size() && found; k++)
-					{
-						found = false;
-						for (int l = 0; l < (int)sim[k].local.ready.size() && !found; l++)
-							if ((term_index)sim[k].local.ready[l] == (term_index)sim[0].local.ready[j])
-							{
-								found = true;
-								locs.push_back(l);
-							}
-					}
-
-					if (found)
-						enabled.push_back(pair<term_index, vector<int> >((term_index)sim[0].local.ready[j], locs));
+					for (int l = 0; l < (int)arcs[petri::transition::type].size() && firable; l++)
+						if (arcs[petri::transition::type][l].to.index == source[i].tokens[enabled[j].tokens[k]].index)
+							firable = false;
+					for (int l = 0; l < (int)arcs[petri::place::type].size() && firable; l++)
+						if (arcs[petri::place::type][l].from.index == source[i].tokens[enabled[j].tokens[k]].index && arcs[petri::place::type][l].to.index != enabled[j].index)
+							firable = false;
 				}
 
-				int j = 0;
-				while (j < (int)enabled.size())
+				if (firable)
 				{
-					bool firable = transitions[enabled[j].first.index].local_action.cubes.size() <= 1;
-					for (int k = 0; k < (int)sim[0].local.ready[j].tokens.size() && firable; k++)
+					bool remotable = true;
+					sort(enabled[j].tokens.begin(), enabled[j].tokens.end());
+					for (int k = (int)enabled[j].tokens.size()-1; k >= 0; k--)
 					{
-						for (int l = 0; l < (int)arcs[petri::transition::type].size() && firable; l++)
-							if (arcs[petri::transition::type][l].to.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index)
-								firable = false;
-						for (int l = 0; l < (int)arcs[petri::place::type].size() && firable; l++)
-							if (arcs[petri::place::type][l].from.index == sim[0].local.tokens[sim[0].local.ready[j].tokens[k]].index && arcs[petri::place::type][l].to.index != enabled[j].first.index)
-								firable = false;
+						remotable = remotable && source[i].tokens[enabled[j].tokens[k]].remotable;
+						source[i].tokens.erase(source[i].tokens.begin() + enabled[j].tokens[k]);
 					}
 
-					if (firable)
+					vector<int> n = next(transition::type, enabled[j].index);
+					for (int k = 0; k < (int)n.size(); k++)
+						source[i].tokens.push_back(reset_token(n[k], remotable));
+
+					if (transitions[enabled[j].index].behavior == transition::active)
 					{
-						for (int k = 0; k < (int)sim.size(); k++)
-							sim[k].fire(enabled[j].second[k]);
-						change = true;
-						enabled.clear();
-						for (int k = 0; k < (int)sim.size(); k++)
-							sim[k].enabled();
-
-						for (int k = 0; k < (int)sim[0].local.ready.size(); k++)
-						{
-							vector<int> locs;
-							locs.push_back(k);
-							bool found = true;
-							for (int l = 1; l < (int)sim.size() && found; l++)
-							{
-								found = false;
-								for (int m = 0; m < (int)sim[l].local.ready.size() && !found; m++)
-									if ((term_index)sim[l].local.ready[m] == (term_index)sim[0].local.ready[k])
-									{
-										found = true;
-										locs.push_back(m);
-									}
-							}
-
-							if (found)
-								enabled.push_back(pair<term_index, vector<int> >((term_index)sim[0].local.ready[k], locs));
-						}
-						j = 0;
+						source[i].encodings = local_assign(source[i].encodings, transitions[enabled[j].index].local_action, true);
+						source[i].encodings = remote_assign(source[i].encodings, transitions[enabled[j].index].remote_action, true);
 					}
 					else
-						j++;
+						source[i].encodings &= transitions[enabled[j].index].local_action;
+
+					change = true;
+				}
+			}
+		}
+
+		for (int i = 0; i < (int)reset.size(); i++)
+		{
+			vector<petri::enabled_transition<term_index> > enabled = this->enabled<reset_token, petri::enabled_transition<term_index> >(reset[i].tokens, false);
+
+			change = false;
+			for (int j = 0; j < (int)enabled.size() && !change; j++)
+			{
+				bool firable = transitions[enabled[j].index].local_action.cubes.size() <= 1;
+				for (int k = 0; k < (int)enabled[j].tokens.size() && firable; k++)
+				{
+					for (int l = 0; l < (int)arcs[petri::transition::type].size() && firable; l++)
+						if (arcs[petri::transition::type][l].to.index == reset[i].tokens[enabled[j].tokens[k]].index)
+							firable = false;
+					for (int l = 0; l < (int)arcs[petri::place::type].size() && firable; l++)
+						if (arcs[petri::place::type][l].from.index == reset[i].tokens[enabled[j].tokens[k]].index && arcs[petri::place::type][l].to.index != enabled[j].index)
+							firable = false;
 				}
 
-				state result = sim[0].get_state();
-				for (int j = 1; j < (int)sim.size(); j++)
-					result = state::merge(petri::choice, result, sim[j].get_state());
+				if (firable)
+				{
+					bool remotable = true;
+					sort(enabled[j].tokens.begin(), enabled[j].tokens.end());
+					for (int k = (int)enabled[j].tokens.size()-1; k >= 0; k--)
+					{
+						remotable = remotable && reset[i].tokens[enabled[j].tokens[k]].remotable;
+						reset[i].tokens.erase(reset[i].tokens.begin() + enabled[j].tokens[k]);
+					}
 
-				if (reset.size() == 0)
-					source[i] = result;
-				else
-					reset[i] = result;
-				i++;
+					vector<int> n = next(transition::type, enabled[j].index);
+					for (int k = 0; k < (int)n.size(); k++)
+						reset[i].tokens.push_back(reset_token(n[k], remotable));
+
+					if (transitions[enabled[j].index].behavior == transition::active)
+					{
+						reset[i].encodings = local_assign(reset[i].encodings, transitions[enabled[j].index].local_action, true);
+						reset[i].encodings = remote_assign(reset[i].encodings, transitions[enabled[j].index].remote_action, true);
+					}
+					else
+						reset[i].encodings &= transitions[enabled[j].index].local_action;
+
+					change = true;
+				}
 			}
 		}
 	}

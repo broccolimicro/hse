@@ -18,6 +18,11 @@ term_index::term_index()
 	term = -1;
 }
 
+term_index::term_index(int index) : petri::term_index(index)
+{
+	term = -1;
+}
+
 term_index::term_index(int index, int term) : petri::term_index(index)
 {
 	this->term = term;

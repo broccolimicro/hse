@@ -352,7 +352,7 @@ int simulator::enabled(bool sorted)
 				{
 					boolean::cover guard = preload[i].guard;
 					if (base->transitions[preload[i].index].behavior == transition::active)
-						guard = 1;//base->transitions[preload[i].index].local_action; //TODO assumption about prs guards
+						guard = base->transitions[preload[i].index].local_action; //TODO assumption about prs guards
 
 
 					for (int j = 0; j < (int)output.size(); j++)
@@ -380,7 +380,7 @@ int simulator::enabled(bool sorted)
 		// Get the output marking of the potential
 		boolean::cover guard = potential[i].guard;
 		if (base->transitions[potential[i].index].behavior == transition::active)
-			guard = 1;//base->transitions[potential[i].index].local_action; //TODO assumption about prs guards
+			guard = base->transitions[potential[i].index].local_action; //TODO assumption about prs guards
 
 		vector<int> output = base->next(transition::type, potential[i].index);
 		for (int j = 0; j < (int)output.size(); j++)
@@ -435,52 +435,11 @@ int simulator::enabled(bool sorted)
 	}
 	sort(potential.begin(), potential.end());
 
-	/*for (int i = 0; i < (int)local.tokens.size(); i++)
-		cout << "Token     " << i << ": " << local.tokens[i].index << " " << local.tokens[i].cause << " " << local.tokens[i].guard << endl;
-
-	for (int i = 0; i < (int)preload.size(); i++)
-	{
-		cout << "Preload   " << i << ":\t" << preload[i].index << "\t{";
-		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
-			cout << preload[i].tokens[j] << " ";
-			//cout << "\ttoken " << local.tokens[preload[i].tokens[j]].index << " " << local.tokens[preload[i].tokens[j]].cause << " " << local.tokens[preload[i].tokens[j]].guard << endl;
-		cout << "} {";
-		for (int j = 0; j < (int)preload[i].output_marking.size(); j++)
-			cout << preload[i].output_marking[j] << " ";
-			//cout << "\ttoken " << local.tokens[preload[i].output_marking[j]].index << " " << local.tokens[preload[i].output_marking[j]].cause << " " << local.tokens[preload[i].output_marking[j]].guard << endl;
-		cout << "}" << endl;
-	}
-
-	for (int i = 0; i < (int)potential.size(); i++)
-	{
-		cout << "Potential " << i << ":\t" << potential[i].index << "\t{";
-		for (int j = 0; j < (int)potential[i].tokens.size(); j++)
-			cout << potential[i].tokens[j] << " ";
-			//cout << "\ttoken " << local.tokens[potential[i].tokens[j]].index << " " << local.tokens[potential[i].tokens[j]].cause << " " << local.tokens[potential[i].tokens[j]].guard << endl;
-		cout << "} {";
-		for (int j = 0; j < (int)potential[i].output_marking.size(); j++)
-			cout << potential[i].output_marking[j] << " ";
-			//cout << "\ttoken " << local.tokens[potential[i].output_marking[j]].index << " " << local.tokens[potential[i].output_marking[j]].cause << " " << local.tokens[potential[i].output_marking[j]].guard << endl;
-		cout << "}" << endl;
-	}*/
-
 	if (last.index >= 0)
 		for (int i = 0; i < (int)potential.size(); i++)
 			potential[i].history.push_back(last);
 
 	local.ready = potential;
-	/*for (int i = 0; i < (int)local.ready.size(); i++)
-		for (int j = i+1; j < (int)local.ready.size(); j++)
-			if (local.ready[i].vacuous && local.ready[j].vacuous && (local.ready[i].index == local.ready[j].index || vector_intersection_size(local.ready[i].tokens, local.ready[j].tokens) > 0))
-			{
-				mutex err(local.ready[i], local.ready[j]);
-				vector<mutex>::iterator loc = lower_bound(mutex_errors.begin(), mutex_errors.end(), err);
-				if (loc == mutex_errors.end() || *loc != err)
-				{
-					mutex_errors.insert(loc, err);
-					warning("", err.to_string(*base, *variables), __FILE__, __LINE__);
-				}
-			}*/
 
 	// Now in the production rule simulator, here is where I would automatically execute all of the
 	// vacuous transitions, but that leads to some really strange (incorrect?) behavior in an HSE.

@@ -26,6 +26,7 @@ struct graph;
 struct term_index : petri::term_index
 {
 	term_index();
+	term_index(int index);
 	term_index(int index, int term);
 	~term_index();
 
