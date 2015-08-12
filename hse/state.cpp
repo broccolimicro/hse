@@ -85,7 +85,7 @@ enabled_transition::enabled_transition()
 {
 	index = 0;
 	term = 0;
-	vacuous = false;
+	vacuous = true;
 	stable = true;
 	remotable = true;
 	guard = 1;
@@ -95,7 +95,7 @@ enabled_transition::enabled_transition(int index)
 {
 	this->index = index;
 	this->term = 0;
-	vacuous = false;
+	vacuous = true;
 	stable = true;
 	remotable = true;
 	guard = 1;
@@ -105,7 +105,7 @@ enabled_transition::enabled_transition(int index, int term)
 {
 	this->index = index;
 	this->term = term;
-	vacuous = false;
+	vacuous = true;
 	stable = true;
 	remotable = true;
 	guard = 1;

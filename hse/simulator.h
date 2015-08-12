@@ -76,7 +76,8 @@ struct simulator
 	struct
 	{
 		vector<local_token> tokens;
-		vector<enabled_transition> ready;
+		vector<enabled_transition> loaded;
+		vector<pair<int, int> > ready;
 	} local;
 
 	struct
@@ -102,8 +103,6 @@ struct simulator
 
 	void merge_errors(const simulator &sim);
 	state get_state();
-
-	vector<pair<int, int> > get_vacuous_choices();
 };
 
 }

@@ -56,8 +56,6 @@ struct enabled_transition : petri::enabled_transition<term_index>
 
 	vector<int> output_marking;
 	vector<term_index> history;
-	boolean::cube local_action;
-	boolean::cube remote_action;
 	boolean::cube guard_action;
 	boolean::cover guard;
 	bool remotable;

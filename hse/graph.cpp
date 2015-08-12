@@ -427,94 +427,131 @@ void graph::elaborate(const ucs::variable_set &variables, bool report)
 			else if (!found)
 			{
 				int enabled = sim.enabled();
-				vector<pair<int, int> > vacuous_choices = sim.get_vacuous_choices();
-				int index = -1;
-				for (int i = 0; i < (int)sim.local.ready.size() && index == -1; i++)
-					if (sim.local.ready[i].vacuous)
-					{
-						index = i;
-						for (int j = 0; j < (int)vacuous_choices.size() && index != -1; j++)
-							if (vacuous_choices[j].first == i || vacuous_choices[j].second == i)
-								index = -1;
-					}
+				// Handle the local tokens
+				if (report)
+					progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.max_bucket_size()) + "/" + to_string(states.count) + " " + to_string(enabled), __FILE__, __LINE__);
 
-				if (index != -1)
+				// Fire the transition in the simulation
+				for (int i = 0; i < (int)sim.local.ready.size(); i++)
 				{
 					simulations.push_back(sim);
-					simulations.back().fire(index);
+					simulations.back().fire(i);
 				}
-				else if (vacuous_choices.size() > 0)
-				{
-					for (int i = 0; i < (int)sim.local.ready.size(); i++)
-						if (sim.local.ready[i].vacuous)
-						{
-							simulations.push_back(sim);
-							enabled_transition e = simulations.back().local.ready[i];
 
-							// Fire the transition in the simulation
-							simulations.back().fire(i);
-						}
+				if (sim.local.ready.size() == 0)
+				{
+					deadlock d = sim.get_state();
+					vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
+					if (dloc == deadlocks.end() || *dloc != d)
+					{
+						error("", d.to_string(variables), __FILE__, __LINE__);
+						deadlocks.insert(dloc, d);
+					}
+
+					if (simulations.size() > 0)
+						simulations.back().merge_errors(sim);
 				}
-				else
+
+				// Figure out which nodes are in parallel
+				vector<vector<int> > tokens(1, vector<int>());
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+					if (sim.local.tokens[i].cause < 0)
+						tokens[0].push_back(i);
+
+				while (tokens.size() > 0)
 				{
-					// Handle the local tokens
-					if (report)
-						progress("", to_string(count) + " " + to_string(simulations.size()) + " " + to_string(states.max_bucket_size()) + "/" + to_string(states.count) + " " + to_string(enabled), __FILE__, __LINE__);
+					vector<int> curr = tokens.back();
+					tokens.pop_back();
 
-					for (int i = 0; i < (int)sim.local.ready.size(); i++)
+					vector<int> enabled_loaded;
+					for (int i = 0; i < (int)sim.local.loaded.size(); i++)
 					{
-						simulations.push_back(sim);
-						enabled_transition e = simulations.back().local.ready[i];
+						bool ready = true;
+						for (int j = 0; j < (int)sim.local.loaded[i].tokens.size() && ready; j++)
+							if (find(curr.begin(), curr.end(), sim.local.loaded[i].tokens[j]) == curr.end())
+								ready = false;
 
-						for (int j = 0; j < (int)e.tokens.size(); j++)
-							places[simulations.back().local.tokens[e.tokens[j]].index].predicate |= simulations.back().encoding.flipped_mask(places[simulations.back().local.tokens[e.tokens[j]].index].mask);
-
-						// Fire the transition in the simulation
-						simulations.back().fire(i);
+						if (ready)
+							enabled_loaded.push_back(i);
 					}
 
-					if (sim.local.ready.size() == 0)
+					for (int i = 0; i < (int)curr.size(); i++)
 					{
-						deadlock d = sim.get_state();
-						vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
-						if (dloc == deadlocks.end() || *dloc != d)
+						for (int j = i+1; j < (int)curr.size(); j++)
 						{
-							error("", d.to_string(variables), __FILE__, __LINE__);
-							deadlocks.insert(dloc, d);
+							if (sim.local.tokens[curr[i]].index <= sim.local.tokens[curr[j]].index)
+								parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[curr[i]].index), petri::iterator(petri::place::type, sim.local.tokens[curr[j]].index)));
+							else
+								parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[curr[j]].index), petri::iterator(petri::place::type, sim.local.tokens[curr[i]].index)));
 						}
 
-						if (simulations.size() > 0)
-							simulations.back().merge_errors(sim);
+						for (int j = 0; j < (int)enabled_loaded.size(); j++)
+							if (find(sim.local.loaded[enabled_loaded[j]].tokens.begin(), sim.local.loaded[enabled_loaded[j]].tokens.end(), curr[i]) == sim.local.loaded[enabled_loaded[j]].tokens.end())
+								parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[curr[i]].index), petri::iterator(petri::transition::type, sim.local.loaded[enabled_loaded[j]].index)));
 					}
 
-					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+					for (int i = 0; i < (int)enabled_loaded.size(); i++)
 					{
-						for (int j = i+1; j < (int)sim.local.tokens.size(); j++)
-							parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[i].index), petri::iterator(petri::place::type, sim.local.tokens[j].index)));
-						for (int j = 0; j < (int)sim.local.ready.size(); j++)
-							if (find(sim.local.ready[j].tokens.begin(), sim.local.ready[j].tokens.end(), i) == sim.local.ready[j].tokens.end())
-								parallel_nodes.push_back(pair<petri::iterator, petri::iterator>(petri::iterator(petri::place::type, sim.local.tokens[i].index), petri::iterator(petri::transition::type, sim.local.ready[j].index)));
-					}
+						tokens.push_back(curr);
+						for (int j = (int)tokens.back().size()-1; j >= 0; j--)
+							if (find(sim.local.loaded[enabled_loaded[i]].tokens.begin(), sim.local.loaded[enabled_loaded[i]].tokens.end(), tokens.back()[j]) != sim.local.loaded[enabled_loaded[i]].tokens.end())
+								tokens.back().erase(tokens.back().begin() + j);
 
-					/* The effective predicate represents the state encodings that don't have duplicates
-					 * in later states.
-					 *
-					 * TODO check the wchb
-					 */
+						tokens.back().insert(tokens.back().end(), sim.local.loaded[enabled_loaded[i]].output_marking.begin(), sim.local.loaded[enabled_loaded[i]].output_marking.end());
+					}
+				}
+
+				/* The effective predicate represents the state encodings that don't have duplicates
+				 * in later states.
+				 *
+				 * I have to loop through all of the enabled transitions, and then loop through all orderings
+				 * of their dependent guards, saving the state
+				 *
+				 * TODO check the wchb
+				 */
+				vector<set<int> > en_in(sim.local.tokens.size(), set<int>());
+				vector<set<int> > en_out(sim.local.tokens.size(), set<int>());
+
+				bool change = true;
+				while (change)
+				{
+					change = false;
+					for (int i = 0; i < (int)sim.local.loaded.size(); i++)
+					{
+						set<int> total_in;
+						for (int j = 0; j < (int)sim.local.loaded[i].tokens.size(); j++)
+							total_in.insert(en_in[sim.local.loaded[i].tokens[j]].begin(), en_in[sim.local.loaded[i].tokens[j]].end());
+						total_in.insert(sim.local.loaded[i].index);
+
+						for (int j = 0; j < (int)sim.local.loaded[i].output_marking.size(); j++)
+						{
+							set<int> old_in = en_in[sim.local.loaded[i].output_marking[j]];
+							en_in[sim.local.loaded[i].output_marking[j]].insert(total_in.begin(), total_in.end());
+							if (en_in[sim.local.loaded[i].output_marking[j]] != old_in)
+								change = true;
+						}
+					}
+				}
+
+				for (int i = 0; i < (int)sim.local.loaded.size(); i++)
+					for (int j = 0; j < (int)sim.local.loaded[i].tokens.size(); j++)
+						en_out[sim.local.loaded[i].tokens[j]].insert(sim.local.loaded[i].index);
+
+				for (int i = 0; i < (int)sim.local.tokens.size(); i++)
+				{
 					boolean::cover en = 1;
-					for (int i = 0; i < (int)sim.local.ready.size(); i++)
-					{
-						if (transitions[sim.local.ready[i].index].behavior == transition::active)
-							en &= ~transitions[sim.local.ready[i].index].local_action.cubes[sim.local.ready[i].term];
-						else
-							en &= ~transitions[sim.local.ready[i].index].local_action;
-					}
+					boolean::cover dis = 1;
+					for (set<int>::iterator j = en_in[i].begin(); j != en_in[i].end(); j++)
+						en &= transitions[*j].local_action;
 
-					for (int i = 0; i < (int)sim.local.tokens.size(); i++)
-						places[sim.local.tokens[i].index].effective |= (sim.encoding.xoutnulls() & en).flipped_mask(places[sim.local.tokens[i].index].mask);//acting[i].second);
+					for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
+						dis &= ~transitions[*j].local_action;
 
-					count++;
+					places[sim.local.tokens[i].index].predicate |= (sim.encoding.xoutnulls() & en).flipped_mask(places[sim.local.tokens[i].index].mask);
+					places[sim.local.tokens[i].index].effective |= (sim.encoding.xoutnulls() & en & dis).flipped_mask(places[sim.local.tokens[i].index].mask);
 				}
+
+				count++;
 			}
 		}
 	}
@@ -539,7 +576,7 @@ void graph::elaborate(const ucs::variable_set &variables, bool report)
  * This converts a given graph to the fully expanded state space through simulation. It systematically
  * simulates all possible transition orderings and determines all of the resulting state information.
  */
-graph graph::to_state_graph(const ucs::variable_set &variables)
+/*graph graph::to_state_graph(const ucs::variable_set &variables)
 {
 	graph result;
 	vector<pair<state, petri::iterator> > states;
@@ -712,7 +749,7 @@ graph graph::to_state_graph(const ucs::variable_set &variables)
 	}
 
 	return result;
-}
+}*/
 
 /* to_petri_net()
  *
