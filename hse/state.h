@@ -58,7 +58,6 @@ struct enabled_transition : petri::enabled_transition<term_index>
 	vector<term_index> history;
 	boolean::cube guard_action;
 	boolean::cover guard;
-	bool remotable;
 	bool vacuous;
 	bool stable;
 };
@@ -70,89 +69,42 @@ bool operator>=(enabled_transition i, enabled_transition j);
 bool operator==(enabled_transition i, enabled_transition j);
 bool operator!=(enabled_transition i, enabled_transition j);
 
-struct enabled_environment : petri::enabled_transition<term_index>
-{
-	enabled_environment();
-	enabled_environment(int index);
-	~enabled_environment();
-
-	boolean::cover guard;
-};
-
-struct reset_token;
-
 /* A local token maintains its own local state information and cannot access global state
  * except through transformations applied to its local state.
  */
-struct local_token : petri::token
+struct token : petri::token
 {
-	local_token();
-	local_token(int index, bool remotable);
-	local_token(int index, boolean::cover guard, int cause = -1, bool remotable = false);
-	local_token(const reset_token &t);
-	~local_token();
+	token();
+	token(petri::token t);
+	token(int index);
+	token(int index, boolean::cover guard, int cause = -1);
+	~token();
 
 	boolean::cover guard;
 	int cause;
-	bool remotable;
 
-	local_token &operator=(const reset_token &t);
 	string to_string();
 };
 
-/* A remote token is a token that does not maintain its own state but acts only as an environment for a local token.
- */
-struct remote_token : petri::token
-{
-	remote_token();
-	remote_token(int index, boolean::cover guard);
-	remote_token(const reset_token &t);
-	~remote_token();
-
-	boolean::cover guard;
-
-	remote_token &operator=(const reset_token &t);
-	string to_string();
-};
-
-/* A local token maintains its own local state information and cannot access global state
- * except through transformations applied to its local state.
- */
-struct reset_token : petri::token
-{
-	reset_token();
-	reset_token(int index, bool remotable);
-	reset_token(const remote_token &t);
-	reset_token(const local_token &t);
-	~reset_token();
-
-	bool remotable;
-
-	reset_token &operator=(const remote_token &t);
-	reset_token &operator=(const local_token &t);
-	string to_string(const ucs::variable_set &variables);
-};
-
-ostream &operator<<(ostream &os, vector<reset_token> t);
-
-struct state : petri::state<reset_token>
+struct state : petri::state<petri::token>
 {
 	state();
-	state(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings);
-	state(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings);
+	state(vector<petri::token> tokens, boolean::cube encodings);
+	state(vector<hse::token> tokens, boolean::cube encodings);
 	~state();
 
-	vector<term_index> environment;
-	boolean::cover encodings;
+	boolean::cube encodings;
 
 	void hash(hasher &hash) const;
 
-	static state merge(int composition, const state &s0, const state &s1);
-	static state collapse(int composition, int index, const state &s);
+	static state merge(const state &s0, const state &s1);
+	static state collapse(int index, const state &s);
 	state convert(map<petri::iterator, petri::iterator> translate) const;
 	bool is_subset_of(const state &s);
 	string to_string(const ucs::variable_set &variables);
 };
+
+ostream &operator<<(ostream &os, state s);
 
 bool operator<(state s1, state s2);
 bool operator>(state s1, state s2);

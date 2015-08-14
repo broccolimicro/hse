@@ -87,7 +87,6 @@ enabled_transition::enabled_transition()
 	term = 0;
 	vacuous = true;
 	stable = true;
-	remotable = true;
 	guard = 1;
 }
 
@@ -97,7 +96,6 @@ enabled_transition::enabled_transition(int index)
 	this->term = 0;
 	vacuous = true;
 	stable = true;
-	remotable = true;
 	guard = 1;
 }
 
@@ -107,7 +105,6 @@ enabled_transition::enabled_transition(int index, int term)
 	this->term = term;
 	vacuous = true;
 	stable = true;
-	remotable = true;
 	guard = 1;
 }
 
@@ -150,169 +147,42 @@ bool operator!=(enabled_transition i, enabled_transition j)
 	return ((term_index)i != (term_index)j || i.history != j.history);
 }
 
-enabled_environment::enabled_environment()
+token::token()
 {
 	index = 0;
-	term = 0;
-	guard = 1;
-}
-
-enabled_environment::enabled_environment(int index)
-{
-	this->index = index;
-	this->term = 0;
-	this->guard = 1;
-}
-
-enabled_environment::~enabled_environment()
-{
-
-}
-
-local_token::local_token()
-{
-	index = 0;
-	remotable = false;
 	guard = 1;
 	cause = -1;
 }
 
-local_token::local_token(int index, bool remotable)
+token::token(petri::token t)
+{
+	index = t.index;
+	guard = 1;
+	cause = -1;
+}
+
+token::token(int index)
 {
 	this->index = index;
-	this->remotable = remotable;
 	this->guard = 1;
 	this->cause = -1;
 }
 
-local_token::local_token(int index, boolean::cover guard, int cause, bool remotable)
+token::token(int index, boolean::cover guard, int cause)
 {
 	this->index = index;
 	this->guard = guard;
 	this->cause = cause;
-	this->remotable = remotable;
 }
 
-local_token::local_token(const reset_token &t)
-{
-	index = t.index;
-	remotable = t.remotable;
-	guard = 1;
-	cause = -1;
-}
-
-local_token::~local_token()
+token::~token()
 {
 
 }
 
-local_token &local_token::operator=(const reset_token &t)
-{
-	index = t.index;
-	remotable = t.remotable;
-	guard = 1;
-	return *this;
-}
-
-string local_token::to_string()
+string token::to_string()
 {
 	return "P" + ::to_string(index);
-}
-
-remote_token::remote_token()
-{
-	index = 0;
-	guard = 1;
-}
-
-remote_token::remote_token(int index, boolean::cover guard)
-{
-	this->index = index;
-	this->guard = guard;
-}
-
-remote_token::remote_token(const reset_token &t)
-{
-	index = t.index;
-	guard = 1;
-}
-
-remote_token::~remote_token()
-{
-
-}
-
-remote_token &remote_token::operator=(const reset_token &t)
-{
-	index = t.index;
-	guard = 1;
-	return *this;
-}
-
-string remote_token::to_string()
-{
-	return "P" + ::to_string(index);
-}
-
-reset_token::reset_token()
-{
-	index = 0;
-	remotable = false;
-}
-
-reset_token::reset_token(int index, bool remotable)
-{
-	this->index = index;
-	this->remotable = remotable;
-}
-
-reset_token::reset_token(const remote_token &t)
-{
-	index = t.index;
-	remotable = true;
-}
-
-reset_token::reset_token(const local_token &t)
-{
-	index = t.index;
-	remotable = t.remotable;
-}
-
-reset_token::~reset_token()
-{
-
-}
-
-reset_token &reset_token::operator=(const remote_token &t)
-{
-	index = t.index;
-	remotable = true;
-	return *this;
-}
-
-reset_token &reset_token::operator=(const local_token &t)
-{
-	index = t.index;
-	remotable = t.remotable;
-	return *this;
-}
-
-string reset_token::to_string(const ucs::variable_set &variables)
-{
-	return "P" + ::to_string(index);
-}
-
-ostream &operator<<(ostream &os, vector<reset_token> t)
-{
-	os << "{";
-	for (int i = 0; i < (int)t.size(); i++)
-	{
-		if (i != 0)
-			os << " ";
-		os << t[i].index << "," << t[i].remotable;
-	}
-	os << "}";
-	return os;
 }
 
 state::state()
@@ -320,23 +190,19 @@ state::state()
 	encodings = 1;
 }
 
-state::state(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings)
+state::state(vector<petri::token> tokens, boolean::cube encodings)
 {
 	this->tokens = tokens;
-	this->environment = environment;
 	this->encodings = encodings;
 }
 
-state::state(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings)
+state::state(vector<hse::token> tokens, boolean::cube encodings)
 {
-	for (int i = 0; i < (int)environment.size(); i++)
-		this->environment.push_back((term_index)environment[i]);
 	for (int i = 0; i < (int)tokens.size(); i++)
 		if (tokens[i].cause < 0)
-			this->tokens.push_back(reset_token(tokens[i]));
+			this->tokens.push_back(tokens[i]);
 
 	sort(this->tokens.begin(), this->tokens.end());
-	sort(this->environment.begin(), this->environment.end());
 	this->encodings = encodings;
 }
 
@@ -348,10 +214,9 @@ state::~state()
 void state::hash(hasher &hash) const
 {
 	hash.put(&tokens);
-	hash.put(&environment);
 }
 
-state state::merge(int composition, const state &s0, const state &s1)
+state state::merge(const state &s0, const state &s1)
 {
 	state result;
 
@@ -359,27 +224,16 @@ state state::merge(int composition, const state &s0, const state &s1)
 	::merge(s0.tokens.begin(), s0.tokens.end(), s1.tokens.begin(), s1.tokens.end(), result.tokens.begin());
 	result.tokens.resize(unique(result.tokens.begin(), result.tokens.end()) - result.tokens.begin());
 
-	result.environment.resize(s0.environment.size() + s1.environment.size());
-	::merge(s0.environment.begin(), s0.environment.end(), s1.environment.begin(), s1.environment.end(), result.environment.begin());
-	result.environment.resize(unique(result.environment.begin(), result.environment.end()) - result.environment.begin());
-
-	if (composition == petri::parallel)
-		result.encodings = s0.encodings & s1.encodings;
-	else if (composition == petri::choice)
-		result.encodings = s0.encodings | s1.encodings;
+	result.encodings = s0.encodings & s1.encodings;
 
 	return result;
 }
 
-state state::collapse(int composition, int index, const state &s)
+state state::collapse(int index, const state &s)
 {
 	state result;
 
-	bool remotable = true;
-	for (int i = 0; i < (int)s.tokens.size(); i++)
-		remotable = (remotable && s.tokens[i].remotable);
-	result.tokens.push_back(reset_token(index, remotable));
-
+	result.tokens.push_back(petri::token(index));
 	result.encodings = s.encodings;
 
 	return result;
@@ -393,14 +247,7 @@ state state::convert(map<petri::iterator, petri::iterator> translate) const
 	{
 		map<petri::iterator, petri::iterator>::iterator loc = translate.find(petri::iterator(place::type, tokens[i].index));
 		if (loc != translate.end())
-			result.tokens.push_back(reset_token(loc->second.index, tokens[i].remotable));
-	}
-
-	for (int i = 0; i < (int)environment.size(); i++)
-	{
-		map<petri::iterator, petri::iterator>::iterator loc = translate.find(petri::iterator(transition::type, environment[i].index));
-		if (loc != translate.end())
-			result.environment.push_back(term_index(loc->second.index, environment[i].term));
+			result.tokens.push_back(petri::token(loc->second.index));
 	}
 
 	result.encodings = encodings;
@@ -410,7 +257,7 @@ state state::convert(map<petri::iterator, petri::iterator> translate) const
 
 bool state::is_subset_of(const state &s)
 {
-	return (tokens == s.tokens && environment == s.environment && encodings.is_subset_of(s.encodings));
+	return (tokens == s.tokens && encodings.is_subset_of(s.encodings));
 }
 
 string state::to_string(const ucs::variable_set &variables)
@@ -420,51 +267,57 @@ string state::to_string(const ucs::variable_set &variables)
 	{
 		if (i != 0)
 			result += " ";
-		result += tokens[i].to_string(variables);
-	}
-	result += "} {";
-	for (int i = 0; i < (int)environment.size(); i++)
-	{
-		if (i != 0)
-			result += " ";
-		result += "T" + ::to_string(environment[i].index) + "." + ::to_string(environment[i].term);
+		result += ::to_string(tokens[i].index);
 	}
 	result += "} " + export_expression_hfactor(encodings, variables).to_string();
 	return result;
 }
 
+ostream &operator<<(ostream &os, state s)
+{
+	os << "{";
+	for (int i = 0; i < (int)s.tokens.size(); i++)
+	{
+		if (i != 0)
+			os << " ";
+		os << s.tokens[i].index;
+	}
+	os << "} " << s.encodings;
+	return os;
+}
+
 bool operator<(state s1, state s2)
 {
 	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment < s2.environment);
+		   (s1.tokens == s2.tokens && s1.encodings < s2.encodings);
 }
 
 bool operator>(state s1, state s2)
 {
 	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment > s2.environment);
+		   (s1.tokens == s2.tokens && s1.encodings > s2.encodings);
 }
 
 bool operator<=(state s1, state s2)
 {
 	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment <= s2.environment);
+		   (s1.tokens == s2.tokens && s1.encodings <= s2.encodings);
 }
 
 bool operator>=(state s1, state s2)
 {
 	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.environment >= s2.environment);
+		   (s1.tokens == s2.tokens && s1.encodings >= s2.encodings);
 }
 
 bool operator==(state s1, state s2)
 {
-	return s1.tokens == s2.tokens && s1.environment == s2.environment;
+	return s1.tokens == s2.tokens && s1.encodings == s2.encodings;
 }
 
 bool operator!=(state s1, state s2)
 {
-	return s1.tokens != s2.tokens || s1.environment != s2.environment;
+	return s1.tokens != s2.tokens || s1.encodings != s2.encodings;
 }
 
 }

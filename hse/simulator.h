@@ -48,8 +48,7 @@ struct deadlock : state
 {
 	deadlock();
 	deadlock(const state &s);
-	deadlock(vector<reset_token> tokens, vector<term_index> environment, boolean::cover encodings);
-	deadlock(vector<local_token> tokens, deque<enabled_environment> environment, boolean::cover encodings);
+	deadlock(vector<token> tokens, boolean::cube encodings);
 	~deadlock();
 
 	string to_string(const ucs::variable_set &v);
@@ -58,7 +57,7 @@ struct deadlock : state
 struct simulator
 {
 	simulator();
-	simulator(const graph *base, const ucs::variable_set *variables, state initial, int index, bool environment);
+	simulator(const graph *base, const ucs::variable_set *variables, state initial);
 	~simulator();
 
 	vector<instability> instability_errors;
@@ -73,36 +72,16 @@ struct simulator
 	boolean::cube encoding;
 	boolean::cube global;
 
-	struct
-	{
-		vector<local_token> tokens;
-		vector<enabled_transition> loaded;
-		vector<pair<int, int> > ready;
-	} local;
-
-	struct
-	{
-		// structures for handling the environment
-		// indexes for places in the graph
-		vector<int> tail;
-		vector<remote_token> head;
-
-		// indices for transitions in the graph between the head and the tail
-		deque<enabled_environment> body;
-
-		vector<enabled_environment> ready;
-	} remote;
+	vector<token> tokens;
+	vector<enabled_transition> loaded;
+	vector<pair<int, int> > ready;
 
 	int enabled(bool sorted = false);
 	enabled_transition fire(int index);
 
-	int possible(bool sorted = false);
-	enabled_environment begin(int index);
-	void end();
-	void environment();
-
 	void merge_errors(const simulator &sim);
 	state get_state();
+	state get_key();
 };
 
 }
