@@ -350,7 +350,7 @@ int simulator::enabled(bool sorted)
 				if (!loop)
 				{
 					boolean::cover guard = preload[i].guard;
-					if (base->transitions[preload[i].index].behavior == transition::active)
+					if (base->transitions[preload[i].index].behavior == transition::active && base->transitions[preload[i].index].local_action != 1)
 						guard = base->transitions[preload[i].index].local_action; //TODO assumption about prs guards
 
 					for (int j = 0; j < (int)output.size(); j++)
@@ -377,7 +377,7 @@ int simulator::enabled(bool sorted)
 	{
 		// Get the output marking of the potential
 		boolean::cover guard = potential[i].guard;
-		if (base->transitions[potential[i].index].behavior == transition::active)
+		if (base->transitions[potential[i].index].behavior == transition::active && base->transitions[potential[i].index].local_action != 1)
 			guard = base->transitions[potential[i].index].local_action; //TODO assumption about prs guards
 
 		vector<int> output = base->next(transition::type, potential[i].index);
