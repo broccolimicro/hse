@@ -15,16 +15,19 @@ namespace hse
 
 term_index::term_index()
 {
+	index = -1;
 	term = -1;
 }
 
-term_index::term_index(int index) : petri::term_index(index)
+term_index::term_index(int index)
 {
+	this->index = index;
 	term = -1;
 }
 
-term_index::term_index(int index, int term) : petri::term_index(index)
+term_index::term_index(int index, int term)
 {
+	this->index = index;
 	this->term = term;
 }
 
@@ -84,7 +87,6 @@ bool operator!=(term_index i, term_index j)
 enabled_transition::enabled_transition()
 {
 	index = 0;
-	term = 0;
 	vacuous = true;
 	stable = true;
 	guard = 1;
@@ -93,7 +95,6 @@ enabled_transition::enabled_transition()
 enabled_transition::enabled_transition(int index)
 {
 	this->index = index;
-	this->term = 0;
 	vacuous = true;
 	stable = true;
 	guard = 1;
@@ -102,7 +103,6 @@ enabled_transition::enabled_transition(int index)
 enabled_transition::enabled_transition(int index, int term)
 {
 	this->index = index;
-	this->term = term;
 	vacuous = true;
 	stable = true;
 	guard = 1;
@@ -113,38 +113,46 @@ enabled_transition::~enabled_transition()
 
 }
 
+string enabled_transition::to_string(const graph &g, const ucs::variable_set &v)
+{
+	if (g.transitions[index].behavior == transition::active)
+		return "T" + ::to_string(index) + ":" + export_composition(g.transitions[index].local_action, v).to_string();
+	else
+		return "T" + ::to_string(index) + ":[" + export_expression_xfactor(g.transitions[index].local_action, v).to_string() + "]";
+}
+
 bool operator<(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i < (term_index)j) ||
-		   ((term_index)i == (term_index)j && i.history < j.history);
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.history < j.history);
 }
 
 bool operator>(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i > (term_index)j) ||
-		   ((term_index)i == (term_index)j && i.history > j.history);
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.history > j.history);
 }
 
 bool operator<=(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i < (term_index)j) ||
-		   ((term_index)i == (term_index)j && i.history <= j.history);
+	return (i.index < j.index) ||
+		   (i.index == j.index && i.history <= j.history);
 }
 
 bool operator>=(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i > (term_index)j) ||
-		   ((term_index)i == (term_index)j && i.history >= j.history);
+	return (i.index > j.index) ||
+		   (i.index == j.index && i.history >= j.history);
 }
 
 bool operator==(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i == (term_index)j && i.history == j.history);
+	return (i.index == j.index && i.history == j.history);
 }
 
 bool operator!=(enabled_transition i, enabled_transition j)
 {
-	return ((term_index)i != (term_index)j || i.history != j.history);
+	return (i.index != j.index || i.history != j.history);
 }
 
 token::token()

@@ -131,7 +131,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		change = false;
 		for (int i = 0; i < (int)source.size(); i++)
 		{
-			vector<petri::enabled_transition<term_index> > enabled = this->enabled<petri::token, petri::enabled_transition<term_index> >(source[i].tokens, false);
+			vector<petri::enabled_transition> enabled = this->enabled<petri::token, petri::enabled_transition>(source[i].tokens, false);
 
 			change = false;
 			for (int j = 0; j < (int)enabled.size() && !change; j++)
@@ -189,7 +189,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 
 		for (int i = 0; i < (int)reset.size(); i++)
 		{
-			vector<petri::enabled_transition<term_index> > enabled = this->enabled<petri::token, petri::enabled_transition<term_index> >(reset[i].tokens, false);
+			vector<petri::enabled_transition> enabled = this->enabled<petri::token, petri::enabled_transition>(reset[i].tokens, false);
 
 			change = false;
 			for (int j = 0; j < (int)enabled.size() && !change; j++)

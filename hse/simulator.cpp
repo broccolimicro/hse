@@ -535,9 +535,9 @@ enabled_transition simulator::fire(int index)
 		for (int j = 0; j < (int)t.history.size(); j++)
 			if (base->transitions[t.history[j].index].behavior == transition::active)
 			{
-				if (boolean::are_mutex(base->transitions[t.index].remote_action[t.term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
+				if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
 				{
-					interference err(t, t.history[j]);
+					interference err(term_index(t.index, term), t.history[j]);
 					vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
 					if (loc == interference_errors.end() || *loc != err)
 					{
@@ -560,7 +560,7 @@ enabled_transition simulator::fire(int index)
 	global = local_assign(global, remote_action, t.stable);
 	encoding = remote_assign(local_assign(encoding, local_action, t.stable), global, true);
 
-	last = t;
+	last = term_index(t.index, term);
 	return t;
 }
 

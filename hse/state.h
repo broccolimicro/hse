@@ -23,13 +23,14 @@ struct graph;
 /* This points to the cube 'term' in the action of transition 'index' in a graph.
  * i.e. g.transitions[index].action.cubes[term]
  */
-struct term_index : petri::term_index
+struct term_index
 {
 	term_index();
 	term_index(int index);
 	term_index(int index, int term);
 	~term_index();
 
+	int index;
 	int term;
 
 	void hash(hasher &hash) const;
@@ -47,7 +48,7 @@ bool operator!=(term_index i, term_index j);
 /* This stores all the information necessary to fire an enabled transition: the local
  * and remote tokens that enable it, and the total state of those tokens.
  */
-struct enabled_transition : petri::enabled_transition<term_index>
+struct enabled_transition : petri::enabled_transition
 {
 	enabled_transition();
 	enabled_transition(int index);
@@ -60,6 +61,8 @@ struct enabled_transition : petri::enabled_transition<term_index>
 	boolean::cover guard;
 	bool vacuous;
 	bool stable;
+
+	string to_string(const graph &g, const ucs::variable_set &v);
 };
 
 bool operator<(enabled_transition i, enabled_transition j);
