@@ -80,7 +80,7 @@ void encoder::check(bool senseless)
 
 		if (base->transitions[i].behavior == transition::active || p.size() > 1)
 		{
-			// The the state encodings for the implicant set of states of the transition.
+			// The state encodings for the implicant set of states of the transition.
 			// these are the state encodings for which there is no vacuous transition that would
 			// take a token off of any of the places.
 			for (int j = 0; j < (int)p.size(); j++)
@@ -105,6 +105,9 @@ void encoder::check(bool senseless)
 
 						for (int k = 0; k < (int)base->places.size(); k++)
 						{
+							vector<int> assigns = base->associated_assigns(vector<int>(1, k));
+
+
 							// The place is in the same process as the implicant set of states and it isn't part of any implicant state
 							if ((base->is_reachable(petri::iterator(petri::transition::type, i), petri::iterator(petri::place::type, k)) || base->is_reachable(petri::iterator(petri::place::type, k), petri::iterator(petri::transition::type, i))) &&
 								find(p.begin(), p.end(), k) == p.end() && !base->is_parallel(petri::iterator(petri::place::type, k), petri::iterator(petri::transition::type, i)))

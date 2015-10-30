@@ -70,8 +70,21 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	graph();
 	~graph();
 
+	/* Arbiters specify pairs of mutually exclusive transitions. These
+	 * transitions must be composed conditionally or a lot of things
+	 * will break. These are ultimately only used to remove false
+	 * positive conflicts of states after guards in a non-deterministic
+	 * selection statement. We target the transitions and not the splitting
+	 * place of the selection statement in order to support non-properly
+	 * nested HSE.
+	 */
+	vector<pair<int, int> > arbiters;
+
+	map<petri::iterator, petri::iterator> merge(int composition, const graph &g);
 	void post_process(const ucs::variable_set &variables, bool proper_nesting = false);
 	void check_variables(const ucs::variable_set &variables);
+	vector<int> first_assigns();
+	vector<int> associated_assigns(vector<int> tokens);
 };
 
 }

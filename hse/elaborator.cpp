@@ -146,8 +146,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		 *
 		 * I have to loop through all of the enabled transitions, and then loop through all orderings
 		 * of their dependent guards, saving the state
-		 *
-		 * TODO check the wchb
 		 */
 		vector<set<int> > en_in(sim.tokens.size(), set<int>());
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
@@ -215,6 +213,20 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		done_progress();
 }
 
+struct simulation
+{
+	simulation() {}
+	simulation(simulator exec, petri::iterator node)
+	{
+		this->exec = exec;
+		this->node = node;
+	}
+	~simulation() {}
+
+	simulator exec;
+	petri::iterator node;
+};
+
 /** to_state_graph()
  *
  * This converts a given graph to the fully expanded state space through simulation. It systematically
@@ -224,7 +236,7 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 {
 	graph result;
 	hashmap<state, petri::iterator, 10000> states;
-	vector<pair<simulator, petri::iterator> > simulations;
+	vector<simulation> simulations;
 	vector<deadlock> deadlocks;
 
 	if (g.reset.size() > 0)
@@ -243,7 +255,7 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 				result.reset.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.reset[i].encodings));
 
 				// Set up the first simulation that starts at the reset state
-				simulations.push_back(pair<simulator, petri::iterator>(sim, loc->second));
+				simulations.push_back(simulation(sim, loc->second));
 			}
 		}
 	}
@@ -263,7 +275,7 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 				result.reset.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.source[i].encodings));
 
 				// Set up the first simulation that starts at the reset state
-				simulations.push_back(pair<simulator, petri::iterator>(sim, loc->second));
+				simulations.push_back(simulation(sim, loc->second));
 			}
 		}
 	}
@@ -271,45 +283,45 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 	int count = 0;
 	while (simulations.size() > 0)
 	{
-		pair<simulator, petri::iterator> sim = simulations.back();
+		simulation sim = simulations.back();
 		simulations.pop_back();
-		simulations.back().first.merge_errors(sim.first);
+		simulations.back().exec.merge_errors(sim.exec);
 
 		if (report_progress)
-			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.first.ready.size()), __FILE__, __LINE__);
+			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.exec.ready.size()), __FILE__, __LINE__);
 
-		simulations.reserve(simulations.size() + sim.first.ready.size());
-		for (int i = 0; i < (int)sim.first.ready.size(); i++)
+		simulations.reserve(simulations.size() + sim.exec.ready.size());
+		for (int i = 0; i < (int)sim.exec.ready.size(); i++)
 		{
 			simulations.push_back(sim);
-			int index = simulations.back().first.loaded[simulations.back().first.ready[i].first].index;
-			int term = simulations.back().first.ready[i].second;
+			int index = simulations.back().exec.loaded[simulations.back().exec.ready[i].first].index;
+			int term = simulations.back().exec.ready[i].second;
 
-			simulations.back().first.fire(i);
-			simulations.back().first.enabled();
+			simulations.back().exec.fire(i);
+			simulations.back().exec.enabled();
 
 			map<state, petri::iterator>::iterator loc;
-			if (states.insert(simulations.back().first.get_key(), petri::iterator(), &loc))
+			if (states.insert(simulations.back().exec.get_key(), petri::iterator(), &loc))
 			{
 				loc->second = result.create(place(loc->first.encodings));
 				petri::iterator trans = result.create(g.transitions[index].subdivide(term));
-				result.connect(simulations.back().second, trans);
+				result.connect(simulations.back().node, trans);
 				result.connect(trans, loc->second);
-				simulations.back().second = loc->second;
+				simulations.back().node = loc->second;
 			}
 			else
 			{
 				petri::iterator trans = result.create(g.transitions[index].subdivide(term));
-				result.connect(simulations.back().second, trans);
+				result.connect(simulations.back().node, trans);
 				result.connect(trans, loc->second);
 				simulations.pop_back();
 			}
 		}
 
-		if (sim.first.ready.size() == 0)
+		if (sim.exec.ready.size() == 0)
 		{
-			deadlock d = sim.first.get_state();
-			result.sink.push_back(state(vector<petri::token>(1, petri::token(sim.second.index)), d.encodings));
+			deadlock d = sim.exec.get_state();
+			result.sink.push_back(state(vector<petri::token>(1, petri::token(sim.node.index)), d.encodings));
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
 			if (dloc == deadlocks.end() || *dloc != d)
 			{
@@ -317,7 +329,7 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 				deadlocks.insert(dloc, d);
 			}
 
-			simulations.back().first.merge_errors(sim.first);
+			simulations.back().exec.merge_errors(sim.exec);
 		}
 
 		count++;
@@ -342,168 +354,139 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 	return result;
 }
 
-struct half_synchronization
-{
-	half_synchronization()
-	{
-		active.index = 0;
-		active.cube = 0;
-		passive.index = 0;
-		passive.cube = 0;
-	}
-
-	~half_synchronization()
-	{
-
-	}
-
-	struct
-	{
-		int index;
-		int cube;
-	} active, passive;
-};
-
-struct synchronization_region
-{
-	synchronization_region()
-	{
-
-	}
-
-	~synchronization_region()
-	{
-
-	}
-
-	boolean::cover action;
-	vector<petri::iterator> nodes;
-};
-
 /* to_petri_net()
  *
  * Converts the HSE into a petri net using index-priority simulation.
  */
 graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress)
 {
-	graph result = g;
+	graph result;
+	map<pair<int, int>, int> transitions;
+	hashtable<state, 10000> states;
+	vector<simulator> simulators;
+	vector<deadlock> deadlocks;
 
-	// Petri nets don't support internal parallelism or choice, so we have to expand those transitions.
-	for (petri::iterator i(petri::transition::type, result.transitions.size()-1); i >= 0; i--)
+	if (g.reset.size() > 0)
 	{
-		if (result.transitions[i.index].behavior == transition::active && result.transitions[i.index].local_action.cubes.size() > 1)
+		for (int i = 0; i < (int)g.reset.size(); i++)
 		{
-			vector<petri::iterator> k = result.duplicate(petri::choice, i, result.transitions[i.index].local_action.cubes.size(), false);
-			for (int j = 0; j < (int)k.size(); j++)
-				result.transitions[k[j].index].local_action = boolean::cover(result.transitions[k[j].index].local_action.cubes[j]);
+			simulator sim(&g, &variables, g.reset[i]);
+			sim.enabled();
+
+			// Set up the first simulator that starts at the reset state
+			if (states.insert(sim.get_state()))
+				simulators.push_back(simulator(sim));
+		}
+	}
+	else
+	{
+		for (int i = 0; i < (int)g.source.size(); i++)
+		{
+			simulator sim(&g, &variables, g.source[i]);
+			sim.enabled();
+
+			// Set up the first simulator that starts at the reset state
+			if (states.insert(sim.get_state()))
+				simulators.push_back(simulator(sim));
 		}
 	}
 
-	for (petri::iterator i(petri::transition::type, result.transitions.size()-1); i >= 0; i--)
+	int count = 0;
+	while (simulators.size() > 0)
 	{
-		if (result.transitions[i.index].behavior == transition::active && result.transitions[i.index].local_action.cubes.size() == 1)
+		simulator sim = simulators.back();
+		simulators.pop_back();
+		simulators.back().merge_errors(sim);
+
+		if (report_progress)
+			progress("", ::to_string(count) + " " + ::to_string(simulators.size()) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
+
+		simulators.reserve(simulators.size() + sim.ready.size());
+		for (int i = 0; i < (int)sim.ready.size(); i++)
 		{
-			vector<int> vars = result.transitions[i.index].local_action.cubes[0].vars();
-			if (vars.size() > 1)
-			{
-				vector<petri::iterator> k = result.duplicate(petri::parallel, i, vars.size(), false);
-				for (int j = 0; j < (int)k.size(); j++)
-					result.transitions[k[j].index].local_action.cubes[0] = boolean::cube(vars[j], result.transitions[k[j].index].local_action.cubes[0].get(vars[j]));
-			}
-		}
-	}
+			simulators.push_back(sim);
+			vector<int> guard = simulators.back().loaded[simulators.back().ready[i].first].guard_action.vars();
+			int index = simulators.back().loaded[simulators.back().ready[i].first].index;
+			int term = simulators.back().ready[i].second;
 
-	// Find all of the guards
-	vector<petri::iterator> passive;
-	for (petri::iterator i(petri::transition::type, result.transitions.size()-1); i >= 0; i--)
-		if (result.transitions[i.index].behavior == transition::passive)
-			passive.push_back(i);
+			simulators.back().fire(i);
+			simulators.back().enabled();
 
-	vector<half_synchronization> synchronizations;
+			pair<int, int> tid = pair<int, int>(sim.loaded[sim.ready[i].first].index, sim.ready[i].second);
+			map<pair<int, int>, int>::iterator loc = transitions.find(tid);
+			if (loc == transitions.end())
+				loc = transitions.insert(pair<pair<int, int>, int>(tid, result.create(g.transitions[tid.first].subdivide(tid.second)).index)).first;
 
-	half_synchronization sync;
-	for (sync.passive.index = 0; sync.passive.index < (int)result.transitions.size(); sync.passive.index++)
-		if (result.transitions[sync.passive.index].behavior == transition::passive && !result.transitions[sync.passive.index].local_action.is_tautology())
-			for (sync.active.index = 0; sync.active.index < (int)result.transitions.size(); sync.active.index++)
-				if (result.transitions[sync.active.index].behavior == transition::active && !result.transitions[sync.active.index].local_action.is_tautology())
-					for (sync.passive.cube = 0; sync.passive.cube < (int)result.transitions[sync.passive.index].local_action.cubes.size(); sync.passive.cube++)
-						for (sync.active.cube = 0; sync.active.cube < (int)result.transitions[sync.active.index].local_action.cubes.size(); sync.active.cube++)
-							if (similarity_g0(result.transitions[sync.active.index].local_action.cubes[sync.active.cube], result.transitions[sync.passive.index].local_action.cubes[sync.passive.cube]))
-								synchronizations.push_back(sync);
+			vector<petri::iterator> p = result.prev(petri::iterator(transition::type, loc->second));
+			vector<vector<petri::iterator> > pt;
+			for (int j = 0; j < (int)p.size(); j++)
+				pt.push_back(result.prev(p));
 
-	/* Implement each guard in the petri net. As of now, this is done
-	 * syntactically meaning that a few assumptions are made. First, if
-	 * there are two transitions that affect the same variable in a guard,
-	 * then they must be composed in condition. If they are not, then the
-	 * net will not be 1-bounded. Second, you cannot have two guards on
-	 * separate conditional branches that both have a cube which checks the
-	 * same value for the same variable. Once again, if you do, the net
-	 * will not be one bounded. There are probably other issues that I haven't
-	 * uncovered yet, but just beware.
-	 */
-	for (int i = 0; i < (int)passive.size(); i++)
-	{
-		if (!result.transitions[passive[i].index].local_action.is_tautology())
-		{
-			// Find all of the half synchronization local_actions for this guard and group them accordingly:
-			// outside group is by disjunction, middle group is by conjunction, and inside group is by value and variable.
-			vector<vector<vector<petri::iterator> > > sync;
-			sync.resize(result.transitions[passive[i].index].local_action.cubes.size());
-			for (int j = 0; j < (int)synchronizations.size(); j++)
-				if (synchronizations[j].passive.index == passive[i].index)
+			vector<pair<int, int> > matches;
+			for (map<pair<int, int>, int>::iterator tids = transitions.begin(); tids != transitions.end(); tids++)
+				if ((g.transitions[tid.first].remote_action[tid.second].inverse() & sim.loaded[tid.first].guard_action).is_null())
 				{
 					bool found = false;
-					for (int l = 0; l < (int)sync[synchronizations[j].passive.cube].size(); l++)
-						if (similarity_g0(result.transitions[sync[synchronizations[j].passive.cube][l][0].index].local_action.cubes[0], result.transitions[synchronizations[j].active.index].local_action.cubes[0]))
-						{
-							found = true;
-							sync[synchronizations[j].passive.cube][l].push_back(petri::iterator(petri::transition::type, synchronizations[j].active.index));
-						}
-
-					if (!found)
-						sync[synchronizations[j].passive.cube].push_back(vector<petri::iterator>(1, petri::iterator(petri::transition::type, synchronizations[j].active.index)));
+					for (int j = 0; j < (int)pt.size() && !found; j++)
+						for (int k = 0; k < (int)pt[j].size() && !found; k++)
+							if (pt[j][k].index == tids->second)
+							{
+								matches.push_back(pair<int, int>(j, tids->second));
+								found = true;
+							}
 				}
 
-			/* Finally implement the connections. The basic observation being that a guard affects when the next
-			 * transition can fire.
-			 */
-			vector<petri::iterator> n = result.next(passive[i]);
-			vector<petri::iterator> g = result.create(place(), n.size());
-			for (int j = 0; j < (int)n.size(); j++)
-				result.connect(g[j], result.next(n[j]));
-
-			for (int j = 0; j < (int)sync.size(); j++)
+			if (matches.size() > 0)
 			{
-				petri::iterator t = result.create(transition());
-				result.connect(t, g);
-				for (int k = 0; k < (int)sync[j].size(); k++)
+				sort(matches.begin(), matches.end());
+				bool duplicate = false;
+				for (int j = 1; j < (int)matches.size(); )
 				{
-					petri::iterator p = result.create(place());
-					result.connect(p, t);
-					result.connect(sync[j][k], p);
+					if (matches[j].first == matches[j-1].first)
+					{
+						duplicate = true;
+						matches.erase(matches.begin() + j);
+					}
+					else if (duplicate)
+					{
+						matches.erase(matches.begin() + j-1);
+						duplicate = false;
+					}
+					else
+						j++;
 				}
 			}
+
+			for (int j = (int)matches.size()-1; j >= 0; j--)
+				p.erase(p.begin() + matches[j].first);
+
+			if (p.size() == 0)
+			{
+
+			}
+
+			if (!states.insert(sim.get_state()))
+				simulators.pop_back();
 		}
+
+		if (sim.ready.size() == 0)
+		{
+			deadlock d = sim.get_state();
+			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
+			if (dloc == deadlocks.end() || *dloc != d)
+			{
+				error("", d.to_string(variables), __FILE__, __LINE__);
+				deadlocks.insert(dloc, d);
+			}
+
+			simulators.back().merge_errors(sim);
+		}
+
+		count++;
 	}
 
-	// Remove the guards from the graph
-	for (int i = 0; i < (int)passive.size(); i++)
-	{
-		result.transitions[passive[i].index].local_action = 1;
-		result.transitions[passive[i].index].remote_action = 1;
-	}
-	/*vector<petri::iterator> n = result.next(passive), p = result.prev(passive);
-	passive.insert(passive.end(), n.begin(), n.end());
-	passive.insert(passive.end(), p.begin(), p.end());
-	sort(passive.begin(), passive.end());
-	passive.resize(unique(passive.begin(), passive.end()) - passive.begin());
-
-	result.erase(passive);*/
-
-	synchronizations.clear();
-
-	// Clean up
-	result.post_process(variables, false);
+	if (report_progress)
+		done_progress();
 
 	return result;
 }
