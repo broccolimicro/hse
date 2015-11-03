@@ -247,15 +247,16 @@ state state::collapse(int index, const state &s)
 	return result;
 }
 
-state state::convert(map<petri::iterator, petri::iterator> translate) const
+state state::convert(map<petri::iterator, vector<petri::iterator> > translate) const
 {
 	state result;
 
 	for (int i = 0; i < (int)tokens.size(); i++)
 	{
-		map<petri::iterator, petri::iterator>::iterator loc = translate.find(petri::iterator(place::type, tokens[i].index));
+		map<petri::iterator, vector<petri::iterator> >::iterator loc = translate.find(petri::iterator(place::type, tokens[i].index));
 		if (loc != translate.end())
-			result.tokens.push_back(petri::token(loc->second.index));
+			for (int j = 0; j < (int)loc->second.size(); j++)
+				result.tokens.push_back(petri::token(loc->second[j].index));
 	}
 
 	result.encodings = encodings;

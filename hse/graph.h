@@ -78,9 +78,14 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	 * place of the selection statement in order to support non-properly
 	 * nested HSE.
 	 */
-	vector<pair<int, int> > arbiters;
+	vector<int> arbiters;
 
-	map<petri::iterator, petri::iterator> merge(int composition, const graph &g);
+	pair<vector<petri::iterator>, vector<petri::iterator> > erase(petri::iterator n);
+	petri::iterator duplicate(int composition, petri::iterator i, bool add = true);
+	vector<petri::iterator> duplicate(int composition, petri::iterator i, int num, bool add = true);
+	map<petri::iterator, vector<petri::iterator> > pinch(petri::iterator n);
+
+	map<petri::iterator, vector<petri::iterator> > merge(int composition, const graph &g);
 	void post_process(const ucs::variable_set &variables, bool proper_nesting = false);
 	void check_variables(const ucs::variable_set &variables);
 	vector<int> first_assigns();

@@ -119,18 +119,58 @@ graph::~graph()
 
 }
 
-map<petri::iterator, petri::iterator> graph::merge(int composition, const graph &g)
+pair<vector<petri::iterator>, vector<petri::iterator> > graph::erase(petri::iterator n)
 {
-	map<petri::iterator, petri::iterator> result = super::merge(composition, g);
+	pair<vector<petri::iterator>, vector<petri::iterator> > result = super::erase(n);
+	super::erase(n, hse::place::type, arbiters);
+	return result;
+}
+
+petri::iterator graph::duplicate(int composition, petri::iterator i, bool add)
+{
+	petri::iterator result = super::duplicate(composition, i, add);
+	if (i.type == hse::place::type && find(arbiters.begin(), arbiters.end(), i.index) != arbiters.end())
+		arbiters.push_back(result.index);
+	return result;
+}
+
+vector<petri::iterator> graph::duplicate(int composition, petri::iterator i, int num, bool add)
+{
+	vector<petri::iterator> result = super::duplicate(composition, i, num, add);
+	if (i.type == hse::place::type && find(arbiters.begin(), arbiters.end(), i.index) != arbiters.end())
+		for (int j = 0; j < (int)result.size(); j++)
+			arbiters.push_back(result[j].index);
+	return result;
+}
+
+map<petri::iterator, vector<petri::iterator> > graph::pinch(petri::iterator n)
+{
+	map<petri::iterator, vector<petri::iterator> > result = super::pinch(n);
+	super::erase(n, hse::place::type, arbiters);
+	for (int i = (int)arbiters.size()-1; i >= 0; i--)
+	{
+		map<petri::iterator, vector<petri::iterator> >::iterator loc = result.find(petri::iterator(hse::place::type, arbiters[i]));
+		if (loc != result.end())
+		{
+			arbiters.erase(arbiters.begin() + i);
+			for (int j = 0; j < (int)loc->second.size(); j++)
+				arbiters.push_back(loc->second[j].index);
+		}
+	}
+	return result;
+}
+
+map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, const graph &g)
+{
+	map<petri::iterator, vector<petri::iterator> > result = super::merge(composition, g);
 
 	for (int i = 0; i < (int)g.arbiters.size(); i++)
 	{
+		map<petri::iterator, vector<petri::iterator> >::iterator loc = result.find(petri::iterator(hse::place::type, g.arbiters[i]));
 
-		map<petri::iterator, petri::iterator>::iterator first_loc = result.find(petri::iterator(hse::transition::type, g.arbiters[i].first));
-		map<petri::iterator, petri::iterator>::iterator second_loc = result.find(petri::iterator(hse::transition::type, g.arbiters[i].second));
-
-		if (first_loc != result.end() && second_loc != result.end())
-			arbiters.push_back(pair<int, int>(first_loc->second.index, second_loc->second.index));
+		if (loc != result.end())
+			for (int j = 0; j < (int)loc->second.size(); j++)
+				arbiters.push_back(loc->second[j].index);
 	}
 
 	return result;

@@ -285,7 +285,8 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 	{
 		simulation sim = simulations.back();
 		simulations.pop_back();
-		simulations.back().exec.merge_errors(sim.exec);
+		if (simulations.size() > 0)
+			simulations.back().exec.merge_errors(sim.exec);
 
 		if (report_progress)
 			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.exec.ready.size()), __FILE__, __LINE__);
@@ -361,132 +362,69 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;
+	simulator sim(&g, &variables, g.reset[0]);
+	vector<int> indices(variables.nodes.size(), 0);
 	map<pair<int, int>, int> transitions;
-	hashtable<state, 10000> states;
-	vector<simulator> simulators;
-	vector<deadlock> deadlocks;
+	hse::iterator last, curr;
 
-	if (g.reset.size() > 0)
+	// find a cycle
+	bool done = false;
+	while (!done)
 	{
-		for (int i = 0; i < (int)g.reset.size(); i++)
-		{
-			simulator sim(&g, &variables, g.reset[i]);
-			sim.enabled();
+		sim.enabled();
 
-			// Set up the first simulator that starts at the reset state
-			if (states.insert(sim.get_state()))
-				simulators.push_back(simulator(sim));
-		}
-	}
-	else
-	{
-		for (int i = 0; i < (int)g.source.size(); i++)
-		{
-			simulator sim(&g, &variables, g.source[i]);
-			sim.enabled();
-
-			// Set up the first simulator that starts at the reset state
-			if (states.insert(sim.get_state()))
-				simulators.push_back(simulator(sim));
-		}
-	}
-
-	int count = 0;
-	while (simulators.size() > 0)
-	{
-		simulator sim = simulators.back();
-		simulators.pop_back();
-		simulators.back().merge_errors(sim);
-
-		if (report_progress)
-			progress("", ::to_string(count) + " " + ::to_string(simulators.size()) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
-
-		simulators.reserve(simulators.size() + sim.ready.size());
+		// Get the transition that will change the node that hasn't been changed in the longest amount of time
+		int index = -1;
+		int value = -1;
+		vector<int> vindex;
 		for (int i = 0; i < (int)sim.ready.size(); i++)
 		{
-			simulators.push_back(sim);
-			vector<int> guard = simulators.back().loaded[simulators.back().ready[i].first].guard_action.vars();
-			int index = simulators.back().loaded[simulators.back().ready[i].first].index;
-			int term = simulators.back().ready[i].second;
+			vector<int> v = g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second].vars();
+			int test = -1;
+			for (int j = 0; j < (int)v.size(); j++)
+				if (indices[v[j]] > test)
+					test = indices[v[j]];
 
-			simulators.back().fire(i);
-			simulators.back().enabled();
-
-			pair<int, int> tid = pair<int, int>(sim.loaded[sim.ready[i].first].index, sim.ready[i].second);
-			map<pair<int, int>, int>::iterator loc = transitions.find(tid);
-			if (loc == transitions.end())
-				loc = transitions.insert(pair<pair<int, int>, int>(tid, result.create(g.transitions[tid.first].subdivide(tid.second)).index)).first;
-
-			vector<petri::iterator> p = result.prev(petri::iterator(transition::type, loc->second));
-			vector<vector<petri::iterator> > pt;
-			for (int j = 0; j < (int)p.size(); j++)
-				pt.push_back(result.prev(p));
-
-			vector<pair<int, int> > matches;
-			for (map<pair<int, int>, int>::iterator tids = transitions.begin(); tids != transitions.end(); tids++)
-				if ((g.transitions[tid.first].remote_action[tid.second].inverse() & sim.loaded[tid.first].guard_action).is_null())
-				{
-					bool found = false;
-					for (int j = 0; j < (int)pt.size() && !found; j++)
-						for (int k = 0; k < (int)pt[j].size() && !found; k++)
-							if (pt[j][k].index == tids->second)
-							{
-								matches.push_back(pair<int, int>(j, tids->second));
-								found = true;
-							}
-				}
-
-			if (matches.size() > 0)
+			if (test > value)
 			{
-				sort(matches.begin(), matches.end());
-				bool duplicate = false;
-				for (int j = 1; j < (int)matches.size(); )
-				{
-					if (matches[j].first == matches[j-1].first)
-					{
-						duplicate = true;
-						matches.erase(matches.begin() + j);
-					}
-					else if (duplicate)
-					{
-						matches.erase(matches.begin() + j-1);
-						duplicate = false;
-					}
-					else
-						j++;
-				}
+				index = i;
+				value = test;
+				vindex = v;
 			}
-
-			for (int j = (int)matches.size()-1; j >= 0; j--)
-				p.erase(p.begin() + matches[j].first);
-
-			if (p.size() == 0)
-			{
-
-			}
-
-			if (!states.insert(sim.get_state()))
-				simulators.pop_back();
 		}
 
-		if (sim.ready.size() == 0)
+		if (index == -1)
+			done = true;
+		else
 		{
-			deadlock d = sim.get_state();
-			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
-			if (dloc == deadlocks.end() || *dloc != d)
+			for (int i = 0; i < (int)vindex.size(); i++)
+				indices[vindex[i]]++;
+
+			pair<int, int> tid(sim.loaded[sim.ready[index].first].index, sim.ready[index].second);
+
+			map<pair<int, int>, int>::iterator loc = transitions.find(tid);
+			if (loc != transitions.end())
 			{
-				error("", d.to_string(variables), __FILE__, __LINE__);
-				deadlocks.insert(dloc, d);
+				curr.type = hse::transition::type;
+				curr.index = loc->second;
+				if (last.index >= 0)
+					result.connect(last, curr);
+				last = curr;
+				done = true;
+			}
+			else
+			{
+				loc = transitions.insert(pair<pair<int, int>, int>(tid, result.create(g.transitions[tid.first].subdivide(tid.second)).index)).first;
+				curr.type = hse::transition::type;
+				curr.index = loc->second;
+				if (last.index >= 0)
+					result.connect(last, curr);
+				last = curr;
 			}
 
-			simulators.back().merge_errors(sim);
+			sim.fire(index);
 		}
-
-		count++;
 	}
-
-	if (report_progress)
-		done_progress();
 
 	return result;
 }

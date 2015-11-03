@@ -102,7 +102,7 @@ struct state : petri::state<petri::token>
 
 	static state merge(const state &s0, const state &s1);
 	static state collapse(int index, const state &s);
-	state convert(map<petri::iterator, petri::iterator> translate) const;
+	state convert(map<petri::iterator, vector<petri::iterator> > translate) const;
 	bool is_subset_of(const state &s);
 	string to_string(const ucs::variable_set &variables);
 };

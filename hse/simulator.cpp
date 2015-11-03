@@ -104,7 +104,7 @@ mutex::~mutex()
 
 string mutex::to_string(const hse::graph &g, const ucs::variable_set &v)
 {
-	return "vacuous firings break mutual exclusion for assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	return "non-exclusive guards in deterministic selection for assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
 }
 
 deadlock::deadlock()
@@ -400,7 +400,8 @@ int simulator::enabled(bool sorted)
 
 	if (last.index >= 0)
 		for (int i = 0; i < (int)loaded.size(); i++)
-			loaded[i].history.push_back(last);
+			if (loaded[i].stable)
+				loaded[i].history.push_back(last);
 
 	/*for (int i = 0; i < (int)tokens.size(); i++)
 		cout << "Token " << i << ": " << tokens[i].index << " " << tokens[i].cause << " " << tokens[i].guard << endl;
@@ -452,42 +453,66 @@ enabled_transition simulator::fire(int index)
 		return enabled_transition();
 	}
 
-	enabled_transition t = loaded[ready[index].first];
-	int term = ready[index].second;
-
-	ready.clear();
-
 	// We need to go through the potential list of transitions and flatten their input and output tokens.
 	// Since we know that no transition can use the same token twice, we can simply mush them all
 	// into one big list and then remove duplicates.
-	for (int j = 0; j < (int)t.tokens.size(); j++)
-		if (tokens[t.tokens[j]].cause >= 0 && tokens[t.tokens[j]].cause < (int)loaded.size())
+	for (int i = 0; i < (int)loaded.size(); i++)
+	{
+		for (int j = loaded[i].tokens.size()-1; j >= 0; j--)
 		{
-			t.tokens.insert(t.tokens.end(), loaded[tokens[t.tokens[j]].cause].tokens.begin(), loaded[tokens[t.tokens[j]].cause].tokens.end());
-			t.output_marking.insert(t.output_marking.end(), loaded[tokens[t.tokens[j]].cause].output_marking.begin(), loaded[tokens[t.tokens[j]].cause].output_marking.end());
+			// assumes that a transition in the loaded array only depends upon transitions before it in the array
+			if (tokens[loaded[i].tokens[j]].cause >= 0 && tokens[loaded[i].tokens[j]].cause < i)
+			{
+				loaded[i].tokens.insert(loaded[i].tokens.end(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.begin(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.end());
+				loaded[i].output_marking.insert(loaded[i].output_marking.end(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.begin(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.end());
+			}
+			else if (tokens[loaded[i].tokens[j]].cause >= i && tokens[loaded[i].tokens[j]].cause < (int)loaded.size())
+				internal("", "loaded transitions out of order", __FILE__, __LINE__);
 		}
-	sort(t.tokens.begin(), t.tokens.end());
-	t.tokens.resize(unique(t.tokens.begin(), t.tokens.end()) - t.tokens.begin());
-	sort(t.output_marking.begin(), t.output_marking.end());
-	t.output_marking.resize(unique(t.output_marking.begin(), t.output_marking.end()) - t.output_marking.begin());
+
+		sort(loaded[i].tokens.begin(), loaded[i].tokens.end());
+		loaded[i].tokens.resize(unique(loaded[i].tokens.begin(), loaded[i].tokens.end()) - loaded[i].tokens.begin());
+		sort(loaded[i].output_marking.begin(), loaded[i].output_marking.end());
+		loaded[i].output_marking.resize(unique(loaded[i].output_marking.begin(), loaded[i].output_marking.end()) - loaded[i].output_marking.begin());
+	}
+
+	enabled_transition t = loaded[ready[index].first];
+	int term = ready[index].second;
 
 	// disable any transitions that were dependent on at least one of the same local tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
-	vector<int> used_tokens = t.tokens;
-	for (int i = 0; i < (int)loaded.size(); )
+	for (int i = (int)loaded.size()-1, j = ready.size()-1; i >= 0; i--)
 	{
-		sort(loaded[i].tokens.begin(), loaded[i].tokens.end());
-		if (vector_intersection_size(loaded[i].tokens, used_tokens) > 0)
+		vector<int> intersect = vector_intersection(loaded[i].tokens, t.tokens);
+		if (intersect.size() > 0)
 		{
-			used_tokens.insert(used_tokens.end(), loaded[i].output_marking.begin(), loaded[i].output_marking.end());
-			sort(used_tokens.begin(), used_tokens.end());
-			used_tokens.resize(unique(used_tokens.begin(), used_tokens.end()) - used_tokens.begin());
+			// assumes the ready array is sorted in ascending order
+			bool is_ready = false;
+			for (; j >= 0 && !is_ready; j--)
+				if (ready[j].first == i)
+					is_ready = true;
+
+			bool determ = true;
+			for (int j = 0; j < (int)intersect.size() && determ; j++)
+				if (find(base->arbiters.begin(), base->arbiters.end(), tokens[intersect[j]].index) != base->arbiters.end())
+					determ = false;
+
+			if (is_ready && determ && loaded[i].index != t.index)
+			{
+				mutex err = mutex(t, loaded[i]);
+				vector<mutex>::iterator loc = lower_bound(mutex_errors.begin(), mutex_errors.end(), err);
+				if (loc == mutex_errors.end() || *loc != err)
+				{
+					mutex_errors.insert(loc, err);
+					error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+				}
+			}
+
 			loaded.erase(loaded.begin() + i);
-			i = 0;
 		}
-		else
-			i++;
 	}
+
+	ready.clear();
 
 	// take the set symmetric difference, but leave the two sets separate.
 	for (int j = 0, k = 0; j < (int)t.tokens.size() && k < (int)t.output_marking.size(); )
