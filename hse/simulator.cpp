@@ -453,31 +453,45 @@ enabled_transition simulator::fire(int index)
 		return enabled_transition();
 	}
 
+	enabled_transition t = loaded[ready[index].first];
+	int term = ready[index].second;
+
 	// We need to go through the potential list of transitions and flatten their input and output tokens.
 	// Since we know that no transition can use the same token twice, we can simply mush them all
 	// into one big list and then remove duplicates.
-	for (int i = 0; i < (int)loaded.size(); i++)
-	{
-		for (int j = loaded[i].tokens.size()-1; j >= 0; j--)
+	// assumes that a transition in the loaded array only depends upon transitions before it in the array
+	vector<int> visited(1, ready[index].first);
+	for (int i = 0; i < (int)t.tokens.size(); i++)
+		if (tokens[t.tokens[i]].cause >= 0 && tokens[t.tokens[i]].cause < ready[index].first)
 		{
-			// assumes that a transition in the loaded array only depends upon transitions before it in the array
-			if (tokens[loaded[i].tokens[j]].cause >= 0 && tokens[loaded[i].tokens[j]].cause < i)
-			{
-				loaded[i].tokens.insert(loaded[i].tokens.end(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.begin(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.end());
-				loaded[i].output_marking.insert(loaded[i].output_marking.end(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.begin(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.end());
-			}
-			else if (tokens[loaded[i].tokens[j]].cause >= i && tokens[loaded[i].tokens[j]].cause < (int)loaded.size())
-				internal("", "loaded transitions out of order", __FILE__, __LINE__);
+			t.tokens.insert(t.tokens.end(), loaded[tokens[t.tokens[i]].cause].tokens.begin(), loaded[tokens[t.tokens[i]].cause].tokens.end());
+			t.output_marking.insert(t.output_marking.end(), loaded[tokens[t.tokens[i]].cause].output_marking.begin(), loaded[tokens[t.tokens[i]].cause].output_marking.end());
+			visited.push_back(tokens[t.tokens[i]].cause);
 		}
 
-		sort(loaded[i].tokens.begin(), loaded[i].tokens.end());
-		loaded[i].tokens.resize(unique(loaded[i].tokens.begin(), loaded[i].tokens.end()) - loaded[i].tokens.begin());
-		sort(loaded[i].output_marking.begin(), loaded[i].output_marking.end());
-		loaded[i].output_marking.resize(unique(loaded[i].output_marking.begin(), loaded[i].output_marking.end()) - loaded[i].output_marking.begin());
-	}
+	sort(t.tokens.begin(), t.tokens.end());
+	t.tokens.resize(unique(t.tokens.begin(), t.tokens.end()) - t.tokens.begin());
+	sort(t.output_marking.begin(), t.output_marking.end());
+	t.output_marking.resize(unique(t.output_marking.begin(), t.output_marking.end()) - t.output_marking.begin());
+	sort(visited.begin(), visited.end());
 
-	enabled_transition t = loaded[ready[index].first];
-	int term = ready[index].second;
+	for (int i = 0; i < (int)loaded.size(); i++)
+	{
+		if (find(visited.begin(), visited.end(), i) == visited.end())
+		{
+			for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
+				if (tokens[loaded[i].tokens[j]].cause >= 0 && tokens[loaded[i].tokens[j]].cause < i && find(visited.begin(), visited.end(), tokens[loaded[i].tokens[j]].cause) == visited.end())
+				{
+					loaded[i].tokens.insert(loaded[i].tokens.end(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.begin(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.end());
+					loaded[i].output_marking.insert(loaded[i].output_marking.end(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.begin(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.end());
+				}
+
+			sort(loaded[i].tokens.begin(), loaded[i].tokens.end());
+			loaded[i].tokens.resize(unique(loaded[i].tokens.begin(), loaded[i].tokens.end()) - loaded[i].tokens.begin());
+			sort(loaded[i].output_marking.begin(), loaded[i].output_marking.end());
+			loaded[i].output_marking.resize(unique(loaded[i].output_marking.begin(), loaded[i].output_marking.end()) - loaded[i].output_marking.begin());
+		}
+	}
 
 	// disable any transitions that were dependent on at least one of the same local tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
