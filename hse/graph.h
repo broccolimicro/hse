@@ -80,6 +80,9 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	 */
 	vector<int> arbiters;
 
+	vector<vector<int> > get_dependency_tree(petri::iterator a);
+	bool common_arbiter(vector<vector<int> > a, vector<vector<int> > b);
+
 	pair<vector<petri::iterator>, vector<petri::iterator> > erase(petri::iterator n);
 	petri::iterator duplicate(int composition, petri::iterator i, bool add = true);
 	vector<petri::iterator> duplicate(int composition, petri::iterator i, int num, bool add = true);

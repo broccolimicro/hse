@@ -364,8 +364,10 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 	graph result;
 	simulator sim(&g, &variables, g.reset[0]);
 	vector<int> indices(variables.nodes.size(), 0);
-	map<pair<int, int>, int> transitions;
-	hse::iterator last, curr;
+	map<pair<int, int>, pair<int, bool> > transitions;
+	vector<int> record(variables.nodes.size(), -1);
+	hse::iterator curr;
+	int max_value = 1;
 
 	// find a cycle
 	bool done = false;
@@ -373,8 +375,9 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 	{
 		sim.enabled();
 
-		// Get the transition that will change the node that hasn't been changed in the longest amount of time
-		int index = -1;
+		// Get the transition that will change the node that has been changed most recently
+		// This will find a cycle quicker
+		/*int index = -1;
 		int value = -1;
 		vector<int> vindex;
 		for (int i = 0; i < (int)sim.ready.size(); i++)
@@ -391,37 +394,83 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 				value = test;
 				vindex = v;
 			}
+		}*/
+
+		// Get the transition that will change the node that hasn't been changed in the longest amount of time
+		// this will be more likely to explore the entire graph
+		int index = -1;
+		int value = max_value;
+		vector<int> vindex;
+		for (int i = 0; i < (int)sim.ready.size(); i++)
+		{
+			vector<int> v = g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second].vars();
+			int test = max_value;
+			for (int j = 0; j < (int)v.size(); j++)
+				if (indices[v[j]] < test)
+					test = indices[v[j]];
+
+			if (test < value)
+			{
+				index = i;
+				value = test;
+				vindex = v;
+			}
 		}
 
 		if (index == -1)
 			done = true;
 		else
 		{
-			for (int i = 0; i < (int)vindex.size(); i++)
-				indices[vindex[i]]++;
-
 			pair<int, int> tid(sim.loaded[sim.ready[index].first].index, sim.ready[index].second);
+			cout << "(" << tid.first << " " << tid.second << ") -> ";
 
-			map<pair<int, int>, int>::iterator loc = transitions.find(tid);
+			map<pair<int, int>, pair<int, bool> >::iterator loc = transitions.find(tid);
 			if (loc != transitions.end())
 			{
 				curr.type = hse::transition::type;
-				curr.index = loc->second;
-				if (last.index >= 0)
-					result.connect(last, curr);
-				last = curr;
+				curr.index = loc->second.first;
 				done = true;
 			}
 			else
 			{
-				loc = transitions.insert(pair<pair<int, int>, int>(tid, result.create(g.transitions[tid.first].subdivide(tid.second)).index)).first;
+				loc = transitions.insert(pair<pair<int, int>, pair<int, bool> >(tid, pair<int, bool>(result.create(g.transitions[tid.first].subdivide(tid.second)).index, false))).first;
 				curr.type = hse::transition::type;
-				curr.index = loc->second;
-				if (last.index >= 0)
-					result.connect(last, curr);
-				last = curr;
+				curr.index = loc->second.first;
+			}
+			cout << "(" << loc->second.first << " " << loc->second.second << ")\t";
+			for (int i = 0; i < (int)vindex.size(); i++)
+			{
+				if (i != 0)
+					cout << ",";
+				cout << variables.nodes[vindex[i]].to_string() << (g.transitions[tid.first].local_action[tid.second].get(vindex[i]) == 1 ? "+" : "-");
+			}
+			cout << endl;
+
+			loc->second.second = true;
+			vector<int> v = sim.loaded[sim.ready[index].first].guard_action.vars();
+			for (int i = 0; i < (int)v.size(); i++)
+			{
+				cout << "\t" << variables.nodes[v[i]].to_string() << "->" << record[v[i]] << endl;
+				if (record[v[i]] >= 0)
+				{
+					vector<int> nn = result.next(hse::place::type, result.next(hse::transition::type, record[v[i]]));
+					if (find(nn.begin(), nn.end(), curr.index) == nn.end())
+						result.connect(hse::iterator(hse::transition::type, record[v[i]]), curr);
+				}
+				else
+					loc->second.second = false;
 			}
 
+			for (map<pair<int, int>, pair<int, bool> >::iterator i = transitions.begin(); i != transitions.end() && done; i++)
+				done = i->second.second;
+
+			for (int i = 0; i < (int)vindex.size(); i++)
+			{
+				record[vindex[i]] = curr.index;
+				indices[vindex[i]]++;
+				if (indices[vindex[i]] >= max_value)
+					max_value = indices[vindex[i]]+1;
+			}
 			sim.fire(index);
 		}
 	}

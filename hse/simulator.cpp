@@ -421,23 +421,6 @@ int simulator::enabled(bool sorted)
 
 	cout << endl;*/
 
-	// Now in the production rule simulator, here is where I would automatically execute all of the
-	// vacuous transitions, but that leads to some really strange (incorrect?) behavior in an HSE.
-
-	// For example, we might take both paths of a conditional. Then I would have to add in a bunch of extra stuff
-	// to handle conditional merges. Like if two tokens happen to be on the same place, then they are merged
-	// into one. Luckily, since most conditional splits are guarded, this is unlikely to happen.
-
-	// Unless... I would have to check the next assignment, skipping past any guards. since the assumption is the
-	// execution of the assignment stores all of the information about any previous guards. (this is the weakest
-	// assumption I could make about state encoding. If I made no assumption, about what is needed to encode
-	// a state, then I would not be able to simulate instability). The thing is that most HSE will be resistant
-	// to this because they don't use the previous assignment to entirely encode the next state.
-
-	// So for now, I'm going to just mark them vacuous and let whoever is managing the simulator handle them.
-	// That might be to execute all of the vacuous firings first in a random order (this would prevent taking
-	// two branches of a conditional simultaneously). Or it could be to try and handle it correctly.
-
 	// TODO I don't know how I would treat the case when the execution enters a state that is not part of the HSE.
 	// In this case, all of the transitions in the entire HSE are vacuous (possibly unstable) and the tokens
 	// could just zoom around the HSE making no changes to the state information.

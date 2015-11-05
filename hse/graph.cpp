@@ -119,6 +119,75 @@ graph::~graph()
 
 }
 
+vector<vector<int> > graph::get_dependency_tree(petri::iterator a)
+{
+	vector<pair<vector<int>, int> > curr;
+	if (a.type == hse::place::type)
+	{
+		vector<int> p = prev(a.type, a.index);
+		bool propagate = true;
+		for (int i = 0; i < (int)p.size() && propagate; i++)
+			if (transitions[p[i]].behavior != hse::transition::passive)
+				propagate = false;
+
+		if (propagate)
+			for (int i = 0; i < (int)p.size(); i++)
+				curr.push_back(pair<vector<int>, int>(prev(1-a.type, p[i]), 0));
+	}
+	else
+		curr.push_back(pair<vector<int>, int>(prev(a.type, a.index), 0));
+
+	vector<vector<int> > result;
+	while (curr.size() > 0)
+	{
+		vector<int> temp = curr.back().first;
+		int iter = curr.back().second;
+		curr.pop_back();
+
+		bool propagate = false;
+		vector<int> p;
+		for (; iter < (int)temp.size() && !propagate; iter++)
+		{
+			p = prev(hse::place::type, temp[iter]);
+			propagate = true;
+			for (int i = 0; i < (int)p.size() && propagate; i++)
+				if (transitions[p[i]].behavior != hse::transition::passive)
+					propagate = false;
+		}
+
+		if (propagate)
+		{
+			for (int i = 0; i < (int)p.size(); i++)
+			{
+				curr.push_back(pair<vector<int>, int>(temp, iter));
+				vector<int> pp = prev(hse::transition::type, p[i]);
+				curr.back().first.insert(curr.back().first.end(), pp.begin(), pp.end());
+			}
+		}
+		else
+			result.push_back(temp);
+	}
+
+	for (int i = 0; i < (int)result.size(); i++)
+	{
+		sort(result[i].begin(), result[i].end());
+		result[i].resize(unique(result[i].begin(), result[i].end()) - result[i].begin());
+	}
+
+	return result;
+}
+
+// assumes all vector<int> inputs are sorted including arbiters
+bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b)
+{
+	for (int i = 0; i < (int)a.size(); i++)
+		for (int j = 0; j < (int)b.size(); j++)
+			if (vector_intersection_size(a[i], b[i], arbiters) == 0)
+				return false;
+
+	return true;
+}
+
 pair<vector<petri::iterator>, vector<petri::iterator> > graph::erase(petri::iterator n)
 {
 	pair<vector<petri::iterator>, vector<petri::iterator> > result = super::erase(n);
@@ -306,6 +375,8 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 
 	if (reset.size() == 0)
 		reset = source;
+
+	sort(arbiters.begin(), arbiters.end());
 }
 
 void graph::check_variables(const ucs::variable_set &variables)
