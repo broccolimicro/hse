@@ -177,13 +177,59 @@ vector<vector<int> > graph::get_dependency_tree(petri::iterator a)
 	return result;
 }
 
+vector<int> graph::get_implicant_tree(petri::iterator a)
+{
+	vector<int> result;
+	if (a.type == hse::place::type)
+	{
+		vector<int> n = next(a.type, a.index);
+		for (int i = 0; i < (int)n.size(); i++)
+			if (transitions[n[i]].behavior == hse::transition::passive)
+			{
+				vector<int> nn = next(1-a.type, n[i]);
+				result.insert(result.end(), nn.begin(), nn.end());
+			}
+	}
+	else
+		result = next(a.type, a.index);
+
+	for (int i = 0; i < (int)result.size(); i++)
+	{
+		vector<int> n =  next(hse::place::type, result[i]);
+
+		for (int i = 0; i < (int)n.size(); i++)
+			if (transitions[n[i]].behavior == hse::transition::passive)
+			{
+				vector<int> nn = next(hse::transition::type, n[i]);
+				result.insert(result.end(), nn.begin(), nn.end());
+			}
+	}
+
+	sort(result.begin(), result.end());
+	result.resize(unique(result.begin(), result.end()) - result.begin());
+
+	return result;
+}
+
 // assumes all vector<int> inputs are sorted including arbiters
 bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b)
 {
 	for (int i = 0; i < (int)a.size(); i++)
 		for (int j = 0; j < (int)b.size(); j++)
-			if (vector_intersection_size(a[i], b[i], arbiters) == 0)
+		{
+			vector<int> intersect = vector_intersection(a[i], b[i]);
+			vector<int> arb_intersect = vector_intersection(intersect, arbiters);
+			bool result = false;
+			for (int k = 0; k < (int)arb_intersect.size() && !result; k++)
+			{
+				vector<int> implicants = get_implicant_tree(hse::iterator(hse::place::type, arb_intersect[k]));
+				if (vector_intersection_size(implicants, intersect) == 0)
+					result = true;
+			}
+
+			if (!result)
 				return false;
+		}
 
 	return true;
 }
