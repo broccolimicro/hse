@@ -90,6 +90,7 @@ enabled_transition::enabled_transition()
 	vacuous = true;
 	stable = true;
 	guard = 1;
+	sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index)
@@ -98,6 +99,7 @@ enabled_transition::enabled_transition(int index)
 	vacuous = true;
 	stable = true;
 	guard = 1;
+	sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index, int term)
@@ -106,6 +108,7 @@ enabled_transition::enabled_transition(int index, int term)
 	vacuous = true;
 	stable = true;
 	guard = 1;
+	sequence = 1;
 }
 
 enabled_transition::~enabled_transition()
@@ -159,6 +162,7 @@ token::token()
 {
 	index = 0;
 	guard = 1;
+	sequence = 1;
 	cause = -1;
 }
 
@@ -166,6 +170,7 @@ token::token(petri::token t)
 {
 	index = t.index;
 	guard = 1;
+	sequence = 1;
 	cause = -1;
 }
 
@@ -173,13 +178,15 @@ token::token(int index)
 {
 	this->index = index;
 	this->guard = 1;
+	this->sequence = 1;
 	this->cause = -1;
 }
 
-token::token(int index, boolean::cover guard, int cause)
+token::token(int index, boolean::cover guard, boolean::cover sequence, int cause)
 {
 	this->index = index;
 	this->guard = guard;
+	this->sequence = sequence;
 	this->cause = cause;
 }
 

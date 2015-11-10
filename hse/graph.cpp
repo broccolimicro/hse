@@ -218,12 +218,26 @@ bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b)
 		for (int j = 0; j < (int)b.size(); j++)
 		{
 			vector<int> intersect = vector_intersection(a[i], b[i]);
+			vector<int> diff_a = vector_difference(a[i], intersect);
+			vector<int> diff_b = vector_difference(b[i], intersect);
 			vector<int> arb_intersect = vector_intersection(intersect, arbiters);
+
 			bool result = false;
 			for (int k = 0; k < (int)arb_intersect.size() && !result; k++)
 			{
-				vector<int> implicants = get_implicant_tree(hse::iterator(hse::place::type, arb_intersect[k]));
-				if (vector_intersection_size(implicants, intersect) == 0)
+				vector<int> arb_n = next(hse::place::type, arb_intersect[k]);
+				vector<int> index_a, index_b;
+				for (int l = 0; l < (int)arb_n.size(); l++)
+				{
+					vector<int> implicants = get_implicant_tree(hse::iterator(hse::transition::type, arb_n[l]));
+					if (vector_intersects(implicants, diff_a))
+						index_a.push_back(l);
+					if (vector_intersects(implicants, diff_b))
+						index_b.push_back(l);
+				}
+
+				vector_symmetric_compliment(index_a, index_b);
+				if (index_a.size() > 0 && index_b.size() > 0)
 					result = true;
 			}
 

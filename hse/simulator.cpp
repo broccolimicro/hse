@@ -10,7 +10,7 @@
 #include <common/text.h>
 #include <common/message.h>
 #include <ucs/variable.h>
-
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -295,11 +295,53 @@ int simulator::enabled(bool sorted)
 
 			// If this transition is an assignment, then we need to check to make sure all of the
 			// previous guards pass before we can execute this assignment.
+			// the 'guard' expression contains all of the guards since the last assignments in the process
+			// the 'sequence' expression contains all of the last assignments in the process. A dependency chain
+			// from these assignments to our current assignment is necessary to implement sequentialism. So
+			// Conservatively the assignments will always end up in the production rules for that purpose.
+			// However, we can do better by finding those dependency chains in the guard and only taking the expressions
+			// from the end of those chains.
 			for (int j = 0; j < (int)preload[i].tokens.size(); j++)
+			{
 				preload[i].guard &= tokens[preload[i].tokens[j]].guard;
+				preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
+			}
 
-			if (base->transitions[preload[i].index].behavior == transition::passive)
+			// TODO removing prs timing assumption
+			boolean::cover guard;
+			if (base->transitions[preload[i].index].behavior == transition::passive || base->transitions[preload[i].index].local_action.is_tautology())
+			{
 				preload[i].guard &= base->transitions[preload[i].index].local_action;
+				guard = preload[i].guard;
+			}
+			else
+			{
+				//cout << "Starting Sequence: " << export_expression(preload[i].sequence, *variables).to_string() << endl;
+				//cout << "Starting Rule: " << export_expression(preload[i].guard, *variables).to_string() << " -> " << export_composition(base->transitions[preload[i].index].local_action, *variables).to_string() << endl;
+
+				for (int j = 0; j < (int)preload[i].guard.cubes.size(); j++)
+				{
+					for (int k = 0; k < (int)preload[i].sequence.cubes.size(); k++)
+					{
+						//cout << "\tTerm " << j << "." << k << endl;
+						boolean::cube covered = preload[i].guard.cubes[j];
+						//cout << "\t\t" << export_expression(covered, *variables).to_string() << endl;
+						for (list<pair<boolean::cube, term_index> >::reverse_iterator l = history.rbegin(); l != history.rend(); l++)
+						{
+							if ((covered & base->transitions[l->second.index].local_action[l->second.term].inverse().flipped_mask(covered.mask().flip())).is_null())
+							{
+								covered &= (l->first.mask(covered.mask()) & preload[i].sequence.cubes[k].flipped_mask(l->first.mask().flip())).xoutnulls().mask(base->transitions[preload[i].index].local_action[0].mask());
+								//cout << "\t\t" << export_expression(covered, *variables).to_string() << endl;
+							}
+						}
+
+						guard.cubes.push_back(preload[i].guard.cubes[j] & preload[i].sequence.cubes[k].mask(covered.mask()).mask(base->transitions[preload[i].index].local_action[0].mask()));
+						//cout << "\t" << export_expression(guard.cubes.back(), *variables).to_string() << endl;
+					}
+				}
+
+				//cout << "Ending Guard: " << export_expression(guard, *variables).to_string() << endl;
+			}
 
 			// Check for unstable transitions
 			bool previously_enabled = false;
@@ -311,7 +353,7 @@ int simulator::enabled(bool sorted)
 				}
 
 			// Now we check to see if the current state passes the guard
-			int ready = boolean::passes_guard(encoding, global, preload[i].guard, &preload[i].guard_action);
+			int ready = boolean::passes_guard(encoding, global, guard, &preload[i].guard_action);
 			if (ready < 0 && previously_enabled)
 				ready = 0;
 
@@ -350,13 +392,17 @@ int simulator::enabled(bool sorted)
 				if (!loop)
 				{
 					boolean::cover guard = preload[i].guard;
+					boolean::cover sequence = preload[i].sequence;
 					if (base->transitions[preload[i].index].behavior == transition::active && base->transitions[preload[i].index].local_action != 1)
-						guard = base->transitions[preload[i].index].local_action; //TODO assumption about prs guards
+					{
+						guard = 1;
+						sequence = base->transitions[preload[i].index].local_action;
+					}
 
 					for (int j = 0; j < (int)output.size(); j++)
 					{
 						preload[i].output_marking.push_back((int)tokens.size());
-						tokens.push_back(token(output[j], guard, i));
+						tokens.push_back(token(output[j], guard, sequence, i));
 					}
 				}
 				else
@@ -377,14 +423,18 @@ int simulator::enabled(bool sorted)
 	{
 		// Get the output marking of the potential
 		boolean::cover guard = potential[i].guard;
+		boolean::cover sequence = potential[i].sequence;
 		if (base->transitions[potential[i].index].behavior == transition::active && base->transitions[potential[i].index].local_action != 1)
-			guard = base->transitions[potential[i].index].local_action; //TODO assumption about prs guards
+		{
+			guard = 1;
+			sequence = base->transitions[potential[i].index].local_action;
+		}
 
 		vector<int> output = base->next(transition::type, potential[i].index);
 		for (int j = 0; j < (int)output.size(); j++)
 		{
 			potential[i].output_marking.push_back((int)tokens.size());
-			tokens.push_back(token(output[j], guard, preload.size()));
+			tokens.push_back(token(output[j], guard, sequence, preload.size()));
 		}
 
 		preload.push_back(potential[i]);
@@ -398,10 +448,10 @@ int simulator::enabled(bool sorted)
 			for (int j = 0; j < (int)base->transitions[loaded[i].index].local_action.cubes.size(); j++)
 				ready.push_back(pair<int, int>(i, j));
 
-	if (last.index >= 0)
+	if (history.size() > 0)
 		for (int i = 0; i < (int)loaded.size(); i++)
 			if (loaded[i].stable)
-				loaded[i].history.push_back(last);
+				loaded[i].history.push_back(history.back().second);
 
 	/*for (int i = 0; i < (int)tokens.size(); i++)
 		cout << "Token " << i << ": " << tokens[i].index << " " << tokens[i].cause << " " << tokens[i].guard << endl;
@@ -582,7 +632,35 @@ enabled_transition simulator::fire(int index)
 	global = local_assign(global, remote_action, t.stable);
 	encoding = remote_assign(local_assign(encoding, local_action, t.stable), global, true);
 
-	last = term_index(t.index, term);
+	// Update the history. The first thing we need to do is remove any assignments that no longer
+	// have any effect on the global state. So we remove history items where all of the terms
+	// in their assignments are conflicting with terms in more recent assignments.
+	boolean::cube actions = base->transitions[t.index].local_action.cubes[term].mask();
+	for (list<pair<boolean::cube, term_index> >::reverse_iterator i = history.rbegin(); i != history.rend();)
+	{
+		if (base->transitions[i->second.index].local_action.cubes[i->second.term].mask(actions).is_tautology())
+		{
+			i++;
+			i = list<pair<boolean::cube, term_index> >::reverse_iterator(history.erase(i.base()));
+		}
+		else
+		{
+			actions = actions.combine_mask(base->transitions[i->second.index].local_action.cubes[i->second.term].mask());
+			i++;
+		}
+	}
+
+	// Add the latest firing to the history.
+	history.push_back(pair<boolean::cube, term_index>(t.guard_action, term_index(t.index, term)));
+
+	/*cout << "History" << endl;
+	actions = 0;
+	for (list<pair<boolean::cube, term_index> >::reverse_iterator i = history.rbegin(); i != history.rend(); i++)
+	{
+		cout << export_expression(i->first, *variables).to_string() << " -> " << export_composition(base->transitions[i->second.index].local_action.cubes[i->second.term].mask(actions), *variables).to_string() << endl;
+		actions = actions.combine_mask(base->transitions[i->second.index].local_action.cubes[i->second.term].mask());
+	}*/
+
 	return t;
 }
 

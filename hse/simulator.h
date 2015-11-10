@@ -64,7 +64,7 @@ struct simulator
 	vector<interference> interference_errors;
 	vector<mutex> mutex_errors;
 	vector<term_index> unacknowledged;
-	term_index last;
+	list<pair<boolean::cube, term_index> > history;
 
 	const graph *base;
 	const ucs::variable_set *variables;

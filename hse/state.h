@@ -59,6 +59,7 @@ struct enabled_transition : petri::enabled_transition
 	vector<term_index> history;
 	boolean::cube guard_action;
 	boolean::cover guard;
+	boolean::cover sequence;
 	bool vacuous;
 	bool stable;
 
@@ -80,10 +81,11 @@ struct token : petri::token
 	token();
 	token(petri::token t);
 	token(int index);
-	token(int index, boolean::cover guard, int cause = -1);
+	token(int index, boolean::cover guard, boolean::cover sequence, int cause = -1);
 	~token();
 
 	boolean::cover guard;
+	boolean::cover sequence;
 	int cause;
 
 	string to_string();
