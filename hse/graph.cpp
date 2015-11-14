@@ -534,6 +534,7 @@ vector<int> graph::associated_assigns(vector<int> tokens)
 
 	sort(result.begin(), result.end());
 	result.resize(unique(result.begin(), result.end()) - result.begin());
+
 	return result;
 }
 

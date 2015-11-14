@@ -514,15 +514,10 @@ enabled_transition simulator::fire(int index)
 		{
 			for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
 				if (tokens[loaded[i].tokens[j]].cause >= 0 && tokens[loaded[i].tokens[j]].cause < i && find(visited.begin(), visited.end(), tokens[loaded[i].tokens[j]].cause) == visited.end())
-				{
 					loaded[i].tokens.insert(loaded[i].tokens.end(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.begin(), loaded[tokens[loaded[i].tokens[j]].cause].tokens.end());
-					loaded[i].output_marking.insert(loaded[i].output_marking.end(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.begin(), loaded[tokens[loaded[i].tokens[j]].cause].output_marking.end());
-				}
 
 			sort(loaded[i].tokens.begin(), loaded[i].tokens.end());
 			loaded[i].tokens.resize(unique(loaded[i].tokens.begin(), loaded[i].tokens.end()) - loaded[i].tokens.begin());
-			sort(loaded[i].output_marking.begin(), loaded[i].output_marking.end());
-			loaded[i].output_marking.resize(unique(loaded[i].output_marking.begin(), loaded[i].output_marking.end()) - loaded[i].output_marking.begin());
 		}
 	}
 
@@ -534,18 +529,24 @@ enabled_transition simulator::fire(int index)
 		if (intersect.size() > 0)
 		{
 			// assumes the ready array is sorted in ascending order
-			bool is_ready = false;
-			for (; j >= 0 && !is_ready; j--)
-				if (ready[j].first == i)
-					is_ready = true;
+			bool is_effective = false;
+			for (; j >= 0 && !is_effective; j--)
+				is_effective = (ready[j].first == i);
 
-			bool determ = true;
-			for (int j = 0; j < (int)intersect.size() && determ; j++)
-				if (find(base->arbiters.begin(), base->arbiters.end(), tokens[intersect[j]].index) != base->arbiters.end())
-					determ = false;
+			bool is_deterministic = true;
+			for (int k = 0; k < (int)intersect.size() && is_deterministic; k++)
+				is_deterministic = (find(base->arbiters.begin(), base->arbiters.end(), tokens[intersect[k]].index) == base->arbiters.end());
 
-			if (is_ready && determ && loaded[i].index != t.index)
+			if (is_effective && is_deterministic && loaded[i].index != t.index)
 			{
+				cout << "Intersect: (";
+				for (int l = 0; l < (int)intersect.size(); l++)
+					cout << tokens[intersect[l]].index << " ";
+				cout << ")";
+				cout << "Arbiters: (";
+				for (int l = 0; l < (int)base->arbiters.size(); l++)
+					cout << base->arbiters[l] << " ";
+				cout << ")";
 				mutex err = mutex(t, loaded[i]);
 				vector<mutex>::iterator loc = lower_bound(mutex_errors.begin(), mutex_errors.end(), err);
 				if (loc == mutex_errors.end() || *loc != err)
@@ -719,6 +720,58 @@ state simulator::get_key()
 		result.tokens.push_back(petri::token(loaded[ready[i].first].index));
 	sort(result.tokens.begin(), result.tokens.end());
 	result.tokens.resize(unique(result.tokens.begin(), result.tokens.end()) - result.tokens.begin());
+	return result;
+}
+
+vector<pair<int, int> > simulator::get_choices()
+{
+	vector<pair<int, int> > result;
+	vector<vector<int> > tree;
+	vector<vector<int> > visited;
+
+	for (int i = 0; i < (int)loaded.size(); i++)
+	{
+		tree.push_back(loaded[i].tokens);
+		visited.push_back(vector<int>(1, i));
+	}
+
+	for (int i = 0; i < (int)tree.size(); i++)
+	{
+		int tsize = (int)tree[i].size();
+		for (int j = 0; j < tsize; j++)
+			if (tokens[tree[i][j]].cause >= 0 && tokens[tree[i][j]].cause < i)
+			{
+				tree[i].insert(tree[i].end(), tree[tokens[tree[i][j]].cause].begin(), tree[tokens[tree[i][j]].cause].end());
+				visited[i].insert(visited[i].end(), visited[tokens[tree[i][j]].cause].begin(), visited[tokens[tree[i][j]].cause].end());
+			}
+
+		sort(tree[i].begin(), tree[i].end());
+		tree[i].resize(unique(tree[i].begin(), tree[i].end()) - tree[i].begin());
+		sort(visited[i].begin(), visited[i].end());
+		visited[i].resize(unique(visited[i].begin(), visited[i].end()) - visited[i].begin());
+	}
+
+	vector<int> lindices;
+	for (int i = 0; i < (int)ready.size(); i++)
+		lindices.push_back(ready[i].first);
+	sort(lindices.begin(), lindices.end());
+	lindices.resize(unique(lindices.begin(), lindices.end()) - lindices.begin());
+
+	for (int i = 0; i < (int)lindices.size(); i++)
+		for (int j = i+1; j < (int)lindices.size(); j++)
+		{
+			vector<int> temp = loaded[lindices[j]].tokens;
+			for (int k = 0; k < (int)temp.size(); k++)
+				if (tokens[temp[k]].cause >= 0 && tokens[temp[k]].cause < lindices[j] && find(visited[i].begin(), visited[i].end(), tokens[temp[k]].cause) == visited[i].end())
+					temp.insert(temp.end(), loaded[tokens[temp[k]].cause].tokens.begin(), loaded[tokens[temp[k]].cause].tokens.end());
+
+			sort(temp.begin(), temp.end());
+			temp.resize(unique(temp.begin(), temp.end()) - temp.begin());
+
+			if (vector_intersects(tree[lindices[i]], temp))
+				result.push_back(pair<int, int>(lindices[i], lindices[j]));
+		}
+
 	return result;
 }
 

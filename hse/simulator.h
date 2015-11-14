@@ -85,6 +85,7 @@ struct simulator
 	void merge_errors(const simulator &sim);
 	state get_state();
 	state get_key();
+	vector<pair<int, int> > get_choices();
 };
 
 }

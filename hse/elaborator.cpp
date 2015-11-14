@@ -7,6 +7,7 @@
 
 #include "elaborator.h"
 #include <common/text.h>
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -355,6 +356,207 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 	return result;
 }
 
+struct firing
+{
+	boolean::cube guard;
+	term_index action;
+	state loc;
+};
+
+bool operator==(firing f0, firing f1)
+{
+	return f0.guard == f1.guard && f0.action == f1.action && f0.loc == f1.loc;
+}
+
+struct cycle
+{
+	vector<firing> firings;
+};
+
+bool operator==(cycle f0, cycle f1)
+{
+	if (f0.firings.size() != f1.firings.size())
+		return false;
+
+	for (int i = 0; i < (int)f0.firings.size(); i++)
+	{
+		bool equal = true;
+		for (int j = 0; j < (int)f0.firings.size() && equal; j++)
+			equal = (f0.firings[(i+j)%(int)f0.firings.size()].action == f1.firings[j].action && f0.firings[(i+j)%(int)f0.firings.size()].guard == f1.firings[j].guard);
+
+		if (equal)
+			return true;
+	}
+
+	return false;
+}
+
+struct frame
+{
+	frame() {}
+	frame(simulator sim)
+	{
+		this->sim = sim;
+		if (sim.variables != NULL)
+			this->indices.resize(sim.variables->nodes.size(), 0);
+	}
+	~frame() {}
+
+	cycle part;
+	vector<int> indices;
+	simulator sim;
+};
+
+vector<cycle> get_cycles(const graph &g, const ucs::variable_set &variables, bool report_progress)
+{
+	vector<cycle> result;
+	vector<frame> frames;
+	//hashtable<state, 200> states;
+	if (g.reset.size() > 0)
+		for (int i = 0; i < (int)g.reset.size(); i++)
+			frames.push_back(frame(simulator(&g, &variables, g.reset[i])));
+	else
+		for (int i = 0; i < (int)g.source.size(); i++)
+			frames.push_back(frame(simulator(&g, &variables, g.source[i])));
+
+	int iteration = -1;
+	while (frames.size() > 0)
+	{
+		iteration++;
+		cout << "Iteration " << iteration << ": " << frames.size() << " frames left" << endl;
+		frame curr = frames.back();
+		frames.pop_back();
+
+		curr.sim.enabled();
+		vector<pair<int, int> > choices = curr.sim.get_choices();
+
+
+		cout << "Enabled Assignments: ";
+		for (int i = 0; i < (int)curr.sim.ready.size(); i++)
+		{
+			for (int j = i+1; j < (int)curr.sim.ready.size(); j++)
+				if (find(choices.begin(), choices.end(), pair<int, int>(curr.sim.ready[i].first, curr.sim.ready[j].first)) != choices.end())
+				{
+					if (i != 0 || j != 1)
+						cout << " ";
+					cout << "(" << i << ", " << j << ")";
+				}
+		}
+		cout << endl;
+		for (int i = 0; i < (int)curr.sim.ready.size(); i++)
+			cout << "(" << i << ")\t" << export_expression(curr.sim.loaded[curr.sim.ready[i].first].guard_action, variables).to_string() << " -> " << export_composition(g.transitions[curr.sim.loaded[curr.sim.ready[i].first].index].local_action.cubes[curr.sim.ready[i].second], variables).to_string() << endl;
+
+
+		vector<int> excluded;
+		// tindices each element in tindices will have three elements
+		// tindices[i][0] = the calculated index for the transition as in index priority simulation
+		// tindices[i][1] = the number of transitions that are mutually exclusive from this one due to choice
+		// tindices[i][2] = the index in the list of ready transitions in curr.sim
+		vector<vector<int> > tindices;
+
+		// figure out the index for each transition in the list of ready transitions in curr.sim
+		for (int i = 0; i < (int)curr.sim.ready.size(); i++)
+		{
+			// initialize the excluded list while we are at it
+			excluded.push_back(i);
+
+			// set up the initial indices values
+			tindices.push_back(vector<int>());
+			// we need to take the max, so we need to start out with something thats lower than any possible index. indices start at 0
+			tindices.back().push_back(-1);
+			// start without any information about choices
+			tindices.back().push_back(0);
+			// this tindex represents ready[i]
+			tindices.back().push_back(i);
+
+			// For transitions that affect multiple variables, take the max of the indices of those variables
+			vector<int> tvars = g.transitions[curr.sim.loaded[curr.sim.ready[i].first].index].local_action[curr.sim.ready[i].second].vars();
+			for (int j = 0; j < (int)tvars.size(); j++)
+				if (curr.indices[tvars[j]] > tindices.back()[0])
+					tindices.back()[0] = curr.indices[tvars[j]];
+		}
+
+		// Now we need to choose multiple transitions to fire. The fewer the better.
+		// So we have two sorting criteria: maximize their index, and minimize the number of transitions they exclude from choice
+		//int chosen = -1;
+		while (excluded.size() > 0 && tindices.size() > 0)
+		{
+			// store the old list of excluded transitions, we'll use these to populate the new list
+			vector<int> old = excluded;
+			excluded.clear();
+
+			// the list of possibly excluded transitions for each tindex
+			vector<vector<int> > possible(curr.sim.ready.size(), vector<int>());
+			for (int i = 0; i < (int)tindices.size(); i++)
+			{
+				for (int j = 0; j < (int)old.size(); j++)
+					if ((curr.sim.ready[tindices[i][2]].first < curr.sim.ready[old[j]].first && find(choices.begin(), choices.end(), pair<int, int>(curr.sim.ready[tindices[i][2]].first, curr.sim.ready[old[j]].first)) != choices.end()) ||
+						(curr.sim.ready[old[j]].first < curr.sim.ready[tindices[i][2]].first && find(choices.begin(), choices.end(), pair<int, int>(curr.sim.ready[old[j]].first, curr.sim.ready[tindices[i][2]].first)) != choices.end()))
+						possible[tindices[i][2]].push_back(old[j]);
+
+				// minimizing the number of excluded transitions is the same as maximizing the number of included ones
+				tindices[i][1] = tindices.size() - possible[tindices[i][2]].size();
+			}
+
+			sort(tindices.begin(), tindices.end());
+
+			cout << "Indices:" << endl;
+			for (int i = 0; i < (int)tindices.size(); i++)
+			{
+				cout << tindices[i][0] << " " << tindices[i][1] << " " << tindices[i][2] << " (";
+				for (int j = 0; j < (int)possible[tindices[i][2]].size(); j++)
+				{
+					if (j != 0)
+						cout << " ";
+					cout << possible[tindices[i][2]][j];
+				}
+				cout << ")" << endl;
+			}
+
+			// find the next tindex that we haven't already fired.
+			vector<int> index = tindices.back();
+
+			// TODO check to make sure this assumption about minimal cycles with "chosen" actually holds true
+			if (index.size() == 3/* && index[0] >= chosen*/)
+			{
+				//chosen = index[0];
+
+				firing t;
+				t.guard = curr.sim.loaded[curr.sim.ready[index[2]].first].guard_action;
+				t.action = term_index(curr.sim.loaded[curr.sim.ready[index[2]].first].index, curr.sim.ready[index[2]].second);
+				t.loc = curr.sim.get_state();
+
+				vector<firing>::iterator loc = find(curr.part.firings.begin(), curr.part.firings.end(), t);
+				if (loc != curr.part.firings.end())
+				{
+					curr.part.firings.erase(curr.part.firings.begin(), loc);
+					if (find(result.begin(), result.end(), curr.part) == result.end())
+						result.push_back(curr.part);
+				}
+				else// if (!states.contains(t.loc))
+				{
+					//states.insert(t.loc);
+					excluded = possible[index[2]];
+					frames.push_back(curr);
+					frames.back().part.firings.push_back(t);
+					frames.back().sim.fire(index[2]);
+
+					vector<int> tvars = g.transitions[t.action.index].local_action.cubes[t.action.term].vars();
+					for (int i = 0; i < (int)tvars.size(); i++)
+						frames.back().indices[tvars[i]]++;
+
+					for (int i = tindices.size()-1; i >= 0; i--)
+						if (find(excluded.begin(), excluded.end(), tindices[i][2]) == excluded.end())
+							tindices.erase(tindices.begin() + i);
+				}
+			}
+		}
+		cout << endl << endl;
+	}
+
+	return result;
+}
+
 /* to_petri_net()
  *
  * Converts the HSE into a petri net using index-priority simulation.
@@ -362,7 +564,26 @@ graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool re
 graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;
-	simulator sim(&g, &variables, g.reset[0]);
+
+	vector<cycle> cycles = get_cycles(g, variables, report_progress);
+	for (int i = 0; i < (int)cycles.size(); i++)
+	{
+		cout << "Cycle " << i << endl;
+		for (int j = 0; j < (int)cycles[i].firings.size(); j++)
+		{
+			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << export_expression(cycles[i].firings[j].guard, variables).to_string() << " -> " << export_composition(g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term], variables).to_string() << "\t{";
+			for (int k = 0; k < (int)cycles[i].firings[j].loc.tokens.size(); k++)
+			{
+				if (k != 0)
+					cout << " ";
+				cout << cycles[i].firings[j].loc.tokens[k].index;
+			}
+			cout << "} " << export_expression(cycles[i].firings[j].loc.encodings, variables).to_string() << endl;
+		}
+	}
+
+
+	/*simulator sim(&g, &variables, g.reset[0]);
 	vector<int> indices(variables.nodes.size(), 0);
 	map<pair<int, int>, pair<int, bool> > transitions;
 	vector<int> record(variables.nodes.size(), -1);
@@ -377,7 +598,7 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 
 		// Get the transition that will change the node that has been changed most recently
 		// This will find a cycle quicker
-		/*int index = -1;
+		int index = -1;
 		int value = -1;
 		vector<int> vindex;
 		for (int i = 0; i < (int)sim.ready.size(); i++)
@@ -398,7 +619,7 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 
 		// Get the transition that will change the node that hasn't been changed in the longest amount of time
 		// this will be more likely to explore the entire graph
-		int index = -1;
+		/*int index = -1;
 		int value = max_value;
 		vector<int> vindex;
 		for (int i = 0; i < (int)sim.ready.size(); i++)
@@ -415,9 +636,9 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 				value = test;
 				vindex = v;
 			}
-		}
+		}*/
 
-		if (index == -1)
+		/*if (index == -1)
 			done = true;
 		else
 		{
@@ -473,7 +694,7 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 			}
 			sim.fire(index);
 		}
-	}
+	}*/
 
 	return result;
 }
