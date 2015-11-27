@@ -119,7 +119,43 @@ graph::~graph()
 
 }
 
-vector<vector<int> > graph::get_dependency_tree(petri::iterator a)
+// get the tree of guards before this iterator
+pair<boolean::cover, boolean::cover> graph::get_guard(petri::iterator a) const
+{
+	pair<boolean::cover, boolean::cover> result;
+	vector<petri::iterator> p = prev(a);
+	if (a.type == hse::place::type)
+	{
+		for (int i = 0; i < (int)p.size(); i++)
+		{
+			pair<boolean::cover, boolean::cover> temp = get_guard(p[i]);
+			result.first |= temp.first;
+			result.second |= temp.second;
+		}
+	}
+	else
+	{
+		result.first = 1;
+		result.second = 1;
+		if (transitions[a.index].behavior == transition::passive)
+		{
+			for (int i = 0; i < (int)p.size(); i++)
+			{
+				pair<boolean::cover, boolean::cover> temp = get_guard(p[i]);
+				result.first &= temp.first;
+				result.second &= temp.second;
+			}
+			result.second &= transitions[a.index].local_action;
+		}
+		else
+			result.first &= transitions[a.index].local_action;
+	}
+
+	return result;
+}
+
+// get the tree of input places covering all of the guards before this iterator
+vector<vector<int> > graph::get_dependency_tree(petri::iterator a) const
 {
 	vector<pair<vector<int>, int> > curr;
 	if (a.type == hse::place::type)
@@ -177,7 +213,7 @@ vector<vector<int> > graph::get_dependency_tree(petri::iterator a)
 	return result;
 }
 
-vector<int> graph::get_implicant_tree(petri::iterator a)
+vector<int> graph::get_implicant_tree(petri::iterator a) const
 {
 	vector<int> result;
 	if (a.type == hse::place::type)
@@ -212,7 +248,7 @@ vector<int> graph::get_implicant_tree(petri::iterator a)
 }
 
 // assumes all vector<int> inputs are sorted including arbiters
-bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b)
+bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
 {
 	for (int i = 0; i < (int)a.size(); i++)
 		for (int j = 0; j < (int)b.size(); j++)
@@ -319,7 +355,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		change = false;
 		for (int i = 0; i < (int)source.size(); i++)
 		{
-			petri::simulator<hse::place, hse::transition, petri::token, hse::state> sim(this, source[i]);
+			simulator::super sim(this, source[i]);
 			sim.enabled();
 
 			change = false;
@@ -372,7 +408,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 
 		for (int i = 0; i < (int)reset.size(); i++)
 		{
-			petri::simulator<hse::place, hse::transition, petri::token, hse::state> sim(this, reset[i]);
+			simulator::super sim(this, reset[i]);
 			sim.enabled();
 
 			change = false;
@@ -423,6 +459,59 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 				}
 			}
 		}
+	}
+
+	// Determine the actual starting location of the tokens given the state information
+	for (int i = 0; i < (int)source.size(); i++)
+	{
+		simulator::super sim(this, source[i]);
+		bool change = true;
+		while (change)
+		{
+			sim.renabled();
+
+			change = false;
+			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
+			{
+				change = transitions[sim.ready[j].index].behavior == transition::passive && (transitions[sim.ready[j].index].local_action & source[i].encodings) == source[i].encodings;
+				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
+					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
+						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
+							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
+							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].local_action, source[i].encodings))
+							change = false;
+
+				if (change)
+					sim.rfire(j);
+			}
+		}
+		source[i].tokens = sim.tokens;
+	}
+
+	for (int i = 0; i < (int)reset.size(); i++)
+	{
+		simulator::super sim(this, reset[i]);
+		bool change = true;
+		while (change)
+		{
+			sim.renabled();
+
+			change = false;
+			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
+			{
+				change = transitions[sim.ready[j].index].behavior == transition::passive && (transitions[sim.ready[j].index].local_action & reset[i].encodings) == reset[i].encodings;
+				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
+					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
+						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
+							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
+							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].local_action, reset[i].encodings))
+							change = false;
+
+				if (change)
+					sim.rfire(j);
+			}
+		}
+		reset[i].tokens = sim.tokens;
 	}
 
 	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)

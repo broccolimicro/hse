@@ -12,8 +12,6 @@
 
 #include "state.h"
 
-#include "simulator.h"
-
 #ifndef hse_graph_h
 #define hse_graph_h
 
@@ -80,9 +78,10 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	 */
 	vector<int> arbiters;
 
-	vector<vector<int> > get_dependency_tree(petri::iterator a);
-	vector<int> get_implicant_tree(petri::iterator a);
-	bool common_arbiter(vector<vector<int> > a, vector<vector<int> > b);
+	pair<boolean::cover, boolean::cover> get_guard(petri::iterator a) const;
+	vector<vector<int> > get_dependency_tree(petri::iterator a) const;
+	vector<int> get_implicant_tree(petri::iterator a) const;
+	bool common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const;
 
 	pair<vector<petri::iterator>, vector<petri::iterator> > erase(petri::iterator n);
 	petri::iterator duplicate(int composition, petri::iterator i, bool add = true);

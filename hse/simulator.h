@@ -7,6 +7,9 @@
 
 #include <common/standard.h>
 #include <ucs/variable.h>
+#include <petri/state.h>
+#include <petri/simulator.h>
+#include "graph.h"
 #include "state.h"
 
 #ifndef hse_simulator_h
@@ -14,8 +17,6 @@
 
 namespace hse
 {
-
-struct graph;
 
 struct instability : enabled_transition
 {
@@ -56,6 +57,8 @@ struct deadlock : state
 
 struct simulator
 {
+	typedef petri::simulator<hse::place, hse::transition, petri::token, hse::state> super;
+
 	simulator();
 	simulator(const graph *base, const ucs::variable_set *variables, state initial);
 	~simulator();

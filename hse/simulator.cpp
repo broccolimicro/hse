@@ -140,7 +140,6 @@ simulator::simulator()
 
 simulator::simulator(const graph *base, const ucs::variable_set *variables, state initial)
 {
-	//cout << "Reset" << endl;
 	this->base = base;
 	this->variables = variables;
 	if (base != NULL)
@@ -148,7 +147,10 @@ simulator::simulator(const graph *base, const ucs::variable_set *variables, stat
 		encoding = initial.encodings;
 		global = initial.encodings;
 		for (int k = 0; k < (int)initial.tokens.size(); k++)
-			tokens.push_back(initial.tokens[k]);
+		{
+			pair<boolean::cover, boolean::cover> g = base->get_guard(hse::iterator(hse::place::type, initial.tokens[k].index));
+			tokens.push_back(hse::token(initial.tokens[k].index, g.second, 1/*g.first*/));
+		}
 	}
 }
 
@@ -424,7 +426,8 @@ int simulator::enabled(bool sorted)
 		// Get the output marking of the potential
 		boolean::cover guard = potential[i].guard;
 		boolean::cover sequence = potential[i].sequence;
-		if (base->transitions[potential[i].index].behavior == transition::active && base->transitions[potential[i].index].local_action != 1)
+		// By definition, none of these firings are vacuous, so we don't need to check that
+		if (base->transitions[potential[i].index].behavior == transition::active)
 		{
 			guard = 1;
 			sequence = base->transitions[potential[i].index].local_action;
