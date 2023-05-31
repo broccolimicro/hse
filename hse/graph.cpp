@@ -250,6 +250,10 @@ vector<int> graph::get_implicant_tree(petri::iterator a) const
 // assumes all vector<int> inputs are sorted including arbiters
 bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
 {
+	if (a.size() == 0 or b.size() == 0) {
+		return false;
+	}
+
 	for (int i = 0; i < (int)a.size(); i++)
 		for (int j = 0; j < (int)b.size(); j++)
 		{

@@ -17,17 +17,24 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 {
 	g.parallel_nodes.clear();
 
+	// Initialize all predicates and effective predicates to false.
 	for (int i = 0; i < (int)g.places.size(); i++)
 	{
 		g.places[i].predicate = boolean::cover();
 		g.places[i].effective = boolean::cover();
 	}
 
+	// used to trim the simulation tree by identifying revisited simulation states.
 	hashtable<state, 10000> states;
+
+	// the set of currently running simulations
 	vector<simulator> simulations;
-	vector<deadlock> deadlocks;
 	simulations.reserve(2000);
 
+	// all error states found are stored here.
+	vector<deadlock> deadlocks;
+
+	// initialize the list of current simulations with reset
 	if (g.reset.size() > 0)
 	{
 		for (int i = 0; i < (int)g.reset.size(); i++)
@@ -39,6 +46,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 				simulations.push_back(sim);
 		}
 	}
+	// if there isn't a reset state, look for places with only outgoing arcs.
 	else
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
@@ -51,9 +59,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		}
 	}
 
+	// this is a depth-first search of all states reachable from reset.
 	int count = 0;
 	while (simulations.size() > 0)
 	{
+		// grab the simulation at the top of the stack
 		simulator sim = simulations.back();
 		simulations.pop_back();
 		//simulations.back().merge_errors(sim);
@@ -61,18 +71,25 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		if (report_progress)
 			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
 
+		// Create a new simulation for each enabled transition in the current
+		// simulation and push it to the end of the stack as long as we haven't
+		// seen that state before
 		simulations.reserve(simulations.size() + sim.ready.size());
 		for (int i = 0; i < (int)sim.ready.size(); i++)
 		{
 			simulations.push_back(sim);
 
+			// fire the enabled transition
 			simulations.back().fire(i);
+
+			// compute the new enabled transitions
 			simulations.back().enabled();
 
 			if (!states.insert(simulations.back().get_state()))
 				simulations.pop_back();
 		}
 
+		// If there aren't any enabled transitions, then record a deadlock state.
 		if (sim.ready.size() == 0)
 		{
 			deadlock d = sim.get_state();
@@ -143,12 +160,10 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			}
 		}
 
-		/* The effective predicate represents the state encodings that don't have duplicates
-		 * in later states.
-		 *
-		 * I have to loop through all of the enabled transitions, and then loop through all orderings
-		 * of their dependent guards, saving the state
-		 */
+		// The effective predicate represents the state encodings that don't have
+		// duplicates in later states. I have to loop through all of the enabled
+		// transitions, and then loop through all orderings of their dependent
+		// guards, saving the state
 		vector<set<int> > en_in(sim.tokens.size(), set<int>());
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
 
@@ -229,11 +244,8 @@ struct simulation
 	petri::iterator node;
 };
 
-/** to_state_graph()
- *
- * This converts a given graph to the fully expanded state space through simulation. It systematically
- * simulates all possible transition orderings and determines all of the resulting state information.
- */
+// This converts a given graph to the fully expanded state space through simulation. It systematically
+// simulates all possible transition orderings and determines all of the resulting state information.
 graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;
@@ -677,10 +689,7 @@ bool operator==(parc a, parc b)
 
 
 
-/* to_petri_net()
- *
- * Converts the HSE into a petri net using index-priority simulation.
- */
+// Converts the HSE into a petri net using index-priority simulation.
 graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;

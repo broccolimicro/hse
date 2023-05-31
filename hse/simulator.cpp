@@ -159,12 +159,9 @@ simulator::~simulator()
 
 }
 
-/** enabled()
- *
- * Returns a vector of indices representing the transitions
- * that this marking enabled and the term of each transition
- * that's enabled.
- */
+// Returns a vector of indices representing the transitions
+// that this marking enabled and the term of each transition
+// that's enabled.
 int simulator::enabled(bool sorted)
 {
 	if (base == NULL)

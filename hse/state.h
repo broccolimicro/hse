@@ -20,9 +20,8 @@ namespace hse
 
 struct graph;
 
-/* This points to the cube 'term' in the action of transition 'index' in a graph.
- * i.e. g.transitions[index].action.cubes[term]
- */
+// This points to the cube 'term' in the action of transition 'index' in a graph.
+// i.e. g.transitions[index].action.cubes[term]
 struct term_index
 {
 	term_index();
@@ -45,9 +44,8 @@ bool operator>=(term_index i, term_index j);
 bool operator==(term_index i, term_index j);
 bool operator!=(term_index i, term_index j);
 
-/* This stores all the information necessary to fire an enabled transition: the local
- * and remote tokens that enable it, and the total state of those tokens.
- */
+// This stores all the information necessary to fire an enabled transition: the local
+// and remote tokens that enable it, and the total state of those tokens.
 struct enabled_transition : petri::enabled_transition
 {
 	enabled_transition();
@@ -73,9 +71,8 @@ bool operator>=(enabled_transition i, enabled_transition j);
 bool operator==(enabled_transition i, enabled_transition j);
 bool operator!=(enabled_transition i, enabled_transition j);
 
-/* A local token maintains its own local state information and cannot access global state
- * except through transformations applied to its local state.
- */
+// A local token maintains its own local state information and cannot access global state
+// except through transformations applied to its local state.
 struct token : petri::token
 {
 	token();

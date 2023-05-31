@@ -78,7 +78,7 @@ struct simulator
 	vector<token> tokens;
 	vector<enabled_transition> loaded;
 
-	// ready[i].first indexes the loaded array
+	// ready[i].first indexes the "loaded" array
 	// ready[i].second indexes the cube in the action of that transition
 	vector<pair<int, int> > ready;
 

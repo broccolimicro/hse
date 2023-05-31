@@ -267,14 +267,17 @@ void encoder::check(bool senseless)
 	}
 
 	// get the list of places that are suspect against other places
-	for (int i = 0; i < (int)base->places.size(); i++)
-		for (int j = 0; j < (int)base->places.size(); j++)
+	for (int i = 0; i < (int)base->places.size(); i++) {
+		for (int j = 0; j < (int)base->places.size(); j++) {
 			if (j != i && (base->is_reachable(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) ||
 					       base->is_reachable(petri::iterator(petri::place::type, j), petri::iterator(petri::place::type, i))) &&
 				!base->is_parallel(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) &&
-				!base->common_arbiter(pdeps[i], pdeps[j]))
-				for (int s = senseless ? -1 : 0; senseless ? s == -1 : s < 2; s++)
-					if (!are_mutex(base->places[i].effective.mask(s), base->places[j].effective))
+				!base->common_arbiter(pdeps[i], pdeps[j])) {
+				for (int s = senseless ? -1 : 0; senseless ? s == -1 : s < 2; s++) {
+					// Check the implicant predicate against the other place's effective.
+					// The predicate is used because inserting a state variable
+					// transition will negate any "you might as well be here" effects.
+					if (!are_mutex(base->places[i].predicate.mask(s), base->places[j].effective))
 					{
 						// cluster the conflicting places into regions. We want to be able to
 						// eliminate entire regions of these conflicts with a single state variable.
@@ -311,6 +314,10 @@ void encoder::check(bool senseless)
 							suspect_regions.push_back(r);
 						}
 					}
+				}
+			}
+		}
+	}
 }
 
 
