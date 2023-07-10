@@ -57,8 +57,8 @@ struct transition : petri::transition
 	static transition merge(int composition, const transition &t0, const transition &t1);
 	static bool mergeable(int composition, const transition &t0, const transition &t1);
 
-	bool is_infeasible();
-	bool is_vacuous();
+	bool is_infeasible() const;
+	bool is_vacuous() const;
 };
 
 struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::state>

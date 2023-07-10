@@ -100,12 +100,12 @@ bool transition::mergeable(int composition, const transition &t0, const transiti
 	return t0.behavior == t1.behavior;
 }
 
-bool transition::is_infeasible()
+bool transition::is_infeasible() const
 {
 	return local_action.is_null();
 }
 
-bool transition::is_vacuous()
+bool transition::is_vacuous() const
 {
 	return local_action.is_tautology();
 }
