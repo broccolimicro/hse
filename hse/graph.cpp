@@ -48,16 +48,9 @@ place place::merge(int composition, const place &p0, const place &p1)
 	return result;
 }
 
-transition::transition()
+transition::transition(boolean::cover guard, boolean::cover local_action, boolean::cover remote_action)
 {
-	behavior = active;
-	local_action = 1;
-	remote_action = 1;
-}
-
-transition::transition(int behavior, boolean::cover local_action, boolean::cover remote_action)
-{
-	this->behavior = behavior;
+	this->guard = guard;
 	this->local_action = local_action;
 	this->remote_action = remote_action;
 }
@@ -70,11 +63,11 @@ transition::~transition()
 transition transition::subdivide(int term) const
 {
 	if (term < (int)local_action.cubes.size() && term < (int)remote_action.cubes.size())
-		return transition(behavior, boolean::cover(local_action.cubes[term]), boolean::cover(remote_action.cubes[term]));
+		return transition(guard, boolean::cover(local_action.cubes[term]), boolean::cover(remote_action.cubes[term]));
 	else if (term < (int)local_action.cubes.size())
-		return transition(behavior, boolean::cover(local_action.cubes[term]));
+		return transition(guard, boolean::cover(local_action.cubes[term]));
 	else
-		return transition(behavior);
+		return transition(guard);
 }
 
 transition transition::merge(int composition, const transition &t0, const transition &t1)
@@ -82,32 +75,38 @@ transition transition::merge(int composition, const transition &t0, const transi
 	transition result;
 	if (composition == petri::parallel || composition == petri::sequence)
 	{
+		result.guard = t0.guard & t1.guard;
 		result.local_action = t0.local_action & t1.local_action;
 		result.remote_action = t0.remote_action & t1.remote_action;
-		result.behavior = t0.behavior;
 	}
 	else if (composition == petri::choice)
 	{
+		result.guard = t0.guard | t1.guard;
 		result.local_action = t0.local_action | t1.local_action;
 		result.remote_action = t0.remote_action | t1.remote_action;
-		result.behavior = t0.behavior;
 	}
 	return result;
 }
 
 bool transition::mergeable(int composition, const transition &t0, const transition &t1)
 {
-	return t0.behavior == t1.behavior;
+	if (composition == petri::sequence) {
+		return t0.local_action.is_tautology();
+	}
+
+	// choice or parallel
+	return (t0.guard == t1.guard) ||
+				 (t0.local_action == t1.local_action);
 }
 
 bool transition::is_infeasible() const
 {
-	return local_action.is_null();
+	return guard.is_null() || local_action.is_null();
 }
 
 bool transition::is_vacuous() const
 {
-	return local_action.is_tautology();
+	return guard.is_tautology() && local_action.is_tautology();
 }
 
 graph::graph()
@@ -137,18 +136,15 @@ pair<boolean::cover, boolean::cover> graph::get_guard(petri::iterator a) const
 	{
 		result.first = 1;
 		result.second = 1;
-		if (transitions[a.index].behavior == transition::passive)
-		{
-			for (int i = 0; i < (int)p.size(); i++)
-			{
+		if (transitions[a.index].local_action.is_tautology()) {
+			for (int i = 0; i < (int)p.size(); i++) {
 				pair<boolean::cover, boolean::cover> temp = get_guard(p[i]);
 				result.first &= temp.first;
 				result.second &= temp.second;
 			}
-			result.second &= transitions[a.index].local_action;
 		}
-		else
-			result.first &= transitions[a.index].local_action;
+		result.second &= transitions[a.index].guard;
+		result.first &= transitions[a.index].local_action;
 	}
 
 	return result;
@@ -163,7 +159,7 @@ vector<vector<int> > graph::get_dependency_tree(petri::iterator a) const
 		vector<int> p = prev(a.type, a.index);
 		bool propagate = true;
 		for (int i = 0; i < (int)p.size() && propagate; i++)
-			if (transitions[p[i]].behavior != hse::transition::passive)
+			if (!transitions[p[i]].local_action.is_tautology())
 				propagate = false;
 
 		if (propagate)
@@ -187,7 +183,7 @@ vector<vector<int> > graph::get_dependency_tree(petri::iterator a) const
 			p = prev(hse::place::type, temp[iter]);
 			propagate = true;
 			for (int i = 0; i < (int)p.size() && propagate; i++)
-				if (transitions[p[i]].behavior != hse::transition::passive)
+				if (!transitions[p[i]].local_action.is_tautology())
 					propagate = false;
 		}
 
@@ -220,7 +216,7 @@ vector<int> graph::get_implicant_tree(petri::iterator a) const
 	{
 		vector<int> n = next(a.type, a.index);
 		for (int i = 0; i < (int)n.size(); i++)
-			if (transitions[n[i]].behavior == hse::transition::passive)
+			if (transitions[n[i]].local_action.is_tautology())
 			{
 				vector<int> nn = next(1-a.type, n[i]);
 				result.insert(result.end(), nn.begin(), nn.end());
@@ -234,7 +230,7 @@ vector<int> graph::get_implicant_tree(petri::iterator a) const
 		vector<int> n =  next(hse::place::type, result[i]);
 
 		for (int i = 0; i < (int)n.size(); i++)
-			if (transitions[n[i]].behavior == hse::transition::passive)
+			if (transitions[n[i]].local_action.is_tautology())
 			{
 				vector<int> nn = next(hse::transition::type, n[i]);
 				result.insert(result.end(), nn.begin(), nn.end());
@@ -345,7 +341,7 @@ map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, con
 	return result;
 }
 
-void graph::post_process(const ucs::variable_set &variables, bool proper_nesting)
+void graph::post_process(const ucs::variable_set &variables, bool proper_nesting, bool aggressive)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
 		transitions[i].remote_action = transitions[i].local_action.remote(variables.get_groups());
@@ -354,7 +350,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	bool change = true;
 	while (change)
 	{
-		super::reduce(proper_nesting);
+		super::reduce(proper_nesting, aggressive);
 
 		change = false;
 		for (int i = 0; i < (int)source.size(); i++)
@@ -376,32 +372,20 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 							firable = false;
 				}
 
-				if (firable)
-				{
+				if (firable) {
 					petri::enabled_transition t = sim.fire(j);
 					source[i].tokens = sim.tokens;
-					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--)
-					{
-						if (k > 0)
-						{
-							source.push_back(source[i]);
-							if (transitions[t.index].behavior == transition::active)
-							{
-								source.back().encodings = local_assign(source.back().encodings, transitions[t.index].local_action.cubes[k], true);
-								source.back().encodings = remote_assign(source.back().encodings, transitions[t.index].remote_action.cubes[k], true);
+					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--) {
+						for (int l = (int)transitions[t.index].guard.size()-1; l >= 0; l--) {
+							int idx = i;
+							if (k > 0 || l > 0) {
+								idx = source.size();
+								source.push_back(source[i]);
 							}
-							else
-								source.back().encodings &= transitions[t.index].local_action.cubes[k];
-						}
-						else
-						{
-							if (transitions[t.index].behavior == transition::active)
-							{
-								source[i].encodings = local_assign(source[i].encodings, transitions[t.index].local_action.cubes[0], true);
-								source[i].encodings = remote_assign(source[i].encodings, transitions[t.index].remote_action.cubes[0], true);
-							}
-							else
-								source[i].encodings &= transitions[t.index].local_action.cubes[0];
+
+							source[idx].encodings &= transitions[t.index].guard.cubes[l];
+							source[idx].encodings = local_assign(source[idx].encodings, transitions[t.index].local_action.cubes[k], true);
+							source[idx].encodings = remote_assign(source[idx].encodings, transitions[t.index].remote_action.cubes[k], true);
 						}
 					}
 
@@ -429,33 +413,20 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 							firable = false;
 				}
 
-				if (firable)
-				{
+				if (firable) {
 					petri::enabled_transition t = sim.fire(j);
 					reset[i].tokens = sim.tokens;
+					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--) {
+						for (int l = (int)transitions[t.index].guard.size()-1; l >= 0; l--) {
+							int idx = i;
+							if (k > 0 || l > 0) {
+								idx = reset.size();
+								reset.push_back(reset[i]);
+							}
 
-					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--)
-					{
-						if (k > 0)
-						{
-							reset.push_back(reset[i]);
-							if (transitions[t.index].behavior == transition::active)
-							{
-								reset.back().encodings = local_assign(reset.back().encodings, transitions[t.index].local_action.cubes[k], true);
-								reset.back().encodings = remote_assign(reset.back().encodings, transitions[t.index].remote_action.cubes[k], true);
-							}
-							else
-								reset.back().encodings &= transitions[t.index].local_action.cubes[k];
-						}
-						else
-						{
-							if (transitions[t.index].behavior == transition::active)
-							{
-								reset[i].encodings = local_assign(reset[i].encodings, transitions[t.index].local_action.cubes[0], true);
-								reset[i].encodings = remote_assign(reset[i].encodings, transitions[t.index].remote_action.cubes[0], true);
-							}
-							else
-								reset[i].encodings &= transitions[t.index].local_action.cubes[0];
+							reset[idx].encodings &= transitions[t.index].guard.cubes[l];
+							reset[idx].encodings = local_assign(reset[idx].encodings, transitions[t.index].local_action.cubes[k], true);
+							reset[idx].encodings = remote_assign(reset[idx].encodings, transitions[t.index].remote_action.cubes[k], true);
 						}
 					}
 
@@ -477,12 +448,12 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 			change = false;
 			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
 			{
-				change = transitions[sim.ready[j].index].behavior == transition::passive && (transitions[sim.ready[j].index].local_action & source[i].encodings) == source[i].encodings;
+				change = transitions[sim.ready[j].index].local_action.is_tautology() && (transitions[sim.ready[j].index].guard & source[i].encodings) == source[i].encodings;
 				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
 					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
 						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
 							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
-							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].local_action, source[i].encodings))
+							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].guard, source[i].encodings))
 							change = false;
 
 				if (change)
@@ -503,12 +474,12 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 			change = false;
 			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
 			{
-				change = transitions[sim.ready[j].index].behavior == transition::passive && (transitions[sim.ready[j].index].local_action & reset[i].encodings) == reset[i].encodings;
+				change = (transitions[sim.ready[j].index].guard & transitions[sim.ready[j].index].local_action & reset[i].encodings) == reset[i].encodings;
 				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
 					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
 						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
 							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
-							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].local_action, reset[i].encodings))
+							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].guard, transitions[arcs[petri::transition::type][l].from.index].local_action, reset[i].encodings))
 							change = false;
 
 				if (change)
@@ -534,20 +505,20 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 
 void graph::check_variables(const ucs::variable_set &variables)
 {
-	for (int i = 0; i < (int)variables.nodes.size(); i++)
-	{
+	vector<int> vars;
+	for (int i = 0; i < (int)variables.nodes.size(); i++) {
 		vector<int> written;
 		vector<int> read;
 
-		for (int j = 0; j < (int)transitions.size(); j++)
-		{
-			vector<int> vars = transitions[j].remote_action.vars();
-			if (find(vars.begin(), vars.end(), i) != vars.end())
-			{
-				if (transitions[j].behavior == hse::transition::active)
-					written.push_back(j);
-				else
-					read.push_back(j);
+		for (int j = 0; j < (int)transitions.size(); j++) {
+			vars = transitions[j].remote_action.vars();
+			if (find(vars.begin(), vars.end(), i) != vars.end()) {
+				written.push_back(j);
+			}
+
+			vars = transitions[j].guard.vars();
+			if (find(vars.begin(), vars.end(), i) != vars.end()) {
+				read.push_back(j);
 			}
 		}
 
@@ -573,17 +544,14 @@ vector<int> graph::first_assigns()
 	{
 		petri_simulator sim = simulators.back();
 		simulators.pop_back();
-		if (sim.enabled() > 0)
-		{
-			for (int i = 0; i < (int)sim.ready.size(); i++)
-			{
-				if (transitions[sim.ready[i].index].behavior == transition::passive)
-				{
+		if (sim.enabled() > 0) {
+			for (int i = 0; i < (int)sim.ready.size(); i++) {
+				if (transitions[sim.ready[i].index].local_action.is_tautology()) {
 					simulators.push_back(sim);
 					simulators.back().fire(i);
-				}
-				else
+				} else {
 					result.push_back(sim.ready[i].index);
+				}
 			}
 		}
 	}
@@ -610,7 +578,7 @@ vector<int> graph::associated_assigns(vector<int> tokens)
 
 			for (int i = 0; i < (int)n.size(); i++)
 			{
-				if (transitions[n[i]].behavior == transition::active)
+				if (!transitions[n[i]].local_action.is_tautology())
 					result.push_back(n[i]);
 				else
 				{

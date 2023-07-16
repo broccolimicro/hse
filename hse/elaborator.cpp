@@ -817,14 +817,14 @@ graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool repo
 			if (loc == nodes.end())
 			{
 				nodes.insert(pair<pnode, int>(arcs[i][j].n0, result.transitions.size()));
-				result.transitions.push_back(transition(transition::active, boolean::cover(arcs[i][j].n0.v, arcs[i][j].n0.d)));
+				result.transitions.push_back(transition(1, boolean::cover(arcs[i][j].n0.v, arcs[i][j].n0.d)));
 			}
 
 			loc = nodes.find(arcs[i][j].n1);
 			if (loc == nodes.end())
 			{
 				nodes.insert(pair<pnode, int>(arcs[i][j].n1, result.transitions.size()));
-				result.transitions.push_back(transition(transition::active, boolean::cover(arcs[i][j].n1.v, arcs[i][j].n1.d)));
+				result.transitions.push_back(transition(1, boolean::cover(arcs[i][j].n1.v, arcs[i][j].n1.d)));
 			}
 		}
 	}

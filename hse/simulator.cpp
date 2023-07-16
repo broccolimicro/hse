@@ -31,10 +31,7 @@ instability::~instability()
 string instability::to_string(const hse::graph &g, const ucs::variable_set &v)
 {
 	string result;
-	if (g.transitions[index].behavior == hse::transition::active)
-		result = "unstable assignment " + enabled_transition::to_string(g, v);
-	else
-		result = "unstable guard " + enabled_transition::to_string(g, v);
+	result = "unstable rule " + enabled_transition::to_string(g, v);
 
 	result += " cause: {";
 
@@ -308,9 +305,9 @@ int simulator::enabled(bool sorted)
 
 			// TODO removing prs timing assumption
 			boolean::cover guard;
-			if (base->transitions[preload[i].index].behavior == transition::passive || base->transitions[preload[i].index].local_action.is_tautology())
+			if (base->transitions[preload[i].index].local_action.is_tautology())
 			{
-				preload[i].guard &= base->transitions[preload[i].index].local_action;
+				preload[i].guard &= base->transitions[preload[i].index].guard;
 				guard = preload[i].guard;
 			}
 			else
@@ -357,11 +354,8 @@ int simulator::enabled(bool sorted)
 				ready = 0;
 
 			preload[i].stable = (ready > 0);
-			if (base->transitions[preload[i].index].behavior == transition::active)
-			{
-				preload[i].vacuous = boolean::vacuous_assign(global, base->transitions[preload[i].index].remote_action, preload[i].stable);
-				preload[i].stable = preload[i].stable || preload[i].vacuous;
-			}
+			preload[i].vacuous = boolean::vacuous_assign(global, base->transitions[preload[i].index].remote_action, preload[i].stable);
+			preload[i].stable = preload[i].stable || preload[i].vacuous;
 
 			if (!preload[i].vacuous)
 			{
@@ -392,7 +386,7 @@ int simulator::enabled(bool sorted)
 				{
 					boolean::cover guard = preload[i].guard;
 					boolean::cover sequence = preload[i].sequence;
-					if (base->transitions[preload[i].index].behavior == transition::active && base->transitions[preload[i].index].local_action != 1)
+					if (!base->transitions[preload[i].index].local_action.is_tautology())
 					{
 						guard = 1;
 						sequence = base->transitions[preload[i].index].local_action;
@@ -424,7 +418,7 @@ int simulator::enabled(bool sorted)
 		boolean::cover guard = potential[i].guard;
 		boolean::cover sequence = potential[i].sequence;
 		// By definition, none of these firings are vacuous, so we don't need to check that
-		if (base->transitions[potential[i].index].behavior == transition::active)
+		if (!base->transitions[potential[i].index].local_action.is_tautology())
 		{
 			guard = 1;
 			sequence = base->transitions[potential[i].index].local_action;
@@ -604,24 +598,21 @@ enabled_transition simulator::fire(int index)
 	// active transition was enabled.
 	boolean::cube local_action = base->transitions[t.index].local_action[term];
 	boolean::cube remote_action = base->transitions[t.index].remote_action[term];
-	if (base->transitions[t.index].behavior == transition::active)
-		for (int j = 0; j < (int)t.history.size(); j++)
-			if (base->transitions[t.history[j].index].behavior == transition::active)
+	for (int j = 0; j < (int)t.history.size(); j++) {
+		if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
+		{
+			interference err(term_index(t.index, term), t.history[j]);
+			vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
+			if (loc == interference_errors.end() || *loc != err)
 			{
-				if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
-				{
-					interference err(term_index(t.index, term), t.history[j]);
-					vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
-					if (loc == interference_errors.end() || *loc != err)
-					{
-						interference_errors.insert(loc, err);
-						error("", err.to_string(*base, *variables), __FILE__, __LINE__);
-					}
-				}
-
-				local_action = boolean::interfere(local_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
-				remote_action = boolean::interfere(remote_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
+				interference_errors.insert(loc, err);
+				error("", err.to_string(*base, *variables), __FILE__, __LINE__);
 			}
+		}
+
+		local_action = boolean::interfere(local_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
+		remote_action = boolean::interfere(remote_action, base->transitions[t.history[j].index].remote_action[t.history[j].term]);
+	}
 
 	// Update the state
 	if (t.stable)

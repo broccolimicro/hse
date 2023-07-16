@@ -44,10 +44,7 @@ void term_index::hash(hasher &hash) const
 
 string term_index::to_string(const graph &g, const ucs::variable_set &v)
 {
-	if (g.transitions[index].behavior == transition::active)
-		return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_composition(g.transitions[index].local_action[term], v).to_string();
-	else
-		return "T" + ::to_string(index) + "." + ::to_string(term) + ":[" + export_expression_xfactor(g.transitions[index].local_action[term], v).to_string() + "]";
+	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_expression_xfactor(g.transitions[index].guard[term], v).to_string() + " -> " + export_composition(g.transitions[index].local_action[term], v).to_string();
 }
 
 bool operator<(term_index i, term_index j)
@@ -118,10 +115,7 @@ enabled_transition::~enabled_transition()
 
 string enabled_transition::to_string(const graph &g, const ucs::variable_set &v)
 {
-	if (g.transitions[index].behavior == transition::active)
-		return "T" + ::to_string(index) + ":" + export_composition(g.transitions[index].local_action, v).to_string();
-	else
-		return "T" + ::to_string(index) + ":[" + export_expression_xfactor(g.transitions[index].local_action, v).to_string() + "]";
+	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].local_action, v).to_string() + " -> " + export_composition(g.transitions[index].local_action, v).to_string();
 }
 
 bool operator<(enabled_transition i, enabled_transition j)

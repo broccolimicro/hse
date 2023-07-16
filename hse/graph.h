@@ -38,19 +38,12 @@ struct place : petri::place
 
 struct transition : petri::transition
 {
-	transition();
-	transition(int behavior, boolean::cover local_action = 1, boolean::cover remote_action = 1);
+	transition(boolean::cover guard = 1, boolean::cover local_action = 1, boolean::cover remote_action = 1);
 	~transition();
 
-	enum
-	{
-		passive = 0,
-		active = 1
-	};
-
+	boolean::cover guard;
 	boolean::cover local_action;
 	boolean::cover remote_action;
-	int behavior;
 
 	transition subdivide(int term) const;
 
@@ -89,7 +82,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	map<petri::iterator, vector<petri::iterator> > pinch(petri::iterator n);
 
 	map<petri::iterator, vector<petri::iterator> > merge(int composition, const graph &g);
-	void post_process(const ucs::variable_set &variables, bool proper_nesting = false);
+	void post_process(const ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
 	void check_variables(const ucs::variable_set &variables);
 	vector<int> first_assigns();
 	vector<int> associated_assigns(vector<int> tokens);

@@ -86,7 +86,7 @@ void encoder::check(bool senseless)
 
 		boolean::cover si = 1;
 
-		if (base->transitions[i].behavior == transition::active || p.size() > 1)
+		if (!base->transitions[i].local_action.is_tautology() || p.size() > 1)
 		{
 			idep = base->get_dependency_tree(hse::iterator(hse::transition::type, i));
 			/*cout << "T" << i << ": {";
@@ -112,7 +112,7 @@ void encoder::check(bool senseless)
 		}
 
 		// The transition actively affects the state of the system
-		if (base->transitions[i].behavior == transition::active)
+		if (!base->transitions[i].local_action.is_tautology())
 		{
 			for (int j = 0; j < (int)base->transitions[i].local_action.cubes.size(); j++)
 			{
