@@ -13,7 +13,7 @@
 namespace hse
 {
 
-void elaborate(graph &g, const ucs::variable_set &variables, bool report_progress)
+void elaborate(graph &g, const ucs::variable_set &variables, bool find_parallel, bool report_progress)
 {
 	g.parallel_nodes.clear();
 	g.parallel_nodes_ready = false;
@@ -105,76 +105,78 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		}
 
 		// Figure out which nodes are in parallel
-		vector<vector<bool> > tokens(1, vector<bool>());
-		vector<vector<bool> > visited;
-		for (int i = 0; i < (int)sim.tokens.size(); i++) {
-			tokens.back().push_back(sim.tokens[i].cause < 0);
-		}
+		if (find_parallel) {
+			vector<vector<bool> > tokens(1, vector<bool>());
+			vector<vector<bool> > visited;
+			for (int i = 0; i < (int)sim.tokens.size(); i++) {
+				tokens.back().push_back(sim.tokens[i].cause < 0);
+			}
 
-		while (tokens.size() > 0)
-		{
-			vector<bool> curr = tokens.back();
-			tokens.pop_back();
-
-			vector<vector<bool> >::iterator loc = lower_bound(visited.begin(), visited.end(), curr);
-			if (loc == visited.end() || *loc != curr)
+			while (tokens.size() > 0)
 			{
-				visited.insert(loc, curr);
+				vector<bool> curr = tokens.back();
+				tokens.pop_back();
 
-				vector<int> enabled_loaded;
-				for (int i = 0; i < (int)sim.loaded.size(); i++)
+				vector<vector<bool> >::iterator loc = lower_bound(visited.begin(), visited.end(), curr);
+				if (loc == visited.end() || *loc != curr)
 				{
-					bool ready = true;
-					for (int j = 0; j < (int)sim.loaded[i].tokens.size() && ready; j++) {
-						ready = curr[sim.loaded[i].tokens[j]];
+					visited.insert(loc, curr);
+
+					vector<int> enabled_loaded;
+					for (int i = 0; i < (int)sim.loaded.size(); i++)
+					{
+						bool ready = true;
+						for (int j = 0; j < (int)sim.loaded[i].tokens.size() && ready; j++) {
+							ready = curr[sim.loaded[i].tokens[j]];
+						}
+
+						if (ready)
+							enabled_loaded.push_back(i);
 					}
 
-					if (ready)
-						enabled_loaded.push_back(i);
-				}
+					for (int i = 0; i < (int)curr.size(); i++) {
+						if (curr[i]) {
+							for (int j = i+1; j < (int)curr.size(); j++) {
+								if (curr[j]) {
+									pair<petri::iterator, petri::iterator> node;
+									if (sim.tokens[i].index <= sim.tokens[j].index) {
+										node.first = petri::iterator(petri::place::type, sim.tokens[i].index);
+										node.second = petri::iterator(petri::place::type, sim.tokens[j].index);
+									} else {
+										node.second = petri::iterator(petri::place::type, sim.tokens[i].index);
+										node.first = petri::iterator(petri::place::type, sim.tokens[j].index);
+									}
+									auto iter = lower_bound(g.parallel_nodes.begin(), g.parallel_nodes.end(), node);
+									if (iter == g.parallel_nodes.end() || *iter != node) {
+										g.parallel_nodes.insert(iter, node);
+									}
+								}
+							}
 
-				for (int i = 0; i < (int)curr.size(); i++) {
-					if (curr[i]) {
-						for (int j = i+1; j < (int)curr.size(); j++) {
-							if (curr[j]) {
-								pair<petri::iterator, petri::iterator> node;
-								if (sim.tokens[i].index <= sim.tokens[j].index) {
+							for (int j = 0; j < (int)enabled_loaded.size(); j++) {
+								if (find(sim.loaded[enabled_loaded[j]].tokens.begin(), sim.loaded[enabled_loaded[j]].tokens.end(), i) == sim.loaded[enabled_loaded[j]].tokens.end()) {
+									pair<petri::iterator, petri::iterator> node;
 									node.first = petri::iterator(petri::place::type, sim.tokens[i].index);
-									node.second = petri::iterator(petri::place::type, sim.tokens[j].index);
-								} else {
-									node.second = petri::iterator(petri::place::type, sim.tokens[i].index);
-									node.first = petri::iterator(petri::place::type, sim.tokens[j].index);
-								}
-								auto iter = lower_bound(g.parallel_nodes.begin(), g.parallel_nodes.end(), node);
-								if (iter == g.parallel_nodes.end() || *iter != node) {
-									g.parallel_nodes.insert(iter, node);
-								}
-							}
-						}
-
-						for (int j = 0; j < (int)enabled_loaded.size(); j++) {
-							if (find(sim.loaded[enabled_loaded[j]].tokens.begin(), sim.loaded[enabled_loaded[j]].tokens.end(), i) == sim.loaded[enabled_loaded[j]].tokens.end()) {
-								pair<petri::iterator, petri::iterator> node;
-								node.first = petri::iterator(petri::place::type, sim.tokens[i].index);
-								node.second = petri::iterator(petri::transition::type, sim.loaded[enabled_loaded[j]].index);
-								auto iter = lower_bound(g.parallel_nodes.begin(), g.parallel_nodes.end(), node);
-								if (iter == g.parallel_nodes.end() || *iter != node) {
-									g.parallel_nodes.insert(iter, node);
+									node.second = petri::iterator(petri::transition::type, sim.loaded[enabled_loaded[j]].index);
+									auto iter = lower_bound(g.parallel_nodes.begin(), g.parallel_nodes.end(), node);
+									if (iter == g.parallel_nodes.end() || *iter != node) {
+										g.parallel_nodes.insert(iter, node);
+									}
 								}
 							}
 						}
 					}
-				}
 
-				for (int i = 0; i < (int)enabled_loaded.size(); i++) {
-					tokens.push_back(curr);
-					
-					for (int j = 0; j < (int)sim.loaded[enabled_loaded[i]].tokens.size(); j++) {
-						tokens.back()[sim.loaded[enabled_loaded[i]].tokens[j]] = false;
-					}
+					for (int i = 0; i < (int)enabled_loaded.size(); i++) {
+						tokens.push_back(curr);
+						
+						for (int j = 0; j < (int)sim.loaded[enabled_loaded[i]].tokens.size(); j++) {
+							tokens.back()[sim.loaded[enabled_loaded[i]].tokens[j]] = false;
+						}
 
-					for (int k = 0; k < (int)sim.loaded[enabled_loaded[i]].output_marking.size(); k++) {
-						tokens.back()[sim.loaded[enabled_loaded[i]].output_marking[k]] = true;
+						for (int k = 0; k < (int)sim.loaded[enabled_loaded[i]].output_marking.size(); k++) {
+							tokens.back()[sim.loaded[enabled_loaded[i]].output_marking[k]] = true;
+						}
 					}
 				}
 			}
@@ -228,11 +230,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 
 		count++;
 	}
+	g.parallel_nodes_ready = find_parallel;
 
 	if (report_progress)
 		done_progress();
 
-	g.parallel_nodes_ready = true;
 
 	for (int i = 0; i < (int)g.places.size(); i++)
 	{
