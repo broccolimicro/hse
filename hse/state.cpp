@@ -166,6 +166,22 @@ token::token()
 	cause = -1;
 }
 
+/*token::token(const hse::token &t)
+{
+	index = t.index;
+	guard = t.guard;
+	sequence = t.sequence;
+	cause = t.cause;
+}
+
+token::token(petri::token t, boolean::cover guard, boolean::cover sequence, int cause)
+{
+	index = t.index;
+	this->guard = guard;
+	this->sequence = sequence;
+	this->cause = cause;
+}*/
+
 token::token(petri::token t)
 {
 	index = t.index;

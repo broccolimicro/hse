@@ -49,7 +49,7 @@ struct encoder
 	vector<suspect> suspects;
 	graph *base;
 
-	void check(bool senseless = false);
+	void check(bool senseless = false, bool report_progress = false);
 };
 
 }

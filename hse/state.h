@@ -76,6 +76,8 @@ bool operator!=(enabled_transition i, enabled_transition j);
 struct token : petri::token
 {
 	token();
+	//token(const hse::token &t);
+	//token(petri::token t, boolean::cover guard, boolean::cover sequence, int cause = -1);
 	token(petri::token t);
 	token(int index);
 	token(int index, boolean::cover guard, boolean::cover sequence, int cause = -1);
@@ -83,6 +85,8 @@ struct token : petri::token
 
 	boolean::cover guard;
 	boolean::cover sequence;
+	
+	// indexes into the set of loaded enabled_transitions in the simulator
 	int cause;
 
 	string to_string();
