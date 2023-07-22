@@ -40,14 +40,13 @@ place place::merge(int composition, const place &p0, const place &p1)
 	{
 		result.effective = p0.effective & p1.effective;
 		result.predicate = p0.predicate & p1.predicate;
-		result.arbiter = (p0.arbiter or p1.arbiter);
 	}
 	else if (composition == petri::choice)
 	{
 		result.effective = p0.effective | p1.effective;
 		result.predicate = p0.predicate | p1.predicate;
-		result.arbiter = (p0.arbiter or p1.arbiter);
 	}
+	result.arbiter = (p0.arbiter or p1.arbiter);
 	return result;
 }
 
@@ -246,7 +245,7 @@ vector<int> graph::get_implicant_tree(petri::iterator a) const
 	return result;
 }
 
-// assumes all vector<int> inputs are sorted including arbiters
+// assumes all vector<int> inputs are sorted
 bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
 {
 	if (a.size() == 0 or b.size() == 0) {
@@ -259,25 +258,25 @@ bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
 			vector<int> intersect = vector_intersection(a[i], b[i]);
 			vector<int> diff_a = vector_difference(a[i], intersect);
 			vector<int> diff_b = vector_difference(b[i], intersect);
-			vector<int> arb_intersect = vector_intersection(intersect, arbiters);
 
 			bool result = false;
-			for (int k = 0; k < (int)arb_intersect.size() && !result; k++)
-			{
-				vector<int> arb_n = next(hse::place::type, arb_intersect[k]);
-				vector<int> index_a, index_b;
-				for (int l = 0; l < (int)arb_n.size(); l++)
-				{
-					vector<int> implicants = get_implicant_tree(hse::iterator(hse::transition::type, arb_n[l]));
-					if (vector_intersects(implicants, diff_a))
-						index_a.push_back(l);
-					if (vector_intersects(implicants, diff_b))
-						index_b.push_back(l);
-				}
+			for (int k = 0; k < (int)intersect.size() && !result; k++) {
+				if (places[intersect[k]].arbiter) {
+					vector<int> arb_n = next(hse::place::type, intersect[k]);
+					vector<int> index_a, index_b;
+					for (int l = 0; l < (int)arb_n.size(); l++)
+					{
+						vector<int> implicants = get_implicant_tree(hse::iterator(hse::transition::type, arb_n[l]));
+						if (vector_intersects(implicants, diff_a))
+							index_a.push_back(l);
+						if (vector_intersects(implicants, diff_b))
+							index_b.push_back(l);
+					}
 
-				vector_symmetric_compliment(index_a, index_b);
-				if (index_a.size() > 0 && index_b.size() > 0)
-					result = true;
+					vector_symmetric_compliment(index_a, index_b);
+					if (index_a.size() > 0 && index_b.size() > 0)
+						result = true;
+				}
 			}
 
 			if (!result)
@@ -285,63 +284,6 @@ bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
 		}
 
 	return true;
-}
-
-pair<vector<petri::iterator>, vector<petri::iterator> > graph::erase(petri::iterator n)
-{
-	pair<vector<petri::iterator>, vector<petri::iterator> > result = super::erase(n);
-	super::erase(n, hse::place::type, arbiters);
-	return result;
-}
-
-petri::iterator graph::duplicate(int composition, petri::iterator i, bool add)
-{
-	petri::iterator result = super::duplicate(composition, i, add);
-	if (i.type == hse::place::type && find(arbiters.begin(), arbiters.end(), i.index) != arbiters.end())
-		arbiters.push_back(result.index);
-	return result;
-}
-
-vector<petri::iterator> graph::duplicate(int composition, petri::iterator i, int num, bool add)
-{
-	vector<petri::iterator> result = super::duplicate(composition, i, num, add);
-	if (i.type == hse::place::type && find(arbiters.begin(), arbiters.end(), i.index) != arbiters.end())
-		for (int j = 0; j < (int)result.size(); j++)
-			arbiters.push_back(result[j].index);
-	return result;
-}
-
-map<petri::iterator, vector<petri::iterator> > graph::pinch(petri::iterator n)
-{
-	map<petri::iterator, vector<petri::iterator> > result = super::pinch(n);
-	super::erase(n, hse::place::type, arbiters);
-	for (int i = (int)arbiters.size()-1; i >= 0; i--)
-	{
-		map<petri::iterator, vector<petri::iterator> >::iterator loc = result.find(petri::iterator(hse::place::type, arbiters[i]));
-		if (loc != result.end())
-		{
-			arbiters.erase(arbiters.begin() + i);
-			for (int j = 0; j < (int)loc->second.size(); j++)
-				arbiters.push_back(loc->second[j].index);
-		}
-	}
-	return result;
-}
-
-map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, const graph &g)
-{
-	map<petri::iterator, vector<petri::iterator> > result = super::merge(composition, g);
-
-	for (int i = 0; i < (int)g.arbiters.size(); i++)
-	{
-		map<petri::iterator, vector<petri::iterator> >::iterator loc = result.find(petri::iterator(hse::place::type, g.arbiters[i]));
-
-		if (loc != result.end())
-			for (int j = 0; j < (int)loc->second.size(); j++)
-				arbiters.push_back(loc->second[j].index);
-	}
-
-	return result;
 }
 
 void graph::post_process(const ucs::variable_set &variables, bool proper_nesting, bool aggressive)
@@ -502,8 +444,6 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	if (reset.size() == 0)
 		reset = source;
 
-	sort(arbiters.begin(), arbiters.end());
-
 	change = true;
 	while (change) {
 		super::reduce(proper_nesting, aggressive);
@@ -600,14 +540,14 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		if (change)
 			continue;
 
-		for (petri::iterator i(transition::type, 0); i < (int)transitions.size(); i++) {
-			if (transitions[i.index].local_action == 1 && transitions[i.index].guard != 1) {
-				vector<petri::iterator> n = next(i); // places
-				vector<petri::iterator> nn = next(n); // transitions
-				for (int k = 0; k < (int)nn.size(); k++) {
-					transitions[nn[k].index].guard &= transitions[i.index].guard;
+		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
+			if (transitions[i.index].local_action == 1) {
+				vector<petri::iterator> nn = next(next(i)); // transitions
+				for (int l = 0; l < (int)nn.size(); l++) {
+					transitions[nn[l].index] = transition::merge(petri::sequence, transitions[i.index], transitions[nn[l].index]);
 				}
-				transitions[i.index].guard = 1;
+
+				pinch(i);
 				change = true;
 			}
 		}

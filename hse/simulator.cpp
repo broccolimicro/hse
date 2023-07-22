@@ -529,7 +529,7 @@ enabled_transition simulator::fire(int index)
 
 			bool is_deterministic = true;
 			for (int k = 0; k < (int)intersect.size() && is_deterministic; k++)
-				is_deterministic = (find(base->arbiters.begin(), base->arbiters.end(), tokens[intersect[k]].index) == base->arbiters.end());
+				is_deterministic = !base->places[tokens[intersect[k]].index].arbiter;
 
 			if (is_effective && is_deterministic && loaded[i].index != t.index)
 			{
@@ -538,8 +538,11 @@ enabled_transition simulator::fire(int index)
 					cout << tokens[intersect[l]].index << " ";
 				cout << ")";
 				cout << "Arbiters: (";
-				for (int l = 0; l < (int)base->arbiters.size(); l++)
-					cout << base->arbiters[l] << " ";
+				for (int l = 0; l < (int)intersect.size(); l++) {
+					if (base->places[tokens[intersect[l]].index].arbiter) {
+						cout << tokens[intersect[l]].index << " ";
+					}
+				}
 				cout << ")";
 				mutex err = mutex(t, loaded[i]);
 				vector<mutex>::iterator loc = lower_bound(mutex_errors.begin(), mutex_errors.end(), err);
