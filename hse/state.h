@@ -53,7 +53,6 @@ struct enabled_transition : petri::enabled_transition
 	enabled_transition(int index, int term);
 	~enabled_transition();
 
-	vector<int> output_marking;
 	vector<term_index> history;
 	boolean::cube guard_action;
 	boolean::cover guard;
@@ -77,18 +76,14 @@ struct token : petri::token
 {
 	token();
 	//token(const hse::token &t);
-	//token(petri::token t, boolean::cover guard, boolean::cover sequence, int cause = -1);
+	//token(petri::token t, boolean::cover guard, boolean::cover sequence);
 	token(petri::token t);
 	token(int index);
-	token(int index, boolean::cover guard, boolean::cover sequence, int cause = -1);
+	token(int index, boolean::cover sequence);
 	~token();
 
-	boolean::cover guard;
 	boolean::cover sequence;
 	
-	// indexes into the set of loaded enabled_transitions in the simulator
-	int cause;
-
 	string to_string();
 };
 

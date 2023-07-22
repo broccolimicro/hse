@@ -115,7 +115,7 @@ enabled_transition::~enabled_transition()
 
 string enabled_transition::to_string(const graph &g, const ucs::variable_set &v)
 {
-	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].local_action, v).to_string() + " -> " + export_composition(g.transitions[index].local_action, v).to_string();
+	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].guard, v).to_string() + " -> " + export_composition(g.transitions[index].local_action, v).to_string();
 }
 
 bool operator<(enabled_transition i, enabled_transition j)
@@ -155,49 +155,37 @@ bool operator!=(enabled_transition i, enabled_transition j)
 token::token()
 {
 	index = 0;
-	guard = 1;
 	sequence = 1;
-	cause = -1;
 }
 
 /*token::token(const hse::token &t)
 {
 	index = t.index;
-	guard = t.guard;
 	sequence = t.sequence;
-	cause = t.cause;
 }
 
-token::token(petri::token t, boolean::cover guard, boolean::cover sequence, int cause)
+token::token(petri::token t, boolean::cover sequence)
 {
 	index = t.index;
-	this->guard = guard;
 	this->sequence = sequence;
-	this->cause = cause;
 }*/
 
 token::token(petri::token t)
 {
 	index = t.index;
-	guard = 1;
 	sequence = 1;
-	cause = -1;
 }
 
 token::token(int index)
 {
 	this->index = index;
-	this->guard = 1;
 	this->sequence = 1;
-	this->cause = -1;
 }
 
-token::token(int index, boolean::cover guard, boolean::cover sequence, int cause)
+token::token(int index, boolean::cover sequence)
 {
 	this->index = index;
-	this->guard = guard;
 	this->sequence = sequence;
-	this->cause = cause;
 }
 
 token::~token()
@@ -224,8 +212,7 @@ state::state(vector<petri::token> tokens, boolean::cube encodings)
 state::state(vector<hse::token> tokens, boolean::cube encodings)
 {
 	for (int i = 0; i < (int)tokens.size(); i++)
-		if (tokens[i].cause < 0)
-			this->tokens.push_back(tokens[i]);
+		this->tokens.push_back(tokens[i]);
 
 	sort(this->tokens.begin(), this->tokens.end());
 	this->encodings = encodings;

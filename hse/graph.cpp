@@ -380,70 +380,6 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		}
 	}
 
-	// Determine the actual starting location of the tokens given the state information
-	for (int i = 0; i < (int)source.size(); i++)
-	{
-		simulator::super sim(this, source[i]);
-		bool change = true;
-		while (change)
-		{
-			sim.renabled();
-
-			change = false;
-			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
-			{
-				change = transitions[sim.ready[j].index].local_action.is_tautology() && (transitions[sim.ready[j].index].guard & source[i].encodings) == source[i].encodings;
-				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
-					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
-						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
-							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
-							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].guard, source[i].encodings))
-							change = false;
-
-				if (change)
-					sim.rfire(j);
-			}
-		}
-		source[i].tokens = sim.tokens;
-	}
-
-	for (int i = 0; i < (int)reset.size(); i++)
-	{
-		simulator::super sim(this, reset[i]);
-		bool change = true;
-		while (change)
-		{
-			sim.renabled();
-
-			change = false;
-			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
-			{
-				change = (transitions[sim.ready[j].index].guard & transitions[sim.ready[j].index].local_action & reset[i].encodings) == reset[i].encodings;
-				for (int k = 0; k < (int)sim.ready[j].tokens.size() && change; k++)
-					for (int l = 0; l < (int)arcs[petri::transition::type].size() && change; l++)
-						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index &&
-							arcs[petri::transition::type][l].from.index != sim.ready[j].index &&
-							!are_mutex(transitions[arcs[petri::transition::type][l].from.index].guard, transitions[arcs[petri::transition::type][l].from.index].local_action, reset[i].encodings))
-							change = false;
-
-				if (change)
-					sim.rfire(j);
-			}
-		}
-		reset[i].tokens = sim.tokens;
-	}
-
-	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
-	{
-		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++)
-			if (is_reachable(j, i))
-				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].local_action.mask());
-		places[i.index].mask = places[i.index].mask.flip();
-	}
-
-	if (reset.size() == 0)
-		reset = source;
-
 	change = true;
 	while (change) {
 		super::reduce(proper_nesting, aggressive);
@@ -554,6 +490,18 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		if (change)
 			continue;
 	}
+
+	// Determine the actual starting location of the tokens given the state information
+	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
+	{
+		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++)
+			if (is_reachable(j, i))
+				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
+		places[i.index].mask = places[i.index].mask.flip();
+	}
+
+	if (reset.size() == 0)
+		reset = source;
 }
 
 void graph::check_variables(const ucs::variable_set &variables)

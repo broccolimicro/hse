@@ -105,7 +105,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool find_parallel,
 		}
 
 		// Figure out which nodes are in parallel
-		if (find_parallel) {
+		/*if (find_parallel) {
 			vector<vector<bool> > tokens(1, vector<bool>());
 			vector<vector<bool> > visited;
 			for (int i = 0; i < (int)sim.tokens.size(); i++) {
@@ -180,13 +180,13 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool find_parallel,
 					}
 				}
 			}
-		}
+		}*/
 
 		// The effective predicate represents the state encodings that don't have
 		// duplicates in later states. I have to loop through all of the enabled
 		// transitions, and then loop through all orderings of their dependent
 		// guards, saving the state
-		vector<set<int> > en_in(sim.tokens.size(), set<int>());
+		/*vector<set<int> > en_in(sim.tokens.size(), set<int>());
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
 
 		bool change = true;
@@ -212,17 +212,17 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool find_parallel,
 
 		for (int i = 0; i < (int)sim.loaded.size(); i++)
 			for (int j = 0; j < (int)sim.loaded[i].tokens.size(); j++)
-				en_out[sim.loaded[i].tokens[j]].insert(sim.loaded[i].index);
+				en_out[sim.loaded[i].tokens[j]].insert(sim.loaded[i].index);*/
 
 		for (int i = 0; i < (int)sim.tokens.size(); i++)
 		{
 			boolean::cover en = 1;
 			boolean::cover dis = 1;
-			for (set<int>::iterator j = en_in[i].begin(); j != en_in[i].end(); j++)
+			/*for (set<int>::iterator j = en_in[i].begin(); j != en_in[i].end(); j++)
 				en &= g.transitions[*j].local_action;
 
 			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
-				dis &= ~g.transitions[*j].local_action;
+				dis &= ~g.transitions[*j].local_action;*/
 
 			g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls() & en).flipped_mask(g.places[sim.tokens[i].index].mask);
 			g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & en & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
