@@ -32,6 +32,7 @@ struct place : petri::place
 	boolean::cover predicate;
 	boolean::cover effective;
 	boolean::cube mask;
+	bool arbiter;
 
 	static place merge(int composition, const place &p0, const place &p1);
 };

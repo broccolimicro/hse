@@ -18,13 +18,14 @@ namespace hse
 
 place::place()
 {
-
+	arbiter = false;
 }
 
 place::place(boolean::cover predicate)
 {
 	this->predicate = predicate;
 	this->effective = predicate;
+	arbiter = false;
 }
 
 place::~place()
@@ -39,11 +40,13 @@ place place::merge(int composition, const place &p0, const place &p1)
 	{
 		result.effective = p0.effective & p1.effective;
 		result.predicate = p0.predicate & p1.predicate;
+		result.arbiter = (p0.arbiter or p1.arbiter);
 	}
 	else if (composition == petri::choice)
 	{
 		result.effective = p0.effective | p1.effective;
 		result.predicate = p0.predicate | p1.predicate;
+		result.arbiter = (p0.arbiter or p1.arbiter);
 	}
 	return result;
 }
@@ -352,7 +355,6 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	{
 		super::reduce(proper_nesting, aggressive);
 
-		change = false;
 		for (int i = 0; i < (int)source.size(); i++)
 		{
 			simulator::super sim(this, source[i]);
@@ -501,6 +503,117 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		reset = source;
 
 	sort(arbiters.begin(), arbiters.end());
+
+	change = true;
+	while (change) {
+		super::reduce(proper_nesting, aggressive);
+
+		change = false;
+		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
+			if (transitions[i.index].local_action == 1) {
+				vector<petri::iterator> n = next(i); // places
+				if (n.size() > 1) {
+					vector<petri::iterator> p = prev(i); // places
+					vector<vector<petri::iterator> > pp;
+					for (int j = 0; j < (int)p.size(); j++) {
+						pp.push_back(prev(p[j]));
+					}
+
+					for (int k = (int)arcs[petri::transition::type].size()-1; k >= 0; k--) {
+						if (arcs[petri::transition::type][k].from == i) {
+							disconnect(petri::iterator(petri::transition::type, k));
+						}
+					}
+
+					vector<petri::iterator> copies;
+					copies.push_back(i);
+					for (int k = 0; k < (int)n.size(); k++) {
+						if (k > 0) {
+							copies.push_back(copy(i));
+							for (int l = 0; l < (int)p.size(); l++) {
+								petri::iterator x = copy(p[l]);
+								connect(pp[l], x);
+								connect(x, copies.back());
+							}
+						}
+						connect(copies.back(), n[k]);
+					}
+					change = true;
+				}
+			}
+		}
+		if (change)
+			continue;
+
+		for (petri::iterator i(place::type, 0); i < (int)places.size() && !change; i++) {
+			vector<petri::iterator> p = prev(i);
+			vector<petri::iterator> active, passive;
+			for (int k = 0; k < (int)p.size(); k++) {
+				if (transitions[p[k].index].local_action == 1) {
+					passive.push_back(p[k]);
+				} else {
+					active.push_back(p[k]);
+				}
+			}
+
+			if (passive.size() > 1 || (passive.size() == 1 && active.size() > 0)) {
+				vector<petri::iterator> copies;
+				if ((int)active.size() == 0) {
+					copies.push_back(i);
+				}
+
+				vector<petri::iterator> n = next(i);
+				vector<vector<petri::iterator> > nn;
+				for (int l = 0; l < (int)n.size(); l++) {
+					nn.push_back(next(n[l]));
+				}
+				vector<vector<petri::iterator> > np;
+				for (int l = 0; l < (int)n.size(); l++) {
+					np.push_back(prev(n[l]));
+					np.back().erase(std::remove(np.back().begin(), np.back().end(), i), np.back().end()); 
+				}
+
+				for (int k = 0; k < (int)passive.size(); k++) {
+					// Disconnect this transition
+					for (int l = (int)arcs[petri::transition::type].size()-1; l >= 0; l--) {
+						if (arcs[petri::transition::type][l].from == passive[k]) {
+							disconnect(petri::iterator(petri::transition::type, l));
+						}
+					}
+
+					if (k >= (int)copies.size()) {
+						copies.push_back(copy(i));
+						for (int l = 0; l < (int)n.size(); l++) {
+							petri::iterator x = copy(n[l]);
+							connect(copies.back(), x);
+							connect(x, nn[l]);
+							connect(np[l], x);
+						}
+					}
+
+					connect(passive[k], copies[k]);
+				}
+
+				change = true;
+			}
+		}
+		if (change)
+			continue;
+
+		for (petri::iterator i(transition::type, 0); i < (int)transitions.size(); i++) {
+			if (transitions[i.index].local_action == 1 && transitions[i.index].guard != 1) {
+				vector<petri::iterator> n = next(i); // places
+				vector<petri::iterator> nn = next(n); // transitions
+				for (int k = 0; k < (int)nn.size(); k++) {
+					transitions[nn[k].index].guard &= transitions[i.index].guard;
+				}
+				transitions[i.index].guard = 1;
+				change = true;
+			}
+		}
+		if (change)
+			continue;
+	}
 }
 
 void graph::check_variables(const ucs::variable_set &variables)
