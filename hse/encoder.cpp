@@ -62,7 +62,7 @@ encoder::~encoder()
 
 }
 
-void encoder::check(bool senseless)
+void encoder::check(bool senseless, bool report_progress)
 {
 	if (base == NULL)
 		return;
@@ -81,6 +81,9 @@ void encoder::check(bool senseless)
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
 	for (int i = 0; i < (int)base->transitions.size(); i++)
 	{
+		if (report_progress)
+			progress("", "T" + ::to_string(i) + "/" + ::to_string(base->transitions.size()), __FILE__, __LINE__);
+
 		vector<int> p = base->prev(petri::transition::type, i);
 		vector<vector<int> > idep;
 
@@ -219,7 +222,7 @@ void encoder::check(bool senseless)
 		// could make it a conflict.
 		if (p.size() > 1)
 		{
-			for (int j = 0; j < (int)base->places.size(); j++)
+			for (int j = 0; j < (int)base->places.size(); j++) {
 				if ((base->is_reachable(petri::iterator(petri::transition::type, i), petri::iterator(petri::place::type, j)) ||
 					 base->is_reachable(petri::iterator(petri::place::type, j), petri::iterator(petri::transition::type, i))) &&
 					find(p.begin(), p.end(), j) == p.end() &&
@@ -263,12 +266,15 @@ void encoder::check(bool senseless)
 								suspect_regions.push_back(r);
 							}
 						}
+			}
 		}
 	}
 
 	// get the list of places that are suspect against other places
 	for (int i = 0; i < (int)base->places.size(); i++) {
 		for (int j = 0; j < (int)base->places.size(); j++) {
+			if (report_progress)
+				progress("", "P" + ::to_string(i) + "->P" + ::to_string(j) + ":" + ::to_string(i*base->places.size() + j) + "/" + ::to_string(base->places.size()*base->places.size()), __FILE__, __LINE__);
 			if (j != i && (base->is_reachable(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) ||
 					       base->is_reachable(petri::iterator(petri::place::type, j), petri::iterator(petri::place::type, i))) &&
 				!base->is_parallel(petri::iterator(petri::place::type, i), petri::iterator(petri::place::type, j)) &&
@@ -318,6 +324,9 @@ void encoder::check(bool senseless)
 			}
 		}
 	}
+
+	if (report_progress)
+		done_progress();
 }
 
 
