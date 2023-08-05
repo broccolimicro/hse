@@ -5,12 +5,13 @@ namespace hse
 
 struct gate
 {
+	int reset;
 	vector<petri::iterator> tids[2];
 	boolean::cover implicant[2];
 	boolean::cover exclusion[2];
 };
 
-void guard_weakening(graph &proc, prs::production_rule_set *out, const ucs::variable_set &v, bool senseless, bool report_progress)
+void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress)
 {
 	vector<vector<vector<int> > > pdeps(proc.places.size(), vector<vector<int> >());
 	vector<vector<vector<int> > > tdeps(proc.transitions.size(), vector<vector<int> >());
@@ -23,6 +24,12 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, const ucs::vari
 
 	vector<gate> gates;
 	gates.resize(v.nodes.size());
+
+	for (int i = 0; i < (int)gates.size(); i++) {
+		if (proc.reset.size() > 0) {
+			gates[i].reset = proc.reset[0].encodings.get(i);
+		}
+	}
 
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
 	for (int i = 0; i < (int)proc.transitions.size(); i++)
@@ -103,7 +110,6 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, const ucs::vari
 									check &= proc.places[check_places[n]].predicate;
 								check &= proc.transitions[check_transitions[l]].guard;
 
-								cout << "check " << export_expression(check, v).to_string() << endl;
 								gate->exclusion[val] |= check;
 							}
 						}
@@ -113,15 +119,35 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, const ucs::vari
 		}
 	}
 
+	ucs::variable resetDecl, _resetDecl;
+	resetDecl.name.push_back(ucs::instance("Reset", vector<int>()));
+	_resetDecl.name.push_back(ucs::instance("_Reset", vector<int>()));
+	int reset = v.define(resetDecl);
+	int _reset = v.define(_resetDecl);
+
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
 
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
-				cout << "exclusion " << export_expression(gate->exclusion[val], v).to_string() << endl;
-				cout << "rule "	<< export_expression(gate->implicant[val], v).to_string() << " -> " << export_composition(boolean::cube(var, val), v).to_string() << endl;
 				boolean::espresso(gate->implicant[val], ~gate->exclusion[val] & ~gate->implicant[val], gate->exclusion[val]);
-				cout << "rule "	<< export_expression(gate->implicant[val], v).to_string() << " -> " << export_composition(boolean::cube(var, val), v).to_string() << endl;
+			}
+		}
+
+		if (gate->reset != 2 && (gate->implicant[0] | gate->implicant[1]).is_tautology()) {
+			gate->reset = 2;
+		}
+
+		if (gate->reset == 1) {
+			gate->implicant[0] &= boolean::cube(_reset, 1);
+			gate->implicant[1] |= boolean::cube(_reset, 0);
+		} else if (gate->reset == 0) {
+			gate->implicant[0] |= boolean::cube(reset, 1);
+			gate->implicant[1] &= boolean::cube(reset, 0);
+		}
+
+		for (int val = 0; val < 2; val++) {
+			if (gate->tids[val].size() > 0) {
 				out->rules.push_back(prs::production_rule());
 				out->rules.back().guard = gate->implicant[val];
 				out->rules.back().local_action = boolean::cube(var, val);

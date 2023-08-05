@@ -14,7 +14,7 @@
 namespace hse
 {
 
-void guard_weakening(graph &proc, prs::production_rule_set *out, const ucs::variable_set &v, bool senseless, bool report_progress = false);
+void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress = false);
 void guard_strengthening(graph &proc, prs::production_rule_set *out);
 
 }
