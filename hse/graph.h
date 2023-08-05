@@ -5,15 +5,14 @@
  *      Author: nbingham
  */
 
+#pragma once
+
 #include <common/standard.h>
 #include <boolean/cover.h>
 #include <ucs/variable.h>
 #include <petri/graph.h>
 
 #include "state.h"
-
-#ifndef hse_graph_h
-#define hse_graph_h
 
 namespace hse
 {
@@ -74,5 +73,3 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 };
 
 }
-
-#endif

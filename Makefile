@@ -1,5 +1,5 @@
 SRCDIR       =  hse
-CXXFLAGS	 =  -O2 -g -Wall -fmessage-length=0 -I../ucs -I../petri -I../boolean -I../interpret_boolean -I../interpret_ucs -I../parse_expression -I../parse_ucs -I../parse -I../common
+CXXFLAGS	 =  -O2 -g -Wall -fmessage-length=0 -I../ucs -I../petri -I../boolean -I../prs -I../interpret_boolean -I../interpret_ucs -I../parse_expression -I../parse_ucs -I../parse -I../common
 SOURCES	    :=  $(shell find $(SRCDIR) -name '*.cpp')
 OBJECTS	    :=  $(SOURCES:%.cpp=%.o)
 TARGET		 =  lib$(SRCDIR).a
