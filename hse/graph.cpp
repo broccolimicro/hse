@@ -494,9 +494,11 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	// Determine the actual starting location of the tokens given the state information
 	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
 	{
-		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++)
-			if (is_reachable(j, i))
+		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
+			if (is_reachable(j, i)) {
 				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
+			}
+		}
 		places[i.index].mask = places[i.index].mask.flip();
 	}
 
