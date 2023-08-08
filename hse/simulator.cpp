@@ -329,15 +329,17 @@ int simulator::enabled(bool sorted)
 		preload[i].vacuous = boolean::vacuous_assign(global, base->transitions[preload[i].index].remote_action, preload[i].stable);
 		preload[i].stable = preload[i].stable || preload[i].vacuous;
 
-		if (isReady < 0) {
+		// if the transition is vacuous, then we've already passed the guard even
+		// if the guard is not satisfied by the current state
+		if (preload[i].vacuous) {
+			has_vacuous = true;
+		} else if (isReady < 0) {
 			/*cout << "Didn't Pass Guard " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " " << (!preload[i].stable ? "unstable" : "") << " {";
 			for (int j = 0; j < (int)preload[i].tokens.size(); j++)
 				cout << preload[i].tokens[j] << " ";
 			cout << "}" << endl;*/
 
 			preload.erase(preload.begin() + i);
-		} else {
-			has_vacuous = (has_vacuous or preload[i].vacuous);
 		}
 	}
 

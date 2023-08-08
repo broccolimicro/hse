@@ -61,15 +61,20 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	graph();
 	~graph();
 
+	boolean::cover predicate(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
+	boolean::cover effective(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
+	boolean::cover implicant(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
+	boolean::cover effective_implicant(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
 	pair<boolean::cover, boolean::cover> get_guard(petri::iterator a) const;
 	vector<vector<int> > get_dependency_tree(petri::iterator a) const;
 	vector<int> get_implicant_tree(petri::iterator a) const;
-	bool common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const;
+	bool common_arbiter(petri::iterator a, petri::iterator b) const;
 
 	void post_process(const ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
 	void check_variables(const ucs::variable_set &variables);
 	vector<int> first_assigns();
 	vector<int> associated_assigns(vector<int> tokens);
+	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 };
 
 }

@@ -120,6 +120,81 @@ graph::~graph()
 
 }
 
+boolean::cover graph::predicate(petri::iterator i, vector<petri::iterator> *prev) const
+{
+	if (i.type == petri::place::type) {
+		return places[i.index].predicate;
+	}
+	
+	boolean::cover pred = 1;
+	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
+		if (arc->to.index == i.index) {
+			pred &= places[arc->from.index].predicate;
+			if (prev != nullptr) {
+				prev->push_back(arc->from);
+			}
+		}
+	}
+	return pred;
+}
+
+boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev) const
+{
+	if (i.type == petri::place::type) {
+		return places[i.index].effective;
+	}
+	
+	boolean::cover pred = 1;
+	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
+		if (arc->to.index == i.index) {
+			pred &= places[arc->from.index].predicate;
+			if (prev != nullptr) {
+				prev->push_back(arc->from);
+			}
+		}
+	}
+	pred &= ~transitions[i.index].guard & ~transitions[i.index].local_action;
+	return pred;
+}
+
+boolean::cover graph::implicant(petri::iterator i, vector<petri::iterator> *prev) const
+{
+	if (i.type == petri::place::type) {
+		return places[i.index].predicate;
+	}
+	
+	boolean::cover pred = 1;
+	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
+		if (arc->to.index == i.index) {
+			pred &= places[arc->from.index].predicate;
+			if (prev != nullptr) {
+				prev->push_back(arc->from);
+			}
+		}
+	}
+	pred &= transitions[i.index].guard;
+	return pred;
+}
+
+boolean::cover graph::effective_implicant(petri::iterator i, vector<petri::iterator> *prev) const
+{
+	if (i.type == petri::place::type) {
+		return places[i.index].effective;
+	}
+	
+	boolean::cover pred = 1;
+	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
+		if (arc->to.index == i.index) {
+			pred &= places[arc->from.index].predicate;
+			if (prev != nullptr) {
+				prev->push_back(arc->from);
+			}
+		}
+	}
+	pred &= transitions[i.index].guard & ~transitions[i.index].local_action;
+	return pred;
+}
+
 // get the tree of guards before this iterator
 pair<boolean::cover, boolean::cover> graph::get_guard(petri::iterator a) const
 {
@@ -246,44 +321,50 @@ vector<int> graph::get_implicant_tree(petri::iterator a) const
 }
 
 // assumes all vector<int> inputs are sorted
-bool graph::common_arbiter(vector<vector<int> > a, vector<vector<int> > b) const
+bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 {
-	if (a.size() == 0 or b.size() == 0) {
+	vector<petri::iterator> left, right;
+	if (a.type == petri::place::type) {
+		if (places[a.index].arbiter) {
+			left.push_back(a);
+		} else {
+			return false;
+		}
+	}
+ 
+	if (b.type == petri::place::type) {
+		if (places[b.index].arbiter) {
+			right.push_back(b);
+		} else {
+			return false;
+		}
+	}
+
+	if (a.type == petri::transition::type) {
+		vector<petri::iterator> p = prev(a);
+		for (int i = 0; i < (int)p.size(); i++) {
+			if (places[p[i].index].arbiter) {
+				left.push_back(p[i]);
+			}
+		}
+	}
+	if (left.size() == 0) {
 		return false;
 	}
 
-	for (int i = 0; i < (int)a.size(); i++)
-		for (int j = 0; j < (int)b.size(); j++)
-		{
-			vector<int> intersect = vector_intersection(a[i], b[i]);
-			vector<int> diff_a = vector_difference(a[i], intersect);
-			vector<int> diff_b = vector_difference(b[i], intersect);
-
-			bool result = false;
-			for (int k = 0; k < (int)intersect.size() && !result; k++) {
-				if (places[intersect[k]].arbiter) {
-					vector<int> arb_n = next(hse::place::type, intersect[k]);
-					vector<int> index_a, index_b;
-					for (int l = 0; l < (int)arb_n.size(); l++)
-					{
-						vector<int> implicants = get_implicant_tree(hse::iterator(hse::transition::type, arb_n[l]));
-						if (vector_intersects(implicants, diff_a))
-							index_a.push_back(l);
-						if (vector_intersects(implicants, diff_b))
-							index_b.push_back(l);
-					}
-
-					vector_symmetric_compliment(index_a, index_b);
-					if (index_a.size() > 0 && index_b.size() > 0)
-						result = true;
-				}
+	if (b.type == petri::transition::type) {
+		vector<petri::iterator> p = prev(b);
+		for (int i = 0; i < (int)p.size(); i++) {
+			if (places[p[i].index].arbiter) {
+				right.push_back(p[i]);
 			}
-
-			if (!result)
-				return false;
 		}
+	}
+	if (right.size() == 0) {
+		return false;
+	}
 
-	return true;
+	return vector_intersection_size(left, right) > 0;
 }
 
 void graph::post_process(const ucs::variable_set &variables, bool proper_nesting, bool aggressive)
@@ -598,6 +679,55 @@ vector<int> graph::associated_assigns(vector<int> tokens)
 
 	sort(result.begin(), result.end());
 	result.resize(unique(result.begin(), result.end()) - result.begin());
+
+	return result;
+}
+
+vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
+{
+	vector<petri::iterator> result;
+	// We're going to check this transition against all of the places in the system
+	for (petri::iterator j = begin(petri::place::type); j != end(petri::place::type); j++) {
+		// The place is in the same process as the implicant set of states,
+		// and its not in parallel with the transition we're checking,
+		// and they aren't forced to be mutually exclusive by an arbiter
+		
+		bool relevant = false;
+		for (int i = 0; i < (int)curr.size() && !relevant; i++) {
+			relevant = (is_reachable(curr[i], j) || is_reachable(j, curr[i]));
+		}
+
+		for (int i = 0; i < (int)curr.size() && relevant; i++) {
+			relevant = (j != curr[i] &&
+					!is_parallel(j, curr[i]) &&
+					!common_arbiter(curr[i], j));
+		}
+
+		if (relevant) {
+			result.push_back(j);
+		}
+	}
+
+	// check the states inside each transition
+	for (petri::iterator j = begin(petri::transition::type); j != end(petri::transition::type); j++) {
+		// The place is in the same process as the implicant set of states,
+		// and its not in parallel with the transition we're checking,
+		// and they aren't forced to be mutually exclusive by an arbiter
+		bool relevant = false;
+		for (int i = 0; i < (int)curr.size() && !relevant; i++) {
+			relevant = (is_reachable(curr[i], j) || is_reachable(j, curr[i]));
+		}
+
+		for (int i = 0; i < (int)curr.size() && relevant; i++) {
+			relevant = (j != curr[i] &&
+					!is_parallel(j, curr[i]) &&
+					!common_arbiter(curr[i], j));
+		}
+
+		if (relevant) {
+			result.push_back(j);
+		}
+	}
 
 	return result;
 }
