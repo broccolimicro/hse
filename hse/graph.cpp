@@ -142,6 +142,13 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 {
 	if (i.type == petri::place::type) {
 		return places[i.index].effective;
+		/*boolean::cover pred = places[i.index].predicate;
+		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
+			if (arc->from.index == i.index) {
+				pred &= ~transitions[arc->to.index].guard & ~transitions[arc->to.index].local_action;
+			}
+		}
+		return pred;*/
 	}
 	
 	boolean::cover pred = 1;
@@ -180,6 +187,13 @@ boolean::cover graph::effective_implicant(petri::iterator i, vector<petri::itera
 {
 	if (i.type == petri::place::type) {
 		return places[i.index].effective;
+		/*boolean::cover pred = places[i.index].predicate;
+		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
+			if (arc->from.index == i.index) {
+				pred &= ~transitions[arc->to.index].guard & ~transitions[arc->to.index].local_action;
+			}
+		}
+		return pred;*/
 	}
 	
 	boolean::cover pred = 1;
@@ -691,7 +705,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		// The place is in the same process as the implicant set of states,
 		// and its not in parallel with the transition we're checking,
 		// and they aren't forced to be mutually exclusive by an arbiter
-		
+	
 		bool relevant = false;
 		for (int i = 0; i < (int)curr.size() && !relevant; i++) {
 			relevant = (is_reachable(curr[i], j) || is_reachable(j, curr[i]));

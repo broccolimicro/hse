@@ -26,7 +26,7 @@ struct gate
 	bool is_combinational();
 	
 	void weaken_espresso();
-	void weaken_brute_force();
+	void weaken_brute_force(int var, ucs::variable_set &v);
 };
 
 void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress = false);

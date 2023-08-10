@@ -49,17 +49,21 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
-
+		
 		for (int val = 0; val < 2; val++) {
 			// We're going to check this transition against all of the places in the system
 			vector<petri::iterator> relevant = proc.relevant_nodes(gate->tids[val]);
-			
+		
+			//cout << "Production rule for " << var << " " << val << " " << ::to_string(gate->tids[val]) << endl;
 			for (auto n = relevant.begin(); n != relevant.end(); n++) {
+				//cout << "excluding " << *n << endl;
 				if (n->type == petri::place::type) {
+					//cout << export_expression(proc.places[n->index].effective, v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
+					//cout << export_expression(proc.effective(*n), v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
 					gate->exclusion[val] |= proc.effective(*n) & boolean::cube(var, 1-val);
 				} else {
 					boolean::cover predicate = proc.predicate(*n);
-					gate->exclusion[val] |= predicate & ~proc.transitions[n->index].guard & boolean::cube(var, 1-val);
+					//gate->exclusion[val] |= predicate & ~proc.transitions[n->index].guard & boolean::cube(var, 1-val);
 					if (find(gate->tids[1-val].begin(), gate->tids[1-val].end(), *n) != gate->tids[1-val].end()) {
 						gate->exclusion[val] |= predicate & proc.transitions[n->index].guard;
 					} else {
@@ -85,8 +89,9 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 				cout << "rule " << export_expression(gate->implicant[val], v).to_string() << " -> " << export_composition(boolean::cube(var, val), v).to_string() << endl;
 			}
 		}*/
-
-		gate->weaken_brute_force();
+		
+		//gate->weaken_espresso();
+		gate->weaken_brute_force(var, v);
 		
 		/*for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
@@ -158,128 +163,95 @@ void gate::weaken_espresso()
 	}
 }
 
-struct guard_option
-{
-	guard_option() {}
-	guard_option(boolean::cover guard) {
-		this->count = guard.area();
-		this->guard = guard;
-		sort(this->guard.cubes.begin(), this->guard.cubes.end());
-	}
-	~guard_option() {}
-
-	int count;
-	boolean::cover guard;
-};
-
-bool operator<(const guard_option &o0, const guard_option &o1)
-{
-	if (o0.count != o1.count) {
-		return o0.count < o1.count;
-	}
-
-	if (o0.guard.cubes.size() != o1.guard.cubes.size()) {
-		return o0.guard.cubes.size() < o1.guard.cubes.size();
-	}
-
-	for (int i = 0; i < (int)o0.guard.cubes.size() && i < (int)o1.guard.cubes.size(); i++) {
-		if (o0.guard.cubes[i] != o1.guard.cubes[i]) {
-			return o0.guard.cubes[i] < o1.guard.cubes[i];
-		}
-	}
-
-	return false;
-}
-
-bool operator!=(const guard_option &o0, const guard_option &o1)
-{
-	return o0.count != o1.count || o0.guard != o1.guard;
-}
-
-void gate::weaken_brute_force()
-{
-	// number of terms, guard
-	vector<guard_option> options[2];
-	options[0].push_back(guard_option(implicant[0]));
-	options[1].push_back(guard_option(implicant[1]));
-
-	// val, guard
-	vector<pair<int, boolean::cover> > stack;
-	cout << implicant[0] << endl;
-	cout << implicant[1] << endl;
-	stack.push_back(pair<int, boolean::cover>(0, implicant[0]));
-	stack.push_back(pair<int, boolean::cover>(1, implicant[1]));
-
-	long n = 0;
+boolean::cover weaken(boolean::cube term, boolean::cover exclusion) {
+	boolean::cover result;
+	vector<boolean::cube> stack;
+	stack.push_back(term);
+	result.cubes.push_back(term);
 	while (stack.size() > 0) {
-		if (n%100 == 0) {
-			cout << stack.size() << endl;
-			n = 0;
-		}
-		n++;
-		pair<int, boolean::cover> curr = stack.back();
+		boolean::cube curr = stack.back();
 		stack.pop_back();
 
-		for (int i = 0; i < (int)curr.second.cubes.size(); i++) {
-			vector<int> vars = curr.second.cubes[i].vars();
-			for (int j = 0; j < (int)vars.size(); j++) {
-				pair<int, boolean::cover> next = curr;
-				next.second.cubes[i].hide(vars[j]);
-				next.second.minimize();
-				if (are_mutex(next.second, exclusion[curr.first])) {
-					guard_option toadd(next.second);
+		vector<int> vars = curr.vars();
+		for (int i = 0; i < (int)vars.size(); i++) {
+			boolean::cube next = curr;
+			next.hide(vars[i]);
+			auto loc = lower_bound(result.cubes.begin(), result.cubes.end(), next);
+			if ((loc == result.cubes.end() || next != *loc) && are_mutex(next, exclusion)) {
+				stack.push_back(next);
+				result.cubes.insert(loc, next);
+			}
+		}
+	}
+	sort(result.cubes.begin(), result.cubes.end());
+	return result;
+}
 
-					auto loc = lower_bound(options[curr.first].begin(), options[curr.first].end(), toadd);
-					if (loc == options[curr.first].end() || loc->guard != toadd.guard) {
-						options[curr.first].insert(loc, toadd);
-						stack.push_back(next);
+void gate::weaken_brute_force(int var, ucs::variable_set &v)
+{
+	vector<boolean::cover> incl[2] = {vector<boolean::cover>(), vector<boolean::cover>()};
+	vector<int> idx[2] = {vector<int>(), vector<int>()};
+	for (int i = 0; i < 2; i++) {
+		for (int j = 0; j < (int)implicant[i].cubes.size(); j++) {
+			incl[i].push_back(weaken(implicant[i].cubes[j], exclusion[i]));
+			idx[i].push_back(0);
+		}
+	}
+
+	bool change = true;
+	while (change) {
+		change = false;
+		for (int i = 0; i < (int)idx[0].size(); i++) {
+			for (int j = 0; j < (int)idx[1].size(); j++) {
+				if (!are_mutex(incl[0][i].cubes[idx[0][i]], incl[1][j].cubes[idx[1][j]])) {
+					if (i < (int)idx[0].size()-1 && (j >= (int)idx[1].size()-1 || incl[0][i].cubes[idx[0][i]+1] < incl[1][j].cubes[idx[1][j]+1])) {
+						idx[0][i]++;
+						change = true;
+					} else if (j < (int)idx[1].size()-1) {
+						idx[1][j]++;
+						change = true;
 					}
 				}
 			}
 		}
 	}
 
-	implicant[0] = options[0].back().guard;
-	implicant[1] = options[1].back().guard;
-
-	vector<guard_option>::iterator i[2] = {options[0].begin(), options[1].begin()};
-	for (; i[0] != options[0].end() && i[1] != options[1].end(); i[0]++, i[1]++) {
-		for (int j = 0; j < 2; j++) {
-			boolean::cover inv = ~i[j]->guard;
-			if (are_mutex(inv, exclusion[1-j])) {
-				implicant[j] = i[j]->guard;
-				implicant[1-j] = inv;
-				return;
-			}
+	//cout << "Weakening" << endl;
+	for (int i = 0; i < 2; i++) {
+		//cout << "exclusion " << export_expression(exclusion[i], v).to_string() << endl;
+		//cout << "rule " << export_expression(implicant[i], v).to_string() << " -> " << export_composition(boolean::cube(var, i), v).to_string() << endl;
+		
+		boolean::cover candidates;
+		for (int j = 0; j < (int)idx[i].size(); j++) {
+			candidates.cubes.push_back(incl[i][j].cubes[idx[i][j]]);
 		}
+		candidates.minimize();
+		sort(candidates.cubes.begin(), candidates.cubes.end());
 
-		for (int j = 0; j < 2; j++) {
-			for (auto k = options[1-j].begin(); k != i[1-j]+1; k++) {
-				if (are_mutex(k->guard, i[j]->guard)) {
-					implicant[j] = i[j]->guard;
-					implicant[1-j] = k->guard;
-					return;
+		bool change = true;
+		while (change) {
+			change = false;
+			
+			for (int j = (int)candidates.cubes.size()-1; j >= 0; j--) {
+				boolean::cover test = candidates;
+				test.cubes.erase(test.begin() + j);
+				if (implicant[i].is_subset_of(test)) {
+					candidates = test;
+					change = true;
+					break;
 				}
 			}
 		}
+
+		implicant[i] = candidates;
+
+		//cout << "rule " << export_expression(implicant[i], v).to_string() << " -> " << export_composition(boolean::cube(var, i), v).to_string() << endl;
 	}
-	for (int j = 0; j < 2; j++) {
-		for (; i[j] != options[j].end(); i[j]++) {
-			boolean::cover inv = ~i[j]->guard;
-			if (are_mutex(inv, exclusion[1-j])) {
-				implicant[j] = i[j]->guard;
-				implicant[1-j] = inv;
-				return;
-			}
 
-			for (auto k = options[1-j].begin(); k != options[1-j].end(); k++) {
-				if (are_mutex(k->guard, i[j]->guard)) {
-					implicant[j] = i[j]->guard;
-					implicant[1-j] = k->guard;
-					return;
-				}
-			}
-		}
+	if (are_mutex(~implicant[0], exclusion[1])) {
+		implicant[1] = ~implicant[0];
+	} else if (are_mutex(~implicant[1], exclusion[0])) {
+		implicant[0] = ~implicant[1];
 	}
 }
 

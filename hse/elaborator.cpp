@@ -118,7 +118,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			// and not action because then we would have passed this transtion entirely
 			// whether or not the current encoding passes the guard
 			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
-				dis &= ~g.transitions[*j].guard & ~g.transitions[*j].local_action;
+				dis &= ~g.transitions[*j].guard;// & ~g.transitions[*j].local_action;
 
 			g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
 			g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
