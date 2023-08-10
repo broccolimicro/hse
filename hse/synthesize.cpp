@@ -90,8 +90,7 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 			}
 		}*/
 		
-		//gate->weaken_espresso();
-		gate->weaken_brute_force(var, v);
+		gate->weaken_brute_force();
 		
 		/*for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
@@ -187,7 +186,7 @@ boolean::cover weaken(boolean::cube term, boolean::cover exclusion) {
 	return result;
 }
 
-void gate::weaken_brute_force(int var, ucs::variable_set &v)
+void gate::weaken_brute_force()
 {
 	vector<boolean::cover> incl[2] = {vector<boolean::cover>(), vector<boolean::cover>()};
 	vector<int> idx[2] = {vector<int>(), vector<int>()};
@@ -216,11 +215,7 @@ void gate::weaken_brute_force(int var, ucs::variable_set &v)
 		}
 	}
 
-	//cout << "Weakening" << endl;
 	for (int i = 0; i < 2; i++) {
-		//cout << "exclusion " << export_expression(exclusion[i], v).to_string() << endl;
-		//cout << "rule " << export_expression(implicant[i], v).to_string() << " -> " << export_composition(boolean::cube(var, i), v).to_string() << endl;
-		
 		boolean::cover candidates;
 		for (int j = 0; j < (int)idx[i].size(); j++) {
 			candidates.cubes.push_back(incl[i][j].cubes[idx[i][j]]);
@@ -244,8 +239,6 @@ void gate::weaken_brute_force(int var, ucs::variable_set &v)
 		}
 
 		implicant[i] = candidates;
-
-		//cout << "rule " << export_expression(implicant[i], v).to_string() << " -> " << export_composition(boolean::cube(var, i), v).to_string() << endl;
 	}
 
 	if (are_mutex(~implicant[0], exclusion[1])) {
