@@ -491,7 +491,7 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Update the state
-	if (t.stable)
+	if (t.stable && !t.vacuous)
 	{
 		global &= t.guard_action;
 		encoding &= t.guard_action;
