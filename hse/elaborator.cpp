@@ -13,6 +13,16 @@
 namespace hse
 {
 
+// Do an exhaustive simulation of all of the states in the state space. Record
+// the state encodings observed during that simulation into the places in the
+// HSE graph.
+// 
+// This function prunes states to optimize execution time by recognizing
+// already visited states. It first does a depth first search, recognizing that
+// the state space is a large cycle. This means that the first simulation will
+// go as far as possible around that cycle and every successive simulation will
+// branch off and recombine. This also keeps the amount of memory required as
+// low as possible as it fully explores branches before finding new ones.
 void elaborate(graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	// Initialize all predicates and effective predicates to false.
@@ -45,6 +55,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		}
 	}
 	// if there isn't a reset state, look for places with only outgoing arcs.
+	// TODO(edward.bingham) This probably won't work because most processes are cycles.
 	else
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
@@ -120,7 +131,12 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
 				dis &= ~g.transitions[*j].guard;
 
+			// Given the current encoding - sim.encoding
+			// 1. Ignore unstable signals - xoutnulls()
+			// 2. Mask out variables that this process has no visibility for - flipped_mask()
+			// 3. OR this into the predicate for that place
 			g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
+			// Same thing as above, but we exclude any state encoding that passes an outgoing guard - & dis
 			g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
 		}
 
@@ -130,7 +146,9 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 	if (report_progress)
 		done_progress();
 
-
+	// Clean up the recorded state with Espresso. This will help when rendering
+	// the state information to the user and when synthesizing production rules
+	// for the final circuit.
 	for (int i = 0; i < (int)g.places.size(); i++)
 	{
 		if (report_progress)

@@ -13,7 +13,6 @@
 
 namespace hse
 {
-	// Generated through simulation
 	void elaborate(graph &g, const ucs::variable_set &variables, bool report_progress = false);
 	graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool report_progress = false);
 	graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress = false);

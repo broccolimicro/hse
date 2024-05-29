@@ -33,6 +33,12 @@ place::~place()
 
 }
 
+// Merge two places and combine the predicate and effective predicate.
+// composition can be one of:
+// 1. petri::parallel
+// 2. petri::choice
+// 3. petri::sequence
+// See haystack/lib/petri/petri/graph.h for their definitions.
 place place::merge(int composition, const place &p0, const place &p1)
 {
 	place result;
@@ -101,11 +107,22 @@ bool transition::mergeable(int composition, const transition &t0, const transiti
 				 (t0.local_action == t1.local_action);
 }
 
+// Is this transition actually ever able to fire? If not, then it is
+// infeasible. This function is conservative. Like the is_vacuous() function,
+// this only answers either TRUE or MAYBE.
 bool transition::is_infeasible() const
 {
 	return guard.is_null() || local_action.is_null();
 }
 
+// Vacuous transitions are transitions that do not have any effect on the state
+// of the circuit or on knowledge about the state of the circuit. This function
+// does not actually answer that question correctly, because you need to know
+// the current state of the circuit to properly answer that question. Instead,
+// this function is conservative. We know that this transition is definitely
+// vacuous if both the guard and action are 1 because, by definition, they will
+// not have any effect on the state or our knowledge of it. So this function
+// really returns either TRUE or MAYBE.
 bool transition::is_vacuous() const
 {
 	return guard.is_tautology() && local_action.is_tautology();
