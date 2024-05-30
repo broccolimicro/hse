@@ -245,8 +245,77 @@ void encoder::check(bool senseless, bool report_progress)
 		done_progress();
 }
 
+
+// TODO State Variable Insertion
+//
+// Our goal is to disambiguate state encodings to prevent transitions from
+// firing in states they shouldn't (non-implicant states). We do this by
+// inserting new assignments on new variables that break up the state space.
+// 
+// The following citations describe the problem further:
+// 
+// Martin, Alain J. "Compiling communicating processes into delay-insensitive
+// VLSI circuits." Distributed computing 1 (1986): 226-234.
+//
+// Cortadella, Jordi, et al. "Complete state encoding based on the theory of
+// regions." Proceedings Second International Symposium on Advanced Research in
+// Asynchronous Circuits and Systems. IEEE, 1996.
+//
+// Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
 void encoder::insert_state_variables()
 {
+	// The following steps are guidelines and not hard rules. If you think you
+	// found a better way to approach the problem, then feel free to chase that
+	// down. If you need supporting infrastructure anywhere else in the project,
+	// feel free to add that in.If you need to modify this function definition,
+	// go for it.
+
+	// 1. Learn some of the underlying infrastructure.
+	//   a. Create a new variable using ucs::variable_set::define() from
+	//      haystack/lib/ucs/ucs/variable.h
+	//   b. Set up the reset behavior for that variable looking at
+	//      graph::reset[].encodings from haystack/lib/hse/hse/graph.h and
+	//      haystack/lib/hse/hse/state.h
+	//   c. Insert a pair of transitions for that variable into the HSE. Look at
+	//      petri::graph::insert_after(), petri::graph::insert_before(), and
+	//      petri::graph::insert_alongside() from haystack/lib/petri/petri/graph.h
+  //
+  // 2. Create a list of paths that need to be cut.
+	// 	 a. Understand encoder::conflict and encoder::suspects, we
+	// 	    need to cut all of the paths between all of the conflicts,
+	// 	    making sure not to create new conflicts as a result of the
+	// 	    suspects.
+	//   b. For a given conflict, identify all other transitions on
+	//      the variable experiencing this state conflict.
+	//   c. walk the graph from conflict::region to conflict::index
+	//      and trace all paths from one to the other that does not
+	//      include another transition on the same variable.
+	//
+	// 3. Try to cut those paths (this will create new conflicts).
+	//   a. Pick a pair of places which cut the majority of paths
+	//   b. Insert your transitions at those two places.
+	//
+	// 4. Iterate	
+	//   a. Create a depth first search algorithm where we insert
+	//      transitions to disambiguate a conflict, then re-evaluate the
+	//      state encodings and conflicts, and repeat for different
+	//      orderings of conflicts to tackle. The algorithm should
+	//      complete when the first solution is found.
+	//
+	// === Successful completion of project ===
+	// 
+	// Your time is yours, what do you want to tackle next?
+	// Some ideas:
+	// 1. Perhaps find a way to update the predicate space and
+	//    conflicts without redoing the whole simulation
+	// 2. Perhaps find better ways to direct and prune the depth first
+	//    search algorithm
+	// 3. Jump on another project
+
+	// Final cleanup:
+	// 1. Clean up any bugs
+	// 2. Prepare demo
+	// 3. Document as needed
 }
 
 }
