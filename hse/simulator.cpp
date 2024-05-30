@@ -139,8 +139,7 @@ simulator::simulator(const graph *base, const ucs::variable_set *variables, stat
 {
 	this->base = base;
 	this->variables = variables;
-	if (base != NULL)
-	{
+	if (base != NULL) {
 		encoding = initial.encodings;
 		global = initial.encodings;
 		for (int k = 0; k < (int)initial.tokens.size(); k++) {
@@ -153,6 +152,25 @@ simulator::~simulator()
 {
 
 }
+
+/*for (int i = 0; i < (int)loaded.size(); i++) {
+	cout << "Loaded " << i << ": " << loaded[i].index << " " << (loaded[i].vacuous ? "vacuous" : "") << " {";
+	for (int j = 0; j < (int)loaded[i].tokens.size(); j++) {
+		cout << loaded[i].tokens[j] << " ";
+	}
+	cout << "}" << endl;
+}
+cout << endl;*/
+
+/*for (int i = 0; i < (int)preload.size(); i++)
+	{
+		cout << "Preload " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " {";
+		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
+			cout << preload[i].tokens[j] << " ";
+		cout << "}" << endl;
+	}
+
+	cout << endl;*/
 
 // Returns a vector of indices representing the transitions
 // that this marking enabled and the term of each transition
@@ -168,21 +186,15 @@ int simulator::enabled(bool sorted)
 	if (tokens.size() == 0)
 		return 0;
 
-	// Get the list of transitions have have a sufficient number of local at the input places
+	if (!sorted)
+		sort(tokens.begin(), tokens.end());
+
+	// Get the list of transitions have a sufficient number of local at the input places
 	vector<enabled_transition> preload;
-
-	/*for (int i = 0; i < (int)loaded.size(); i++)
-	{
-		cout << "Loaded " << i << ": " << loaded[i].index << " " << (loaded[i].vacuous ? "vacuous" : "") << " {";
-		for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
-			cout << loaded[i].tokens[j] << " ";
-		cout << "}" << endl;
-	}
-
-	cout << endl;*/
-
 	vector<int> disabled;
-	for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
+
+	disabled.reserve(base->transitions.size());
+	for (auto a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
 		// Check to see if we haven't already determined that this transition can't be enabled
 		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
 		if (d == disabled.end() || *d != a->to.index)
@@ -249,17 +261,6 @@ int simulator::enabled(bool sorted)
 			}
 		}
 	}
-
-	/*for (int i = 0; i < (int)preload.size(); i++)
-	{
-		cout << "Preload " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " {";
-		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
-			cout << preload[i].tokens[j] << " ";
-		cout << "}" << endl;
-	}
-
-	cout << endl;*/
-
 
 	bool has_vacuous = false;
 	// Now we need to check the guards of all of the loaded transitions against the state
