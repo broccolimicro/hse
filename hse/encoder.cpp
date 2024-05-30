@@ -16,12 +16,12 @@ conflict::conflict()
 	sense = -1;
 }
 
-conflict::conflict(term_index index, int sense, vector<petri::iterator> implicant, vector<petri::iterator> region)
+conflict::conflict(term_index index, int sense, vector<petri::iterator> region, boolean::cover encoding)
 {
 	this->sense = sense;
 	this->index = index;
-	this->implicant = implicant;
 	this->region = region;
+	this->encoding = encoding;
 }
 
 conflict::~conflict()
@@ -62,7 +62,7 @@ encoder::~encoder()
 
 }
 
-void encoder::add_conflict(int tid, int term, int sense, vector<petri::iterator> prev, petri::iterator node)
+void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding)
 {
 	// cluster the conflicting places into regions. We want to be able to
 	// eliminate entire regions of these conflicts with a single state variable.
@@ -98,10 +98,11 @@ void encoder::add_conflict(int tid, int term, int sense, vector<petri::iterator>
 		}
 
 		conflicts[merge[0]].region.push_back(node);
+		conflicts[merge[0]].encoding |= encoding;
 		conflict_regions[merge[0]].insert(conflict_regions[merge[0]].end(), neighbors.begin(), neighbors.end());
 		sort(conflict_regions[merge[0]].begin(), conflict_regions[merge[0]].end());
 	} else {
-		conflicts.push_back(conflict(term_index(tid, term), sense, prev, vector<petri::iterator>(1, node)));
+		conflicts.push_back(conflict(term_index(tid, term), sense, vector<petri::iterator>(1, node), encoding));
 		conflict_regions.push_back(neighbors);
 	}
 }
@@ -208,8 +209,9 @@ void encoder::check(bool senseless, bool report_progress)
 					// there is no other vacuous transition that would take a token off the place.
 
 					// Check if they share a common state encoding given the above checks
-					if (!are_mutex(term_implicant, encoding & not_action)) {
-						add_conflict(t0.index, term, sense, t0_prev, *i);
+					encoding &= not_action;
+					if (!are_mutex(term_implicant, encoding)) {
+						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
 				}
 			}
@@ -241,6 +243,10 @@ void encoder::check(bool senseless, bool report_progress)
 
 	if (report_progress)
 		done_progress();
+}
+
+void encoder::insert_state_variables()
+{
 }
 
 }

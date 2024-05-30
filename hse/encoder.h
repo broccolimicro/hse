@@ -5,11 +5,10 @@
  *      Author: nbingham
  */
 
+#pragma once
+
 #include <common/standard.h>
 #include "state.h"
-
-#ifndef hse_encoder_h
-#define hse_encoder_h
 
 namespace hse
 {
@@ -32,11 +31,12 @@ struct graph;
 struct conflict
 {
 	conflict();
-	conflict(term_index index, int sense, vector<petri::iterator> implicant, vector<petri::iterator> region);
+	conflict(term_index index, int sense, vector<petri::iterator> region, boolean::cover encoding);
 	~conflict();
 
 	// index of the transition in the graph and the cube in the transition
 	term_index index;
+	boolean::cover encoding;
 
 	// CMOS logic is inverted. PMOS transistors pull the output high when the
 	// gate is low and NMOS transistors pull the output low when the gate is
@@ -58,9 +58,6 @@ struct conflict
 		UP = 1
 	};
 	int sense;
-
-	// the input places leading to the transition
-	vector<petri::iterator> implicant;
 
 	// region of places the transition can fire in incorrectly
 	vector<petri::iterator> region;
@@ -111,11 +108,11 @@ struct encoder
 	vector<suspect> suspects;
 	graph *base;
 
-	void add_conflict(int tid, int term, int sense, vector<petri::iterator> prev, petri::iterator node);
+	void add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding);
 	void add_suspect(vector<petri::iterator> i, petri::iterator j, int sense);
 	void check(bool senseless = false, bool report_progress = false);
+	void insert_state_variables();
 };
 
 }
 
-#endif
