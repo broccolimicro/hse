@@ -9,13 +9,34 @@
 
 namespace hse
 {
-path::path()
+path::path(int num_places, int num_transitions)
 {
+	this->num_places = num_places;
+	this->num_transitions = num_transitions;
+	hops.resize(num_transitions+num_places);
 }
 
 path::~path()
 {
 
+}
+
+int path::idx(petri::iterator i)
+{
+	return (i.type == petri::place::type) * num_transitions + i.index;
+}
+
+petri::iterator path::iter(int i)
+{
+	petri::iterator j;
+	if (i >= num_transitions) {
+		j.type = petri::transition::type;
+		j.index = i - num_transitions;
+	} else {
+		j.type = petri::place::type;
+		j.index = i;
+	}
+	return j;
 }
 
 void path::clear()
@@ -33,20 +54,18 @@ bool path::is_empty()
 	return true;
 }
 
-vector<int> path::maxima()
+vector<petri::iterator> path::maxima()
 {
-	vector<int> result;
-	for (int i = 0; i < (int)hops.size(); i++)
-	{
-		if (result.size() == 0)
-			result.push_back(i);
-		else if (hops[i] > hops[result[0]])
-		{
+	int n = 0;
+	vector<petri::iterator> result;
+	for (int i = 0; i < (int)hops.size(); i++) {
+		if (hops[i] > n) {
+			n = hops[i];
 			result.clear();
-			result.push_back(i);
+			result.push_back(iter(i));
+		} else if (hops[i] == n) {
+			result.push_back(iter(i));
 		}
-		else if (hops[i] == hops[result[0]])
-			result.push_back(i);
 	}
 	return result;
 }
@@ -76,7 +95,7 @@ int path::max(vector<int> i)
 
 path path::mask()
 {
-	path result;
+	path result(num_places, num_transitions);
 	result.from = from;
 	result.to = to;
 	result.hops.resize(hops.size());
@@ -87,7 +106,7 @@ path path::mask()
 
 path path::inverse_mask()
 {
-	path result;
+	path result(num_places, num_transitions);
 	result.from = from;
 	result.to = to;
 	result.hops.resize(hops.size());
@@ -96,25 +115,25 @@ path path::inverse_mask()
 	return result;
 }
 
-void path::zero(int i)
+void path::zero(petri::iterator i)
 {
-	hops[i] = 0;
+	hops[idx(i)] = 0;
 }
 
-void path::zero(vector<int> i)
+void path::zero(vector<petri::iterator> i)
 {
 	for (int j = 0; j < (int)i.size(); j++)
-		hops[i[j]] = 0;
+		hops[idx(i[j])] = 0;
 }
 
-void path::inc(int i, int v)
+void path::inc(petri::iterator i, int v)
 {
-	hops[i] += v;
+	hops[idx(i)] += v;
 }
 
-void path::dec(int i, int v)
+void path::dec(petri::iterator i, int v)
 {
-	hops[i] -= v;
+	hops[idx(i)] -= v;
 }
 
 path &path::operator=(path p)
@@ -171,12 +190,12 @@ path &path::operator/=(int n)
 	return *this;
 }
 
-int &path::operator[](int i)
+int &path::operator[](petri::iterator i)
 {
-	return hops[i];
+	return hops[idx(i)];
 }
 
-path_set::path_set()
+path_set::path_set(int num_places, int num_transitions) : total(num_places, num_transitions)
 {
 
 }
@@ -227,76 +246,78 @@ list<path>::iterator path_set::end()
 	return paths.end();
 }
 
-void path_set::zero(int i)
+void path_set::zero(petri::iterator i)
 {
-	for (list<path>::iterator p = paths.begin(); p != paths.end();)
-	{
-		p->hops[i] = 0;
-		if (p->is_empty())
+	for (list<path>::iterator p = paths.begin(); p != paths.end();) {
+		p->hops[p->idx(i)] = 0;
+		if (p->is_empty()) {
 			p = paths.erase(p);
-		else
+		} else {
 			p++;
+		}
 	}
-	total.hops[i] = 0;
+	total.hops[total.idx(i)] = 0;
 }
 
-void path_set::zero(vector<int> i)
+void path_set::zero(vector<petri::iterator> i)
 {
-	for (list<path>::iterator p = paths.begin(); p != paths.end();)
-	{
-		for (int j = 0; j < (int)i.size(); j++)
-			p->hops[i[j]] = 0;
+	for (list<path>::iterator p = paths.begin(); p != paths.end();) {
+		for (int j = 0; j < (int)i.size(); j++) {
+			p->hops[p->idx(i[j])] = 0;
+		}
 
-		if (p->is_empty())
+		if (p->is_empty()) {
 			p = paths.erase(p);
-		else
+		} else {
 			p++;
+		}
 	}
-	for (int j = 0; j < (int)i.size(); j++)
-		total.hops[i[j]] = 0;
-}
-
-void path_set::inc(int i, int v)
-{
-	total.hops[i] += paths.size()*v;
-	for (list<path>::iterator p = paths.begin(); p != paths.end();)
-	{
-		p->hops[i] += v;
-		if (p->is_empty())
-			p = paths.erase(p);
-		else
-			p++;
+	for (int j = 0; j < (int)i.size(); j++) {
+		total.hops[total.idx(i[j])] = 0;
 	}
 }
 
-void path_set::dec(int i, int v)
+void path_set::inc(petri::iterator i, int v)
 {
-	total.hops[i] -= paths.size()*v;
-	for (list<path>::iterator p = paths.begin(); p != paths.end();)
-	{
-		p->hops[i] -= v;
-		if (p->is_empty())
+	total.hops[total.idx(i)] += paths.size()*v;
+	for (list<path>::iterator p = paths.begin(); p != paths.end();) {
+		p->hops[p->idx(i)] += v;
+		if (p->is_empty()) {
 			p = paths.erase(p);
-		else
+		} else {
 			p++;
+		}
 	}
 }
 
-void path_set::inc(list<path>::iterator i, int j, int v)
+void path_set::dec(petri::iterator i, int v)
 {
-	i->hops[j] += v;
-	total.hops[j] += v;
+	total.hops[total.idx(i)] -= paths.size()*v;
+	for (list<path>::iterator p = paths.begin(); p != paths.end();) {
+		p->hops[p->idx(i)] -= v;
+		if (p->is_empty()) {
+			p = paths.erase(p);
+		} else {
+			p++;
+		}
+	}
 }
 
-void path_set::dec(list<path>::iterator i, int j, int v)
+void path_set::inc(list<path>::iterator i, petri::iterator j, int v)
 {
-	i->hops[j] -= v;
-	total.hops[j] -= v;
+	i->hops[i->idx(j)] += v;
+	total.hops[total.idx(j)] += v;
+}
+
+void path_set::dec(list<path>::iterator i, petri::iterator j, int v)
+{
+	i->hops[i->idx(j)] -= v;
+	total.hops[total.idx(j)] -= v;
 }
 
 path_set path_set::mask()
 {
-	path_set result;
+	path_set result(total.num_places, total.num_transitions);
 	for (list<path>::iterator p = paths.begin(); p != paths.end(); p++)
 		result.push(p->mask());
 	return result;
@@ -304,26 +325,26 @@ path_set path_set::mask()
 
 path_set path_set::inverse_mask()
 {
-	path_set result;
+	path_set result(total.num_places, total.num_transitions);
 	for (list<path>::iterator p = paths.begin(); p != paths.end(); p++)
 		result.push(p->inverse_mask());
 	return result;
 }
 
-path_set path_set::coverage(int i)
+path_set path_set::coverage(petri::iterator i)
 {
-	path_set result;
+	path_set result(total.num_places, total.num_transitions);
 	for (list<path>::iterator p = paths.begin(); p != paths.end(); p++)
-		if (p->hops[i] != 0)
+		if (p->hops[p->idx(i)] != 0)
 			result.push(*p);
 	return result;
 }
 
-path_set path_set::avoidance(int i)
+path_set path_set::avoidance(petri::iterator i)
 {
-	path_set result;
+	path_set result(total.num_places, total.num_transitions);
 	for (list<path>::iterator p = paths.begin(); p != paths.end(); p++)
-		if (p->hops[i] == 0)
+		if (p->hops[p->idx(i)] == 0)
 			result.push(*p);
 	return result;
 }

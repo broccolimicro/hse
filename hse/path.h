@@ -5,26 +5,31 @@
  *      Author: nbingham
  */
 
-#include <common/standard.h>
-#include "graph.h"
+#pragma once
 
-#ifndef hse_path_h
-#define hse_path_h
+#include <common/standard.h>
+#include <petri/graph.h>
 
 namespace hse
 {
+
 struct path
 {
-	path();
+	path(int num_places, int num_transitions);
 	~path();
 
-	vector<int> from, to;
+	vector<petri::iterator> from, to;
 	vector<int> hops;
+	int num_places;
+	int num_transitions;
+
+	int idx(petri::iterator i);
+	petri::iterator iter(int i);
 
 	void clear();
 	bool is_empty();
 
-	vector<int> maxima();
+	vector<petri::iterator> maxima();
 	int max();
 	int max(int i);
 	int max(vector<int> i);
@@ -32,10 +37,10 @@ struct path
 	path mask();
 	path inverse_mask();
 
-	void zero(int i);
-	void zero(vector<int> i);
-	void inc(int i, int v = 1);
-	void dec(int i, int v = 1);
+	void zero(petri::iterator i);
+	void zero(vector<petri::iterator> i);
+	void inc(petri::iterator i, int v = 1);
+	void dec(petri::iterator i, int v = 1);
 
 	path &operator=(path p);
 	path &operator+=(path p);
@@ -44,12 +49,12 @@ struct path
 	path &operator*=(int n);
 	path &operator/=(int n);
 
-	int &operator[](int i);
+	int &operator[](petri::iterator i);
 };
 
 struct path_set
 {
-	path_set();
+	path_set(int num_places, int num_transitions);
 	~path_set();
 
 	list<path> paths;
@@ -64,18 +69,18 @@ struct path_set
 	list<path>::iterator begin();
 	list<path>::iterator end();
 
-	void zero(int i);
-	void zero(vector<int> i);
-	void inc(int i, int v = 1);
-	void dec(int i, int v = 1);
-	void inc(list<path>::iterator i, int j, int v = 1);
-	void dec(list<path>::iterator i, int j, int v = 1);
+	void zero(petri::iterator i);
+	void zero(vector<petri::iterator> i);
+	void inc(petri::iterator i, int v = 1);
+	void dec(petri::iterator i, int v = 1);
+	void inc(list<path>::iterator i, petri::iterator j, int v = 1);
+	void dec(list<path>::iterator i, petri::iterator j, int v = 1);
 
 	path_set mask();
 	path_set inverse_mask();
 
-	path_set coverage(int i);
-	path_set avoidance(int i);
+	path_set coverage(petri::iterator i);
+	path_set avoidance(petri::iterator i);
 
 	path_set &operator=(path_set p);
 	path_set &operator+=(path_set p);
@@ -98,4 +103,3 @@ hse::path_set operator+(hse::path_set p0, hse::path_set p1);
 hse::path_set operator*(hse::path_set p0, hse::path p1);
 hse::path_set operator*(hse::path p0, hse::path_set p1);
 
-#endif
