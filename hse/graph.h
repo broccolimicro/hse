@@ -116,8 +116,6 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	void post_process(const ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
 	void check_variables(const ucs::variable_set &variables);
-	vector<int> first_assigns();
-	vector<int> associated_assigns(vector<int> tokens);
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 };
 
