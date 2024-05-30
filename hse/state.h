@@ -1,9 +1,4 @@
-/*
- * state.h
- *
- *  Created on: Jun 23, 2015
- *      Author: nbingham
- */
+#pragma once
 
 #include <common/standard.h>
 #include <boolean/cube.h>
@@ -12,16 +7,12 @@
 #include <petri/graph.h>
 #include <ucs/variable.h>
 
-#ifndef hse_state_h
-#define hse_state_h
-
 namespace hse
 {
 
 struct graph;
 
 // This points to the cube 'term' in the action of transition 'index' in a graph.
-// i.e. g.transitions[index].action.cubes[term]
 struct term_index
 {
 	term_index();
@@ -29,6 +20,7 @@ struct term_index
 	term_index(int index, int term);
 	~term_index();
 
+	// graph::transitions[index].local_action.cubes[term]
 	int index;
 	int term;
 
@@ -116,4 +108,3 @@ bool operator!=(state s1, state s2);
 
 }
 
-#endif

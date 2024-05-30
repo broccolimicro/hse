@@ -31,6 +31,9 @@ struct place : petri::place
 	place(boolean::cover predicate);
 	~place();
 
+	// inherited from petri::place
+	// vector<parallel_group> parallel_groups;
+
 	// This records every state encoding seen by tokens at this place. This and
 	// the effective predicate are used to synthesize production rules from this
 	// state space.
@@ -59,6 +62,9 @@ struct transition : petri::transition
 {
 	transition(boolean::cover guard = 1, boolean::cover local_action = 1, boolean::cover remote_action = 1);
 	~transition();
+
+	// inherited from petri::transition
+	// vector<parallel_group> parallel_groups;
 
 	// The current state must meet the conditions specified in the guard before
 	// the transition may fire
@@ -90,6 +96,17 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	graph();
 	~graph();
+
+	// inherited from petri::graph
+	// vector<int> node_distances;
+	// bool node_distances_ready;
+	// bool parallel_nodes_ready;
+	//
+	// vector<place> places;
+	// vector<transition> transitions;
+	// vector<arc> arcs[2];
+	// vector<state> source, sink;
+	// vector<state> reset;
 
 	boolean::cover predicate(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
 	boolean::cover effective(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
