@@ -87,7 +87,7 @@ enabled_transition::enabled_transition()
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	sequence = 1;
+	// sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index)
@@ -96,7 +96,7 @@ enabled_transition::enabled_transition(int index)
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	sequence = 1;
+	// sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index, int term)
@@ -105,7 +105,7 @@ enabled_transition::enabled_transition(int index, int term)
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	sequence = 1;
+	// sequence = 1;
 }
 
 enabled_transition::~enabled_transition()
@@ -155,7 +155,7 @@ bool operator!=(enabled_transition i, enabled_transition j)
 token::token()
 {
 	index = 0;
-	sequence = 1;
+	// sequence = 1;
 }
 
 /*token::token(const hse::token &t)
@@ -173,19 +173,19 @@ token::token(petri::token t, boolean::cover sequence)
 token::token(petri::token t)
 {
 	index = t.index;
-	sequence = 1;
+	// sequence = 1;
 }
 
 token::token(int index)
 {
 	this->index = index;
-	this->sequence = 1;
+	// this->sequence = 1;
 }
 
 token::token(int index, boolean::cover sequence)
 {
 	this->index = index;
-	this->sequence = sequence;
+	// this->sequence = sequence;
 }
 
 token::~token()

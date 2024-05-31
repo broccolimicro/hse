@@ -45,11 +45,32 @@ struct enabled_transition : petri::enabled_transition
 	enabled_transition(int index, int term);
 	~enabled_transition();
 
+	// inherited from petri::enabled_transition
+	// int index;
+	// vector<int> tokens;
+
 	vector<term_index> history;
+	
+	// The intersection of all of the terms of the guard of this transition which
+	// the current state passed. This is recorded by boolean::passes_guard(),
+	// then ANDed into the current state to fill in missing information.
 	boolean::cube guard_action;
+
+	// The effective guard of this enabled transition. The definition of
+	// "effective guard" is a bit lengthy, see simulator.cpp for a thorough
+	// discussion.
 	boolean::cover guard;
-	boolean::cover sequence;
+	
+	// The set of assignments up to and including the last non-vacuous assignment
+	// preceding this enabled transition. See the todo in simulator.cpp
+	// boolean::cover sequence;
+
+	// An enabled transition is vacuous if the assignment would leave the current
+	// state encoding unaffected.
 	bool vacuous;
+
+	// An enabled transition becomes unstable when the current state no longer
+	// passes the guard.
 	bool stable;
 
 	string to_string(const graph &g, const ucs::variable_set &v);
@@ -62,8 +83,9 @@ bool operator>=(enabled_transition i, enabled_transition j);
 bool operator==(enabled_transition i, enabled_transition j);
 bool operator!=(enabled_transition i, enabled_transition j);
 
-// A local token maintains its own local state information and cannot access global state
-// except through transformations applied to its local state.
+// Tokens are like program counters, marking the position of the current state
+// of execution. A token may exist at any place in the HSE as long as it is not
+// possible for more than one token to exist in that place.
 struct token : petri::token
 {
 	token();
@@ -74,11 +96,21 @@ struct token : petri::token
 	token(int index, boolean::cover sequence);
 	~token();
 
-	boolean::cover sequence;
+	// The current place this token resides at.
+	// inherited from petri::token
+	// int index
+
+	// Contains the previous assignments experienced by the input tokens.
+	// See the todo in simulator.cpp
+	// boolean::cover sequence;
 	
 	string to_string();
 };
 
+// A state is a collection of tokens marking where we are executing in the HSE,
+// and a set of variable assignments encoded as a minterm. The simulator
+// provides the infrastracture to walk through the state space one transition
+// at a time using this structure.
 struct state : petri::state<petri::token>
 {
 	state();
@@ -86,6 +118,11 @@ struct state : petri::state<petri::token>
 	state(vector<hse::token> tokens, boolean::cube encodings);
 	~state();
 
+	// The tokens marking our location in the HSE
+	// inherited from petri::state
+	// vector<token> tokens;
+
+	// The current value assiged to each variable.
 	boolean::cube encodings;
 
 	void hash(hasher &hash) const;

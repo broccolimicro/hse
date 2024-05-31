@@ -153,25 +153,6 @@ simulator::~simulator()
 
 }
 
-/*for (int i = 0; i < (int)loaded.size(); i++) {
-	cout << "Loaded " << i << ": " << loaded[i].index << " " << (loaded[i].vacuous ? "vacuous" : "") << " {";
-	for (int j = 0; j < (int)loaded[i].tokens.size(); j++) {
-		cout << loaded[i].tokens[j] << " ";
-	}
-	cout << "}" << endl;
-}
-cout << endl;*/
-
-/*for (int i = 0; i < (int)preload.size(); i++)
-	{
-		cout << "Preload " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " {";
-		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
-			cout << preload[i].tokens[j] << " ";
-		cout << "}" << endl;
-	}
-
-	cout << endl;*/
-
 // Returns a vector of indices representing the transitions
 // that this marking enabled and the term of each transition
 // that's enabled.
@@ -189,13 +170,13 @@ int simulator::enabled(bool sorted)
 	if (!sorted)
 		sort(tokens.begin(), tokens.end());
 
-	// Get the list of transitions have a sufficient number of local at the input places
+	// Get the list of transitions that have a sufficient number of tokens at the input places
 	vector<enabled_transition> preload;
 	vector<int> disabled;
 
 	disabled.reserve(base->transitions.size());
 	for (auto a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
-		// Check to see if we haven't already determined that this transition can't be enabled
+		// A transition will only be in disabled if we've already determined that it can't be enabled.
 		vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
 		if (d == disabled.end() || *d != a->to.index)
 		{
@@ -264,67 +245,105 @@ int simulator::enabled(bool sorted)
 
 	bool has_vacuous = false;
 	// Now we need to check the guards of all of the loaded transitions against the state
-	for (int i = (int)preload.size()-1; i >= 0; i--)
-	{
-		// If this transition is a guard, we check to see if it passes (either stable or unstable)
-		// if it is an assignment, then we check to see if it is vacuous. If either of these hold
-		// true, then we can keep going.
+	for (int i = (int)preload.size()-1; i >= 0; i--) {
+		// To ensure that a transition is actually enabled, we need to check its
+		// guard. We also need to implement an instability check. Unfortunately,
+		// instability is defined in the context of complete production rules, but
+		// not really in the context of an HSE where we only have partial
+		// production rules. Therefore, there are a couple of possible ways to
+		// define instability depending on what phase of the circuit synthesis you
+		// are in. Further, the chosen definition of instability affects how we
+		// define the guard of the transition that we need to check.
 
-		// If this transition is an assignment, then we need to check to make sure all of the
-		// previous guards pass before we can execute this assignment.
-		// the 'guard' expression contains all of the guards since the last assignments in the process
-		// the 'sequence' expression contains all of the last assignments in the process. A dependency chain
-		// from these assignments to our current assignment is necessary to implement sequentialism. So
-		// Conservatively the assignments will always end up in the production rules for that purpose.
-		// However, we can do better by finding those dependency chains in the guard and only taking the expressions
-		// from the end of those chains.
-		for (int j = 0; j < (int)preload[i].tokens.size(); j++) {
-			preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
-		}
+		// 1. If you assume that you can still insert state variables, then
+		// inserting a state variable can break apart a guard. This means that if a
+		// guard leading to an assignment passes, and then later doesn't, that
+		// doesn't necessarily imply that the transition is unstable. This is
+		// because the state variable insertion algorithm could insert a state
+		// transition that separates that piece of the guard that doesn't pass from
+		// the transition in question. Therefore, conservatively, you'd never want
+		// to treat an unstable guard as unstable.  Instead the guard would hold
+		// state. Once it passes the first time, it's considered passed. The
+		// problem with this approach is that it assumes state variables in a lot
+		// of different places that the designer is not likely to have intended. It
+		// then proceeds to ignore instabilities in the HSE, leading to an
+		// incorrect sythesis when the state variable insertion algorithm
+		// invariably doesn't catch it.
 
-		// TODO removing prs timing assumption
-		preload[i].guard &= base->transitions[preload[i].index].guard;
+		// 2. If you assume that you can not still insert state variables, then we
+		// have a separate problem. Each assignment in the HSE is a partial
+		// production rule. Given a sequence of transition a+; b-; c+, in general
+		// the term "a" will appear in the production rule for "b-" as "a -> b-",
+		// and the term "~b" will appear in the production rule for "c+" as "~b ->
+		// c+". This implements the event sequencing. Meanwhile, in the HSE "b-"
+		// and "c+" don't have guards. It is possible after executing "a+" but
+		// before executing "b-" for a parallel assignment to lower "a". This
+		// SHOULD make "b-" unstable. To implement this correctly, we'd have to add
+		// those terms into the guard that we check while running the simulation.
+
+		// However, if the previous transition is vacuous (the variable being
+		// assigned doesn't actually change its value as a result of the
+		// assignment), then it is not enough to just add the term for that
+		// assignment. Instead, we have to include that assignment's guard, and
+		// that assignment's previous assignments and so on until we enounter
+		// non-vacuous transitions.
+
+		// It gets worse though. Following the above strategy will create false
+		// positive identifications of unstable transitions. In the case of a
+		// handshake [R.e]; R.r+; [~R.e]; R.r-, the production rule for R.r- does
+		// not need to contain R.r+ (Also, it can't contain R.r+ because that would
+		// create a self-invalidating production rule). So we need to look back
+		// through the history of transitions and see which of the previous
+		// assigments have been acknowledged through another variable.
+
+		// At this point we would pretty much be deriving the complete production
+		// rule for every transition we execute in the simulator just in time for
+		// execution by running guard strengthening.
+
+
+		// For now, we've implemented a compromise that seams generally reasonable.
+		// Syntactic ordering constraints are assumed to be stable. This means that
+		// we don't look backwards at the previous assignments. We only check what
+		// is written in the guard in the HSE.
+
+
+		// As a result of graph::post_process(), all of the guards should have been
+		// merged into the closest assignment.
+		preload[i].guard = base->transitions[preload[i].index].guard;	
 		boolean::cover guard = preload[i].guard;
-		
-		//cout << "Starting Sequence: " << export_expression(preload[i].sequence, *variables).to_string() << endl;
-		//cout << "Starting Rule: " << export_expression(preload[i].guard, *variables).to_string() << " -> " << export_composition(base->transitions[preload[i].index].local_action, *variables).to_string() << endl;
-
-		/* TODO(edward.bingham) fix this before merging to master
-		for (int j = 0; j < (int)preload[i].guard.cubes.size(); j++)
-		{
-			for (int k = 0; k < (int)preload[i].sequence.cubes.size(); k++)
-			{
-				//cout << "\tTerm " << j << "." << k << endl;
-				boolean::cube covered = preload[i].guard.cubes[j];
-				//cout << "\t\t" << export_expression(covered, *variables).to_string() << endl;
-				for (list<pair<boolean::cube, term_index> >::reverse_iterator l = history.rbegin(); l != history.rend(); l++)
-				{
-					if ((covered & base->transitions[l->second.index].local_action[l->second.term].inverse().flipped_mask(covered.mask().flip())).is_null())
-					{
-						covered &= (l->first.mask(covered.mask()) & preload[i].sequence.cubes[k].flipped_mask(l->first.mask().flip())).xoutnulls().mask(base->transitions[preload[i].index].local_action[0].mask());
-						//cout << "\t\t" << export_expression(covered, *variables).to_string() << endl;
-					}
-				}
-
-				guard.cubes.push_back(preload[i].guard.cubes[j] & preload[i].sequence.cubes[k].mask(covered.mask()).mask(base->transitions[preload[i].index].local_action[0].mask()));
-				//cout << "\t" << export_expression(guard.cubes.back(), *variables).to_string() << endl;
-			}
-		}*/
-		//cout << "Ending Guard: " << export_expression(guard, *variables).to_string() << endl;
+	
+		// TODO(edward.bingham) Think about implementing approach 2.
+		// for (int j = 0; j < (int)preload[i].tokens.size(); j++) {
+		// 	preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
+		// }
+		//
+		// for (int j = 0; j < (int)preload[i].guard.cubes.size(); j++) {
+		// 	for (int k = 0; k < (int)preload[i].sequence.cubes.size(); k++) {
+		// 		boolean::cube covered = preload[i].guard.cubes[j];
+		// 		for (list<pair<boolean::cube, term_index> >::reverse_iterator l = history.rbegin(); l != history.rend(); l++) {
+		// 			if ((covered & base->transitions[l->second.index].local_action[l->second.term].inverse().flipped_mask(covered.mask().flip())).is_null()) {
+		// 				covered &= (l->first.mask(covered.mask()) & preload[i].sequence.cubes[k].flipped_mask(l->first.mask().flip())).xoutnulls().mask(base->transitions[preload[i].index].local_action[0].mask());
+		// 			}
+		// 		}
+		//
+		// 		guard.cubes.push_back(preload[i].guard.cubes[j] & preload[i].sequence.cubes[k].mask(covered.mask()).mask(base->transitions[preload[i].index].local_action[0].mask()));
+		// 	}
+		// }
 
 		// Check for unstable transitions
 		bool previously_enabled = false;
-		for (int j = 0; j < (int)loaded.size() && !previously_enabled; j++)
-			if (loaded[j].index == preload[i].index)
-			{
+		for (int j = 0; j < (int)loaded.size() && !previously_enabled; j++) {
+			if (loaded[j].index == preload[i].index) {
 				preload[i].history = loaded[j].history;
 				previously_enabled = true;
 			}
+		}
 
 		// Now we check to see if the current state passes the guard
 		int isReady = boolean::passes_guard(encoding, global, guard, &preload[i].guard_action);
-		if (isReady < 0 && previously_enabled)
+		if (isReady < 0 && previously_enabled) {
 			isReady = 0;
+		}
 
 		preload[i].stable = (isReady > 0);
 		preload[i].vacuous = boolean::vacuous_assign(global, base->transitions[preload[i].index].remote_action, preload[i].stable);
@@ -335,25 +354,9 @@ int simulator::enabled(bool sorted)
 		if (preload[i].vacuous) {
 			has_vacuous = true;
 		} else if (isReady < 0) {
-			/*cout << "Didn't Pass Guard " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " " << (!preload[i].stable ? "unstable" : "") << " {";
-			for (int j = 0; j < (int)preload[i].tokens.size(); j++)
-				cout << preload[i].tokens[j] << " ";
-			cout << "}" << endl;*/
-
 			preload.erase(preload.begin() + i);
 		}
 	}
-
-	/*for (int i = 0; i < (int)preload.size(); i++)
-	{
-		cout << "Preload " << i << ": " << preload[i].index << " " << (preload[i].vacuous ? "vacuous" : "") << " {";
-		for (int j = 0; j < (int)preload[i].tokens.size(); j++)
-			cout << preload[i].tokens[j] << " ";
-		cout << "}" << endl;
-	}
-
-	cout << endl;*/
-
 
 	loaded = preload;
 	ready.clear();
@@ -366,29 +369,13 @@ int simulator::enabled(bool sorted)
 		}
 	}
 
-	if (history.size() > 0)
-		for (int i = 0; i < (int)loaded.size(); i++)
-			if (loaded[i].stable)
+	if (history.size() > 0) {
+		for (int i = 0; i < (int)loaded.size(); i++) {
+			if (loaded[i].stable) {
 				loaded[i].history.push_back(history.back().second);
-
-	/*for (int i = 0; i < (int)tokens.size(); i++)
-		cout << "Token " << i << ": " << tokens[i].index << " " << tokens[i].cause << " " << tokens[i].guard << endl;
-
-	cout << endl;
-
-	for (int i = 0; i < (int)loaded.size(); i++)
-	{
-		cout << "Loaded " << i << ": " << loaded[i].index << " " << (loaded[i].vacuous ? "vacuous" : "") << " {";
-		for (int j = 0; j < (int)loaded[i].tokens.size(); j++)
-			cout << loaded[i].tokens[j] << " ";
-		cout << "}" << endl;
+			}
+		}
 	}
-
-	cout << endl;*/
-
-	// TODO I don't know how I would treat the case when the execution enters a state that is not part of the HSE.
-	// In this case, all of the transitions in the entire HSE are vacuous (possibly unstable) and the tokens
-	// could just zoom around the HSE making no changes to the state information.
 
 	return ready.size();
 }
@@ -404,7 +391,7 @@ enabled_transition simulator::fire(int index)
 	enabled_transition t = loaded[ready[index].first];
 	int term = ready[index].second;
 
-	// disable any transitions that were dependent on at least one of the same local tokens
+	// disable any transitions that were dependent on at least one of the same tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
 	for (int i = (int)loaded.size()-1, j = ready.size()-1; i >= 0; i--)
 	{
@@ -471,8 +458,8 @@ enabled_transition simulator::fire(int index)
 		}
 	}
 
-	// Check for interfering transitions. Interfering transitions are the active transitions that have fired since this
-	// active transition was enabled.
+	// Check for interfering transitions. Interfering transitions are the active
+	// transitions that have fired since this active transition was enabled.
 	boolean::cube local_action = base->transitions[t.index].local_action[term];
 	boolean::cube remote_action = base->transitions[t.index].remote_action[term];
 	for (int j = 0; j < (int)t.history.size(); j++) {
@@ -521,14 +508,6 @@ enabled_transition simulator::fire(int index)
 
 	// Add the latest firing to the history.
 	history.push_back(pair<boolean::cube, term_index>(t.guard_action, term_index(t.index, term)));
-
-	/*cout << "History" << endl;
-	actions = 0;
-	for (list<pair<boolean::cube, term_index> >::reverse_iterator i = history.rbegin(); i != history.rend(); i++)
-	{
-		cout << export_expression(i->first, *variables).to_string() << " -> " << export_composition(base->transitions[i->second.index].local_action.cubes[i->second.term].mask(actions), *variables).to_string() << endl;
-		actions = actions.combine_mask(base->transitions[i->second.index].local_action.cubes[i->second.term].mask());
-	}*/
 
 	return t;
 }

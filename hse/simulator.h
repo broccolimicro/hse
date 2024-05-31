@@ -101,8 +101,7 @@ struct simulator
 	// functionality needs to be explored further or whether doing so would be
 	// incorrect.
 
-	// TODO(edward.bingham) re-examine whether we should re-enable the history
-	// functionality in identifying unstable transitions.
+	// See todo in simulator.cpp
 	list<pair<boolean::cube, term_index> > history;
 
 	// Remember these pointers so that we do not have to include them as inputs
