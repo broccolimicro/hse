@@ -88,18 +88,29 @@ struct suspect
 	vector<petri::iterator> second;
 };
 
+// This structure is responsible for checking an HSE for conflicts and then
+// solving those conflicts with state-variable insertion.
 struct encoder
 {
 	encoder();
 	encoder(graph *base);
 	~encoder();
 
+	graph *base;
+
+	// conflict_regions is like conflict::region and suspect_regions is list
+	// suspect::first and suspect::second except that it includes all of the
+	// neighboring nodes so that we can check for intersection to make clustering
+	// easier. These two members are only to be used by the add_conflict() and
+	// add_suspect() functions. In a way, they are just temporary variables.
 	vector<vector<petri::iterator> > conflict_regions;
 	vector<vector<petri::iterator> > suspect_regions;
 
+	// The list of conflicts found in the HSE by check().
 	vector<conflict> conflicts;
+
+	// The list of suspects found in the HSE by check().
 	vector<suspect> suspects;
-	graph *base;
 
 	void add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding);
 	void add_suspect(vector<petri::iterator> i, petri::iterator j, int sense);
