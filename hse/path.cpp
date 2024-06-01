@@ -9,6 +9,7 @@
 
 namespace hse
 {
+
 path::path(int num_places, int num_transitions)
 {
 	this->num_places = num_places;

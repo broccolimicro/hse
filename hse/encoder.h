@@ -1,10 +1,3 @@
-/*
- * encoder.h
- *
- *  Created on: May 7, 2015
- *      Author: nbingham
- */
-
 #pragma once
 
 #include <common/standard.h>
