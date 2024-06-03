@@ -223,6 +223,48 @@ void gate_set::build_reset() {
 	}
 }
 
+// TODO State Graph Optimization
+//
+// The goal of this project is to augment the existing circuit synthesis
+// functionality to generate production ready circuits. This includes creating
+// the state holding elements, adding precharge networks to clean up analog
+// effects that might create glitches, optionally harden the gates against
+// transients for robustness, and combine gates into shared gate networks. 
+//
+// The following steps are guidelines and not hard rules. If you think you
+// found a better way to approach the problem, then feel free to chase that
+// down. If you need supporting infrastructure anywhere else in the project,
+// feel free to add that in. If you need to modify this function definition,
+// go for it.
+//
+// 1. Generate Staticizers
+//   a. Generate weak feedback staticizers
+//   b. Generate combinational feedback staticizers
+//   c. Use state graph information to generate partially combinational staticizers.
+//
+// 2. Use state graph to add cross coupling to enforce illegal state avoidance
+//
+// 3. Generate precharge networks
+//   a. Determine what data structure changes need to be made to support precharge networks 
+//   b. Use state graph information to generate precharge networks
+//
+// 4. Generate shared gate networks
+//   a. Determine what data structure changes need to be made to support shared gate networks
+//   b. Use state graph to generate optimal shared gate networks
+//
+// === Successful completion of project ===
+// 
+// Your time is yours, what do you want to tackle next?
+// Some ideas:
+// 1. Expand upon shared gate network functionality to optimize production rule
+//    expressions throughout the circuit.
+// 2. Build out the user interface in hseenc for working through all of these functions.
+//
+// Final cleanup:
+// 1. Clean up any bugs
+// 2. Prepare demo
+// 3. Document as needed
+
 void gate_set::build_staticizers() {
 }
 

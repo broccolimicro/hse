@@ -262,8 +262,7 @@ void encoder::check(bool senseless, bool report_progress)
 // Asynchronous Circuits and Systems. IEEE, 1996.
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
-void encoder::insert_state_variables()
-{
+void encoder::insert_state_variables() {
 	// The following steps are guidelines and not hard rules. If you think you
 	// found a better way to approach the problem, then feel free to chase that
 	// down. If you need supporting infrastructure anywhere else in the project,
