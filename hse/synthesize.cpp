@@ -3,6 +3,13 @@
 namespace hse
 {
 
+gate::gate() {
+	reset = 2;
+}
+
+gate::~gate() {
+}
+
 bool gate::is_combinational()
 {
 	// TODO we really only need to cover all of the holding states
@@ -105,27 +112,37 @@ void gate::weaken_brute_force()
 	}
 }
 
-void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress)
-{
-	vector<gate> gates;
-	gates.resize(v.nodes.size());
+gate_set::gate_set() {
+	base = nullptr;
+	vars = nullptr;
+}
+
+gate_set::gate_set(graph *base, ucs::variable_set *vars) {
+	this->base = base;
+	this->vars = vars;
+}
+
+gate_set::~gate_set() {
+}
+
+void gate_set::load(bool senseless) {
+	gates.clear();
+	gates.resize(vars->nodes.size());
 
 	for (int i = 0; i < (int)gates.size(); i++) {
-		if (proc.reset.size() > 0) {
-			gates[i].reset = proc.reset[0].encodings.get(i);
+		if (base->reset.size() > 0) {
+			gates[i].reset = base->reset[0].encodings.get(i);
 		}
 	}
 
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
-	for (auto t0i = proc.transitions.begin(); t0i != proc.transitions.end(); t0i++) {
-		petri::iterator t0(petri::transition::type, t0i - proc.transitions.begin());
-		//if (report_progress)
-		//	progress("", "T" + ::to_string(i) + "/" + ::to_string(proc.transitions.size()), __FILE__, __LINE__);
-
+	for (auto t0i = base->transitions.begin(); t0i != base->transitions.end(); t0i++) {
+		petri::iterator t0(petri::transition::type, t0i - base->transitions.begin());
+		
 		// The state encodings for the implicant set of states of the transition.
 		// these are the state encodings for which there is no vacuous transition that would
 		// take a token off of any of the places.
-		boolean::cover predicate = proc.predicate(t0);
+		boolean::cover predicate = base->predicate(t0);
 		boolean::cover implicant = predicate & t0i->guard;
 
 		// The transition actively affects the state of the system
@@ -154,53 +171,43 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 		
 		for (int val = 0; val < 2; val++) {
 			// We're going to check this transition against all of the places in the system
-			vector<petri::iterator> relevant = proc.relevant_nodes(gate->tids[val]);
+			vector<petri::iterator> relevant = base->relevant_nodes(gate->tids[val]);
 		
 			//cout << "Production rule for " << var << " " << val << " " << ::to_string(gate->tids[val]) << endl;
 			for (auto n = relevant.begin(); n != relevant.end(); n++) {
 				//cout << "excluding " << *n << endl;
 				if (n->type == petri::place::type) {
-					//cout << export_expression(proc.places[n->index].effective, v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
-					//cout << export_expression(proc.effective(*n), v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
-					gate->exclusion[val] |= proc.effective(*n) & boolean::cube(var, 1-val);
+					//cout << export_expression(base->places[n->index].effective, v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
+					//cout << export_expression(base->effective(*n), v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
+					gate->exclusion[val] |= base->effective(*n) & boolean::cube(var, 1-val);
 				} else {
-					boolean::cover predicate = proc.predicate(*n);
-					//gate->exclusion[val] |= predicate & ~proc.transitions[n->index].guard & boolean::cube(var, 1-val);
+					boolean::cover predicate = base->predicate(*n);
+					//gate->exclusion[val] |= predicate & ~base->transitions[n->index].guard & boolean::cube(var, 1-val);
 					if (find(gate->tids[1-val].begin(), gate->tids[1-val].end(), *n) != gate->tids[1-val].end()) {
-						gate->exclusion[val] |= predicate & proc.transitions[n->index].guard;
+						gate->exclusion[val] |= predicate & base->transitions[n->index].guard;
 					} else {
-						gate->exclusion[val] |= predicate & proc.transitions[n->index].guard & boolean::cube(var, 1-val);
+						gate->exclusion[val] |= predicate & base->transitions[n->index].guard & boolean::cube(var, 1-val);
 					}
 				}
 			}
 		}
 	}
+}
 
+void gate_set::weaken() {
+	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
+		gate->weaken_brute_force();
+	}
+}
+
+void gate_set::build_reset() {
 	ucs::variable resetDecl, _resetDecl;
 	resetDecl.name.push_back(ucs::instance("Reset", vector<int>()));
 	_resetDecl.name.push_back(ucs::instance("_Reset", vector<int>()));
-	int reset = v.define(resetDecl);
-	int _reset = v.define(_resetDecl);
+	int reset = vars->define(resetDecl);
+	int _reset = vars->define(_resetDecl);
 
-	//cout << endl;
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
-		int var = gate - gates.begin();
-		/*for (int val = 0; val < 2; val++) {
-			if (gate->tids[val].size() > 0) {
-				cout << "exclusion " << export_expression(gate->exclusion[val], v).to_string() << endl;
-				cout << "rule " << export_expression(gate->implicant[val], v).to_string() << " -> " << export_composition(boolean::cube(var, val), v).to_string() << endl;
-			}
-		}*/
-		
-		gate->weaken_brute_force();
-		
-		/*for (int val = 0; val < 2; val++) {
-			if (gate->tids[val].size() > 0) {
-				cout << "rule " << export_expression(gate->implicant[val], v).to_string() << " -> " << export_composition(boolean::cube(var, val), v).to_string() << endl;
-			}
-		}
-		cout << endl;*/
-
 		if (gate->reset != 2 && gate->is_combinational()) {
 			// TODO not sure if this is actually correct
 			gate->reset = 2;
@@ -213,6 +220,24 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 			gate->implicant[0] |= boolean::cube(reset, 1);
 			gate->implicant[1] &= boolean::cube(reset, 0);
 		}
+	}
+}
+
+void gate_set::build_staticizers() {
+}
+
+void gate_set::build_precharge() {
+}
+
+void gate_set::harden_state() {
+}
+
+void gate_set::build_shared_gates() {
+}
+
+void gate_set::save(prs::production_rule_set *out) {
+	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
+		int var = gate - gates.begin();
 
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
@@ -225,3 +250,4 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 }
 
 }
+

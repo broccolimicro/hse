@@ -21,6 +21,9 @@ namespace hse
 // HSE using the place predicates.
 struct gate
 {
+	gate();
+	~gate();
+
 	// The value of this variable on reset.
 	int reset;
 
@@ -48,11 +51,25 @@ struct gate
 	void weaken_brute_force();
 };
 
-void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress = false);
+struct gate_set
+{
+	gate_set();
+	gate_set(graph *base, ucs::variable_set *vars);
+	~gate_set();
 
-/*void build_staticizers(graph &proc);
-void build_precharge();
-void harden_state();
-void build_shared_gates();*/
+	graph *base;
+	ucs::variable_set *vars;
+	
+	vector<gate> gates;
+
+	void load(bool senseless=false);
+	void weaken();
+	void build_reset();
+	void build_staticizers();
+	void build_precharge();
+	void harden_state();
+	void build_shared_gates();
+	void save(prs::production_rule_set *out);
+};
 
 }
