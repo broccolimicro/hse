@@ -50,4 +50,9 @@ struct gate
 
 void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress = false);
 
+/*void build_staticizers(graph &proc);
+void build_precharge();
+void harden_state();
+void build_shared_gates();*/
+
 }

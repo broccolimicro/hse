@@ -3,6 +3,108 @@
 namespace hse
 {
 
+bool gate::is_combinational()
+{
+	// TODO we really only need to cover all of the holding states
+	return (implicant[0] | implicant[1]).is_tautology();
+}
+
+void gate::weaken_espresso()
+{
+	for (int val = 0; val < 2; val++) {
+		if (tids[val].size() > 0) {
+			boolean::espresso(implicant[val], ~exclusion[val] & ~implicant[val], exclusion[val]);
+		}
+	}
+
+	if (tids[0].size() == 0 || tids[1].size() == 0)
+		return;
+
+	int width[2];
+ 	width[0] = implicant[0].area();
+ 	width[1] = implicant[1].area();
+	boolean::cover not_implicant[2];
+ 	not_implicant[0] = ~implicant[0];
+ 	not_implicant[1] = ~implicant[1];
+	bool comb[2];
+	comb[0] = are_mutex(not_implicant[0], exclusion[1]);
+	comb[1] = are_mutex(not_implicant[1], exclusion[0]);
+	
+	if (comb[0] && comb[1]) {
+		if (width[0] < width[1]) {
+			implicant[1] = not_implicant[0];
+		} else {
+			implicant[0] = not_implicant[1];
+		}
+	} else if (comb[0]) {
+		implicant[1] = not_implicant[0];
+	} else if (comb[1]) {
+		implicant[0] = not_implicant[1];
+	}
+}
+
+void gate::weaken_brute_force()
+{
+	vector<boolean::cover> incl[2] = {vector<boolean::cover>(), vector<boolean::cover>()};
+	vector<int> idx[2] = {vector<int>(), vector<int>()};
+	for (int i = 0; i < 2; i++) {
+		for (int j = 0; j < (int)implicant[i].cubes.size(); j++) {
+			incl[i].push_back(boolean::weaken(implicant[i].cubes[j], exclusion[i]));
+			idx[i].push_back(0);
+		}
+	}
+
+	bool change = true;
+	while (change) {
+		change = false;
+		for (int i = 0; i < (int)idx[0].size(); i++) {
+			for (int j = 0; j < (int)idx[1].size(); j++) {
+				if (!are_mutex(incl[0][i].cubes[idx[0][i]], incl[1][j].cubes[idx[1][j]])) {
+					if (i < (int)idx[0].size()-1 && (j >= (int)idx[1].size()-1 || incl[0][i].cubes[idx[0][i]+1] < incl[1][j].cubes[idx[1][j]+1])) {
+						idx[0][i]++;
+						change = true;
+					} else if (j < (int)idx[1].size()-1) {
+						idx[1][j]++;
+						change = true;
+					}
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < 2; i++) {
+		boolean::cover candidates;
+		for (int j = 0; j < (int)idx[i].size(); j++) {
+			candidates.cubes.push_back(incl[i][j].cubes[idx[i][j]]);
+		}
+		candidates.minimize();
+		sort(candidates.cubes.begin(), candidates.cubes.end());
+
+		bool change = true;
+		while (change) {
+			change = false;
+			
+			for (int j = (int)candidates.cubes.size()-1; j >= 0; j--) {
+				boolean::cover test = candidates;
+				test.cubes.erase(test.begin() + j);
+				if (implicant[i].is_subset_of(test)) {
+					candidates = test;
+					change = true;
+					break;
+				}
+			}
+		}
+
+		implicant[i] = candidates;
+	}
+
+	if (are_mutex(~implicant[0], exclusion[1])) {
+		implicant[1] = ~implicant[0];
+	} else if (are_mutex(~implicant[1], exclusion[0])) {
+		implicant[0] = ~implicant[1];
+	}
+}
+
 void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_set &v, bool senseless, bool report_progress)
 {
 	vector<gate> gates;
@@ -119,132 +221,6 @@ void guard_weakening(graph &proc, prs::production_rule_set *out, ucs::variable_s
 				out->rules.back().local_action = boolean::cube(var, val);
 			}
 		}
-	}
-}
-
-bool gate::is_combinational()
-{
-	// TODO we really only need to cover all of the holding states
-	return (implicant[0] | implicant[1]).is_tautology();
-}
-
-void gate::weaken_espresso()
-{
-	for (int val = 0; val < 2; val++) {
-		if (tids[val].size() > 0) {
-			boolean::espresso(implicant[val], ~exclusion[val] & ~implicant[val], exclusion[val]);
-		}
-	}
-
-	if (tids[0].size() == 0 || tids[1].size() == 0)
-		return;
-
-	int width[2];
- 	width[0] = implicant[0].area();
- 	width[1] = implicant[1].area();
-	boolean::cover not_implicant[2];
- 	not_implicant[0] = ~implicant[0];
- 	not_implicant[1] = ~implicant[1];
-	bool comb[2];
-	comb[0] = are_mutex(not_implicant[0], exclusion[1]);
-	comb[1] = are_mutex(not_implicant[1], exclusion[0]);
-	
-	if (comb[0] && comb[1]) {
-		if (width[0] < width[1]) {
-			implicant[1] = not_implicant[0];
-		} else {
-			implicant[0] = not_implicant[1];
-		}
-	} else if (comb[0]) {
-		implicant[1] = not_implicant[0];
-	} else if (comb[1]) {
-		implicant[0] = not_implicant[1];
-	}
-}
-
-boolean::cover weaken(boolean::cube term, boolean::cover exclusion) {
-	boolean::cover result;
-	vector<boolean::cube> stack;
-	stack.push_back(term);
-	result.cubes.push_back(term);
-	while (stack.size() > 0) {
-		boolean::cube curr = stack.back();
-		stack.pop_back();
-
-		vector<int> vars = curr.vars();
-		for (int i = 0; i < (int)vars.size(); i++) {
-			boolean::cube next = curr;
-			next.hide(vars[i]);
-			auto loc = lower_bound(result.cubes.begin(), result.cubes.end(), next);
-			if ((loc == result.cubes.end() || next != *loc) && are_mutex(next, exclusion)) {
-				stack.push_back(next);
-				result.cubes.insert(loc, next);
-			}
-		}
-	}
-	sort(result.cubes.begin(), result.cubes.end());
-	return result;
-}
-
-void gate::weaken_brute_force()
-{
-	vector<boolean::cover> incl[2] = {vector<boolean::cover>(), vector<boolean::cover>()};
-	vector<int> idx[2] = {vector<int>(), vector<int>()};
-	for (int i = 0; i < 2; i++) {
-		for (int j = 0; j < (int)implicant[i].cubes.size(); j++) {
-			incl[i].push_back(weaken(implicant[i].cubes[j], exclusion[i]));
-			idx[i].push_back(0);
-		}
-	}
-
-	bool change = true;
-	while (change) {
-		change = false;
-		for (int i = 0; i < (int)idx[0].size(); i++) {
-			for (int j = 0; j < (int)idx[1].size(); j++) {
-				if (!are_mutex(incl[0][i].cubes[idx[0][i]], incl[1][j].cubes[idx[1][j]])) {
-					if (i < (int)idx[0].size()-1 && (j >= (int)idx[1].size()-1 || incl[0][i].cubes[idx[0][i]+1] < incl[1][j].cubes[idx[1][j]+1])) {
-						idx[0][i]++;
-						change = true;
-					} else if (j < (int)idx[1].size()-1) {
-						idx[1][j]++;
-						change = true;
-					}
-				}
-			}
-		}
-	}
-
-	for (int i = 0; i < 2; i++) {
-		boolean::cover candidates;
-		for (int j = 0; j < (int)idx[i].size(); j++) {
-			candidates.cubes.push_back(incl[i][j].cubes[idx[i][j]]);
-		}
-		candidates.minimize();
-		sort(candidates.cubes.begin(), candidates.cubes.end());
-
-		bool change = true;
-		while (change) {
-			change = false;
-			
-			for (int j = (int)candidates.cubes.size()-1; j >= 0; j--) {
-				boolean::cover test = candidates;
-				test.cubes.erase(test.begin() + j);
-				if (implicant[i].is_subset_of(test)) {
-					candidates = test;
-					change = true;
-					break;
-				}
-			}
-		}
-
-		implicant[i] = candidates;
-	}
-
-	if (are_mutex(~implicant[0], exclusion[1])) {
-		implicant[1] = ~implicant[0];
-	} else if (are_mutex(~implicant[1], exclusion[0])) {
-		implicant[0] = ~implicant[1];
 	}
 }
 
