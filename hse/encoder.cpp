@@ -267,7 +267,7 @@ void encoder::insert_state_variables()
 	// The following steps are guidelines and not hard rules. If you think you
 	// found a better way to approach the problem, then feel free to chase that
 	// down. If you need supporting infrastructure anywhere else in the project,
-	// feel free to add that in.If you need to modify this function definition,
+	// feel free to add that in. If you need to modify this function definition,
 	// go for it.
 
 	// 1. Learn some of the underlying infrastructure.
