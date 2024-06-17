@@ -241,6 +241,7 @@ void encoder::check(bool senseless, bool report_progress)
 		}
 	}
 
+	insert_state_variables();
 	if (report_progress)
 		done_progress();
 }
@@ -315,6 +316,58 @@ void encoder::insert_state_variables() {
 	// 1. Clean up any bugs
 	// 2. Prepare demo
 	// 3. Document as needed
+	
+	//create variable named foo and add it to the variable set
+	ucs::variable v;
+	ucs::instance inst;
+	inst.name = "foo";
+	vector<ucs::instance> name;
+	name.push_back(inst);
+	v.name = name;
+	v.region = 1;
+	//define adds a new variable to the variable set
+	v_set->define(v);
+
+
+	//print out names of variables in the set
+	// int j =0;
+	// for (auto i : v_set->nodes) {
+	// 	cout << i.to_string() << " " << j << " region: " << i.region << endl;
+	// 	j++;
+	// }
+
+	//print out reset encoding
+	for (auto i : base->reset) {
+		cout << i.to_string(*v_set) << endl;
+	}
+
+	//add reset behavior for that variable
+	vector<hse::token> new_token;
+	// the uid of 13 is hard-coded, based on insertion order of the new variable
+	boolean::cube new_cube(13, 0); //uid=13, val=0 (down)
+	hse::state new_state(new_token, new_cube);
+	//this merge method returns a new state rather than combining with the state encoding prop
+	//should probably write a new merge, as we are only adding one variable at a time
+	hse::state newer_state = base->reset[0].merge(new_state, base->reset[0]);
+	base->reset[0] = newer_state;
+	cout << "new reset" << endl;
+	for (auto i : base->reset) {
+		cout << i.to_string(*v_set) << endl;
+	}
+
+	//add transitions for our new variable "foo"
+	boolean::cover guard(13, 1);
+	boolean::cover local_action(1, 0);
+	boolean::cover remote_action(1, 0);
+	hse::transition new_transition;
+	new_transition.guard = guard;
+	new_transition.local_action = local_action;
+	new_transition.remote_action = remote_action;
+
+	petri::iterator it(1, 1);
+	//insert transition from foo to L.r'1 (uid 1)
+	base->insert_before(it, new_transition);
+
 }
 
 }

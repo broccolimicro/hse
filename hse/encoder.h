@@ -97,6 +97,7 @@ struct encoder
 	~encoder();
 
 	graph *base;
+	ucs::variable_set *v_set;
 
 	// conflict_regions is like conflict::region and suspect_regions is list
 	// suspect::first and suspect::second except that it includes all of the
