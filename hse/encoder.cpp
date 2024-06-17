@@ -326,34 +326,14 @@ void encoder::insert_state_variables() {
 	v.name = name;
 	v.region = 1;
 	//define adds a new variable to the variable set
-	v_set->define(v);
-
-
-	//print out names of variables in the set
-	// int j =0;
-	// for (auto i : v_set->nodes) {
-	// 	cout << i.to_string() << " " << j << " region: " << i.region << endl;
-	// 	j++;
-	// }
+	int new_uid = v_set->define(v);
 
 	//print out reset encoding
-	for (auto i : base->reset) {
-		cout << i.to_string(*v_set) << endl;
-	}
-
+	cout << base->reset[0].to_string(*v_set) << endl;
 	//add reset behavior for that variable
-	vector<hse::token> new_token;
-	// the uid of 13 is hard-coded, based on insertion order of the new variable
-	boolean::cube new_cube(13, 0); //uid=13, val=0 (down)
-	hse::state new_state(new_token, new_cube);
-	//this merge method returns a new state rather than combining with the state encoding prop
-	//should probably write a new merge, as we are only adding one variable at a time
-	hse::state newer_state = base->reset[0].merge(new_state, base->reset[0]);
-	base->reset[0] = newer_state;
+	base->reset[0].encodings.set(new_uid, 0); // set our new var's reset behavior to down
 	cout << "new reset" << endl;
-	for (auto i : base->reset) {
-		cout << i.to_string(*v_set) << endl;
-	}
+	cout << base->reset[0].to_string(*v_set) << endl;
 
 	//add transitions for our new variable "foo"
 	boolean::cover guard(13, 1);
@@ -362,7 +342,7 @@ void encoder::insert_state_variables() {
 	hse::transition new_transition;
 	new_transition.guard = guard;
 	new_transition.local_action = local_action;
-	new_transition.remote_action = remote_action;
+	new_transition.remote_action = new_transition.local_action.remote(v_set->get_groups());
 
 	petri::iterator it(1, 1);
 	//insert transition from foo to L.r'1 (uid 1)
