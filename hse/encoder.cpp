@@ -74,22 +74,19 @@ hse::path encoder::find_path(int start, int end)
 	path.from.push_back(a);
 	path.to.push_back(b);
 
-	int curr_place = start;
+	path.hops[start] += 1;
 	while(true) {
-		path.hops[curr_place] += 1;
-
 		vector<enabled_transition> result;
 		vector<int> disabled;
 		result.reserve(tokens.size()*2);
 		disabled.reserve(base->transitions.size());
-		for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
-		{
+		//TODO if end is unreachable (i.e. token reaches start without touching end) need to throw path out
+		for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
 			// Check to see if we haven't already determined that this transition can't be enabled
 			vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
 			bool d_invalid = (d == disabled.end() || *d != a->to.index);
 
-			if (d_invalid)
-			{
+			if (d_invalid) {
 				// Find the index of this transition (if any) in the result pool
 				typename vector<enabled_transition>::iterator e = lower_bound(result.begin(), result.end(), enabled_transition(a->to.index));
 				bool e_invalid = (e == result.end() || e->index != a->to.index);
@@ -113,8 +110,7 @@ hse::path encoder::find_path(int start, int end)
 				// If we didn't find a token at the input place, then we know that this transition can't
 				// be enabled. So lets remove this from the list of possibly enabled transitions and
 				// remember as much in the disabled list.
-				if (!found)
-				{
+				if (!found) {
 					disabled.insert(d, a->to.index);
 					if (!e_invalid)
 						result.erase(e);
@@ -123,33 +119,31 @@ hse::path encoder::find_path(int start, int end)
 		}
 
 		bool found_path = false;
-		for (auto i : result) {
-			if (i.index == end) {
-				path.hops[base->places.size() + i.index] += 1;
+		//TODO the behavior below likely does not work if there are multiple ready transistions from a token
+		for (enabled_transition t : result) {
+			// disable any transitions that were dependent on at least one of the same local tokens
+			// This is only necessary to check for unstable transitions in the enabled() function
+			for (int i = (int)result.size()-1; i >= 0; i--)
+				if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
+					result.erase(result.begin() + i);
+
+			path.hops[base->places.size() + t.index] += 1;
+			if (t.index == end) {
 				found_path = true;
 				break;
 			}
+			// Update the tokens
+			for (int i = t.tokens.size()-1; i >= 0; i--)
+				tokens.erase(tokens.begin() + t.tokens[i]);
+
+			vector<int> n = base->next(transition::type, t.index);
+			for (int i = 0; i < (int)n.size(); i++) {
+				path.hops[n[i]] += 1;
+				tokens.push_back(token(n[i]));
+			}
+
 		}
 		if (found_path) break;
-
-		//TODO the behavior below likely does not work if there are multiple ready transistions from a token
-		enabled_transition t = result[0];
-		path.hops[base->places.size() + t.index] += 1;
-		// disable any transitions that were dependent on at least one of the same local tokens
-		// This is only necessary to check for unstable transitions in the enabled() function
-		for (int i = (int)result.size()-1; i >= 0; i--)
-			if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
-				result.erase(result.begin() + i);
-
-		// Update the tokens
-		for (int i = t.tokens.size()-1; i >= 0; i--)
-			tokens.erase(tokens.begin() + t.tokens[i]);
-
-		vector<int> n = base->next(transition::type, t.index);
-		for (int i = 0; i < (int)n.size(); i++)
-			tokens.push_back(token(n[i]));
-
-		curr_place = tokens[0].index;
 	}
 
 	return path;
@@ -379,22 +373,10 @@ void encoder::find_all_paths() {
 		}
 		break;
 	}
-	hse::path new_path = find_path(1, 0);
+	hse::path new_path = find_path(4, 2);
 
 	cout << "hops: " << endl;
-
-	int place_idx = base->places.size();
-	int j = 0;
-	int k = 0;
-	for (auto i : new_path.hops) {
-		if (j < place_idx) {
-			cout << "P" << j << " " << i << endl;
-			j++;
-		} else {
-			cout << "T" << k << " " << i << endl;
-			k++;
-		}
-	}
+	cout << new_path.to_string() << endl;
 
 
 }

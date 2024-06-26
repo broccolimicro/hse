@@ -60,6 +60,8 @@ struct path
 	path &operator/=(int n);
 
 	int &operator[](petri::iterator i);
+
+	string to_string();
 };
 
 // A path set helps to manage multiple paths from one place or region to

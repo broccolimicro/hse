@@ -22,6 +22,18 @@ path::~path()
 
 }
 
+string path::to_string()
+{
+	string result;
+	for (int i = 0; i < num_places; ++i) {
+		result += "P" + std::to_string(i) + ": " + std::to_string(hops[i]) + " ";
+	}
+	for (int j = 0; j < num_transitions; ++j) {
+		result += "T" + std::to_string(j) + " " + std::to_string(hops[num_places+j]) + " ";
+	}
+	return result;
+}
+
 int path::idx(petri::iterator i)
 {
 	return (i.type == petri::place::type) * num_transitions + i.index;
