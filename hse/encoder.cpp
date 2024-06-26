@@ -81,6 +81,7 @@ hse::path encoder::find_path(int start, int end)
 		result.reserve(tokens.size()*2);
 		disabled.reserve(base->transitions.size());
 		//TODO if end is unreachable (i.e. token reaches start without touching end) need to throw path out
+		//TODO if path touches start before terminating (touching end), discard path
 		for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
 			// Check to see if we haven't already determined that this transition can't be enabled
 			vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
@@ -127,7 +128,8 @@ hse::path encoder::find_path(int start, int end)
 				if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
 					result.erase(result.begin() + i);
 
-			path.hops[base->places.size() + t.index] += 1;
+			//update path with traveled transition
+			path.hops[base->places.size() + t.index] += 1; 
 			if (t.index == end) {
 				found_path = true;
 				break;
@@ -136,6 +138,7 @@ hse::path encoder::find_path(int start, int end)
 			for (int i = t.tokens.size()-1; i >= 0; i--)
 				tokens.erase(tokens.begin() + t.tokens[i]);
 
+			//update path with new tokens
 			vector<int> n = base->next(transition::type, t.index);
 			for (int i = 0; i < (int)n.size(); i++) {
 				path.hops[n[i]] += 1;
@@ -345,40 +348,26 @@ void encoder::find_all_paths() {
 	//for a given conflict...
 	//if a variable has multiple transitions, actually yeah you already know this
 
-	cout << "conflicts" << endl;
-	vector<int> conflict_idx;
-	for (auto i : conflicts) {
-		conflict_idx.push_back(i.index.index);
-		cout << i.index.index << endl;
-		cout << i.encoding << endl;
-		for (auto j : i.region) {
-			cout << j.index << endl;
-		}
+	hse::path_set conflict_paths(base->places.size(), base->transitions.size());
 
+	cout << "conflicts" << endl;
+	for (auto conflict : conflicts) {
+		for (auto place : conflict.region) {
+			conflict_paths.push(find_path(place.index, conflict.index.index));
+		}
 	}
 
 	cout << "reset tokens" << endl;
 	cout << base->reset[0].to_string(*v_set) << endl;
 
-	vector<hse::token> tokens;
-	for (auto i : conflicts) {
-		for (auto j : i.region) {
-			int start = j.index; //gives place index of this conflict 
-			cout << start << endl;
-			// hse::token start_token(start);
-			
-			// tokens.push_back(start_token);
-
-			break;
-		}
-		break;
-	}
-	hse::path new_path = find_path(4, 2);
-
 	cout << "hops: " << endl;
-	cout << new_path.to_string() << endl;
-
-
+	for (auto i : conflict_paths.paths) {
+		cout << "from type - idx " << i.from[0].type << " " << i.from[0].index << endl;
+		cout << "to type - idx " << i.to[0].type << " " << i.to[0].index << endl;
+		cout << i.to_string() << endl;
+	}
+	cout << "conflicts size: " << conflicts.size() << endl;
+	cout << "paths size: " << conflict_paths.paths.size() << endl;
 }
 
 // TODO State Variable Insertion
