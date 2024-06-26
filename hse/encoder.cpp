@@ -62,6 +62,99 @@ encoder::~encoder()
 
 }
 
+hse::path encoder::find_path(int start, int end)
+{
+	//given starting place and ending transition as int encodings, walk the graph to create a path from place to transition
+	vector<token> tokens;
+	hse::token start_token(start);
+	tokens.push_back(start_token);
+
+	hse::path path(base->places.size(), base->transitions.size());
+	petri::iterator a(0, start), b(1, end);
+	path.from.push_back(a);
+	path.to.push_back(b);
+
+	int curr_place = start;
+	while(true) {
+		path.hops[curr_place] += 1;
+
+		vector<enabled_transition> result;
+		vector<int> disabled;
+		result.reserve(tokens.size()*2);
+		disabled.reserve(base->transitions.size());
+		for (vector<petri::arc>::const_iterator a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++)
+		{
+			// Check to see if we haven't already determined that this transition can't be enabled
+			vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
+			bool d_invalid = (d == disabled.end() || *d != a->to.index);
+
+			if (d_invalid)
+			{
+				// Find the index of this transition (if any) in the result pool
+				typename vector<enabled_transition>::iterator e = lower_bound(result.begin(), result.end(), enabled_transition(a->to.index));
+				bool e_invalid = (e == result.end() || e->index != a->to.index);
+
+				// Check to see if there is any token at the input place of this arc and make sure that
+				// this token has not already been consumed by this particular transition
+				// Also since we only need one token per arc, we can stop once we've found a token
+				bool found = false;
+				for (int j = 0; j < (int)tokens.size() && !found; j++)
+					if (a->from.index == tokens[j].index &&
+						(e_invalid || find(e->tokens.begin(), e->tokens.end(), j) == e->tokens.end()))
+					{
+						// We are safe to add this to the list of possibly enabled transitions
+						found = true;
+						if (e_invalid)
+							e = result.insert(e, enabled_transition(a->to.index));
+
+						e->tokens.push_back(j);
+					}
+
+				// If we didn't find a token at the input place, then we know that this transition can't
+				// be enabled. So lets remove this from the list of possibly enabled transitions and
+				// remember as much in the disabled list.
+				if (!found)
+				{
+					disabled.insert(d, a->to.index);
+					if (!e_invalid)
+						result.erase(e);
+				}
+			}
+		}
+
+		bool found_path = false;
+		for (auto i : result) {
+			if (i.index == end) {
+				path.hops[base->places.size() + i.index] += 1;
+				found_path = true;
+				break;
+			}
+		}
+		if (found_path) break;
+
+		//TODO the behavior below likely does not work if there are multiple ready transistions from a token
+		enabled_transition t = result[0];
+		path.hops[base->places.size() + t.index] += 1;
+		// disable any transitions that were dependent on at least one of the same local tokens
+		// This is only necessary to check for unstable transitions in the enabled() function
+		for (int i = (int)result.size()-1; i >= 0; i--)
+			if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
+				result.erase(result.begin() + i);
+
+		// Update the tokens
+		for (int i = t.tokens.size()-1; i >= 0; i--)
+			tokens.erase(tokens.begin() + t.tokens[i]);
+
+		vector<int> n = base->next(transition::type, t.index);
+		for (int i = 0; i < (int)n.size(); i++)
+			tokens.push_back(token(n[i]));
+
+		curr_place = tokens[0].index;
+	}
+
+	return path;
+}
+
 void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding)
 {
 	// cluster the conflicting places into regions. We want to be able to
@@ -247,6 +340,65 @@ void encoder::check(bool senseless, bool report_progress)
 }
 
 
+void encoder::find_all_paths() {
+
+	//in petri, sim to walk -> look at fire() and enabled() in simulator.h
+	//trace -> path of walking -> list of places and transistions that it takes -> look at path code
+	//parallel two tokens
+	//split -> two paths
+	//parallel can deadlock if start on one branch of a parallel conflict, can just continue
+
+	//for a given conflict...
+	//if a variable has multiple transitions, actually yeah you already know this
+
+	cout << "conflicts" << endl;
+	vector<int> conflict_idx;
+	for (auto i : conflicts) {
+		conflict_idx.push_back(i.index.index);
+		cout << i.index.index << endl;
+		cout << i.encoding << endl;
+		for (auto j : i.region) {
+			cout << j.index << endl;
+		}
+
+	}
+
+	cout << "reset tokens" << endl;
+	cout << base->reset[0].to_string(*v_set) << endl;
+
+	vector<hse::token> tokens;
+	for (auto i : conflicts) {
+		for (auto j : i.region) {
+			int start = j.index; //gives place index of this conflict 
+			cout << start << endl;
+			// hse::token start_token(start);
+			
+			// tokens.push_back(start_token);
+
+			break;
+		}
+		break;
+	}
+	hse::path new_path = find_path(1, 0);
+
+	cout << "hops: " << endl;
+
+	int place_idx = base->places.size();
+	int j = 0;
+	int k = 0;
+	for (auto i : new_path.hops) {
+		if (j < place_idx) {
+			cout << "P" << j << " " << i << endl;
+			j++;
+		} else {
+			cout << "T" << k << " " << i << endl;
+			k++;
+		}
+	}
+
+
+}
+
 // TODO State Variable Insertion
 //
 // Our goal is to disambiguate state encodings to prevent transitions from
@@ -316,37 +468,38 @@ void encoder::insert_state_variables() {
 	// 1. Clean up any bugs
 	// 2. Prepare demo
 	// 3. Document as needed
-	
+
+	find_all_paths();
 	//create variable named foo and add it to the variable set
-	ucs::variable v;
-	ucs::instance inst;
-	inst.name = "foo";
-	vector<ucs::instance> name;
-	name.push_back(inst);
-	v.name = name;
-	v.region = 1;
-	//define adds a new variable to the variable set
-	int new_uid = v_set->define(v);
+	// ucs::variable v;
+	// ucs::instance inst;
+	// inst.name = "foo";
+	// vector<ucs::instance> name;
+	// name.push_back(inst);
+	// v.name = name;
+	// v.region = 1;
+	// //define adds a new variable to the variable set
+	// int new_uid = v_set->define(v);
 
-	//print out reset encoding
-	cout << base->reset[0].to_string(*v_set) << endl;
-	//add reset behavior for that variable
-	base->reset[0].encodings.set(new_uid, 0); // set our new var's reset behavior to down
-	cout << "new reset" << endl;
-	cout << base->reset[0].to_string(*v_set) << endl;
+	// //print out reset encoding
+	// cout << base->reset[0].to_string(*v_set) << endl;
+	// //add reset behavior for that variable
+	// base->reset[0].encodings.set(new_uid, 0); // set our new var's reset behavior to down
+	// cout << "new reset" << endl;
+	// cout << base->reset[0].to_string(*v_set) << endl;
 
-	//add transitions for our new variable "foo"
-	boolean::cover guard(13, 1);
-	boolean::cover local_action(1, 0);
-	boolean::cover remote_action(1, 0);
-	hse::transition new_transition;
-	new_transition.guard = guard;
-	new_transition.local_action = local_action;
-	new_transition.remote_action = new_transition.local_action.remote(v_set->get_groups());
+	// //add transitions for our new variable "foo"
+	// boolean::cover guard(13, 1);
+	// boolean::cover local_action(1, 0);
+	// boolean::cover remote_action(1, 0);
+	// hse::transition new_transition;
+	// new_transition.guard = guard;
+	// new_transition.local_action = local_action;
+	// new_transition.remote_action = new_transition.local_action.remote(v_set->get_groups());
 
-	petri::iterator it(1, 1);
-	//insert transition from foo to L.r'1 (uid 1)
-	base->insert_before(it, new_transition);
+	// petri::iterator it(1, 1);
+	// //insert transition from foo to L.r'1 (uid 1)
+	// base->insert_before(it, new_transition);
 
 }
 

@@ -2,6 +2,7 @@
 
 #include <common/standard.h>
 #include "state.h"
+#include "path.h"
 
 namespace hse
 {
@@ -118,6 +119,8 @@ struct encoder
 	void check(bool senseless = false, bool report_progress = false);
 
 	void insert_state_variables();
+	hse::path find_path(int start, int end);
+	void find_all_paths();
 };
 
 }
