@@ -119,7 +119,7 @@ struct encoder
 	void check(bool senseless = false, bool report_progress = false);
 
 	void insert_state_variables();
-	hse::path find_path(int start, int end);
+	hse::path find_paths(petri::iterator start, petri::iterator end);
 	void find_all_paths();
 };
 

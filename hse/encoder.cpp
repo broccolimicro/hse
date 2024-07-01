@@ -62,21 +62,52 @@ encoder::~encoder()
 
 }
 
-hse::path encoder::find_path(int start, int end)
+hse::path encoder::find_paths(petri::iterator start, petri::iterator end)
 {
-	//given starting place and ending transition as int encodings, walk the graph to create a path from place to transition
 	vector<token> tokens;
-	hse::token start_token(start);
-	tokens.push_back(start_token);
-
 	hse::path path(base->places.size(), base->transitions.size());
-	petri::iterator a(0, start), b(1, end);
-	path.from.push_back(a);
-	path.to.push_back(b);
+	path.from.push_back(start);
+	path.to.push_back(end);
 
-	path.hops[start] += 1;
+	// beginning of path finding differs if start is a transition or place
+	vector<enabled_transition> result;
+	if (start.type == place::type) {
+		tokens.push_back(token(start.index));
+		path.hops[start.index] += 1;
+	} else {
+		// if we are starting at a transition, just start with the transition as enabled
+		result.push_back(enabled_transition(start.index));
+	}
+	
 	while(true) {
-		vector<enabled_transition> result;
+		bool found_path = false;
+		for (enabled_transition t : result) {
+			// disable any transitions that were dependent on at least one of the same local tokens
+			// This is only necessary to check for unstable transitions in the enabled() function
+			for (int i = (int)result.size()-1; i >= 0; i--)
+				if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
+					result.erase(result.begin() + i);
+
+			// update path with traveled transition
+			path.hops[base->places.size() + t.index] += 1; 
+			if (t.index == end.index) {
+				found_path = true;
+				break;
+			}
+			// Update the tokens
+			for (int i = t.tokens.size()-1; i >= 0; i--)
+				tokens.erase(tokens.begin() + t.tokens[i]);
+
+			// update path with new tokens
+			vector<int> n = base->next(transition::type, t.index);
+			for (int i = 0; i < (int)n.size(); i++) {
+				path.hops[n[i]] += 1;
+				tokens.push_back(token(n[i]));
+			}
+
+		}
+		if (found_path) break;
+
 		vector<int> disabled;
 		result.reserve(tokens.size()*2);
 		disabled.reserve(base->transitions.size());
@@ -118,35 +149,6 @@ hse::path encoder::find_path(int start, int end)
 				}
 			}
 		}
-
-		bool found_path = false;
-		//TODO the behavior below likely does not work if there are multiple ready transistions from a token
-		for (enabled_transition t : result) {
-			// disable any transitions that were dependent on at least one of the same local tokens
-			// This is only necessary to check for unstable transitions in the enabled() function
-			for (int i = (int)result.size()-1; i >= 0; i--)
-				if (vector_intersection_size(result[i].tokens, t.tokens) > 0)
-					result.erase(result.begin() + i);
-
-			//update path with traveled transition
-			path.hops[base->places.size() + t.index] += 1; 
-			if (t.index == end) {
-				found_path = true;
-				break;
-			}
-			// Update the tokens
-			for (int i = t.tokens.size()-1; i >= 0; i--)
-				tokens.erase(tokens.begin() + t.tokens[i]);
-
-			//update path with new tokens
-			vector<int> n = base->next(transition::type, t.index);
-			for (int i = 0; i < (int)n.size(); i++) {
-				path.hops[n[i]] += 1;
-				tokens.push_back(token(n[i]));
-			}
-
-		}
-		if (found_path) break;
 	}
 
 	return path;
@@ -345,20 +347,17 @@ void encoder::find_all_paths() {
 	//split -> two paths
 	//parallel can deadlock if start on one branch of a parallel conflict, can just continue
 
-	//for a given conflict...
-	//if a variable has multiple transitions, actually yeah you already know this
-
 	hse::path_set conflict_paths(base->places.size(), base->transitions.size());
 
 	cout << "conflicts" << endl;
 	for (auto conflict : conflicts) {
 		for (auto place : conflict.region) {
-			conflict_paths.push(find_path(place.index, conflict.index.index));
+			conflict_paths.push(find_paths(place, petri::iterator(1, conflict.index.index)));
 		}
 	}
 
-	cout << "reset tokens" << endl;
-	cout << base->reset[0].to_string(*v_set) << endl;
+	// cout << "reset tokens" << endl;
+	// cout << base->reset[0].to_string(*v_set) << endl;
 
 	cout << "hops: " << endl;
 	for (auto i : conflict_paths.paths) {
