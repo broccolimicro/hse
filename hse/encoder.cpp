@@ -8,6 +8,8 @@
 #include "encoder.h"
 #include "graph.h"
 
+#include <petri/path.h>
+
 namespace hse
 {
 
@@ -263,6 +265,21 @@ void encoder::check(bool senseless, bool report_progress)
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
 void encoder::insert_state_variables() {
+
+	vector<pair<petri::path_set, petri::path_set> > traces;
+	for (int i = 0; i < (int)conflicts.size(); i++) {
+		vector<petri::iterator> from = conflicts[i].region;
+		vector<petri::iterator> to;
+		to.push_back(petri::iterator(transition::type, conflicts[i].index.index));
+		traces.push_back(pair<petri::path_set, petri::path_set>(
+			petri::trace(*base, from, to),
+			petri::trace(*base, to, from)
+		));
+
+		cout << i << ": " << traces.back().first << endl;
+		cout << i << ": " << traces.back().second << endl;
+	}
+
 	// The following steps are guidelines and not hard rules. If you think you
 	// found a better way to approach the problem, then feel free to chase that
 	// down. If you need supporting infrastructure anywhere else in the project,

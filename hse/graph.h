@@ -32,7 +32,7 @@ struct place : petri::place
 	~place();
 
 	// inherited from petri::place
-	// vector<parallel_group> parallel_groups;
+	// vector<split_group> groups;
 
 	// This records every state encoding seen by tokens at this place. This and
 	// the effective predicate are used to synthesize production rules from this
@@ -64,7 +64,7 @@ struct transition : petri::transition
 	~transition();
 
 	// inherited from petri::transition
-	// vector<parallel_group> parallel_groups;
+	// vector<split_group> groups;
 
 	// The current state must meet the conditions specified in the guard before
 	// the transition may fire
