@@ -521,7 +521,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 
 		for (int i = 0; i < (int)curr.size() && relevant; i++) {
 			relevant = (j != curr[i] &&
-					!is_parallel(j, curr[i]) &&
+					!is(parallel, j, curr[i]) &&
 					!common_arbiter(curr[i], j));
 		}
 
@@ -542,7 +542,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 
 		for (int i = 0; i < (int)curr.size() && relevant; i++) {
 			relevant = (j != curr[i] &&
-					!is_parallel(j, curr[i]) &&
+					!is(parallel, j, curr[i]) &&
 					!common_arbiter(curr[i], j));
 		}
 

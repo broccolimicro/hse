@@ -135,7 +135,7 @@ simulator::simulator()
 	variables = NULL;
 }
 
-simulator::simulator(const graph *base, const ucs::variable_set *variables, state initial)
+simulator::simulator(graph *base, const ucs::variable_set *variables, state initial)
 {
 	this->base = base;
 	this->variables = variables;

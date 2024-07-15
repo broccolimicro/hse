@@ -75,7 +75,7 @@ struct simulator
 	typedef petri::simulator<hse::place, hse::transition, petri::token, hse::state> super;
 
 	simulator();
-	simulator(const graph *base, const ucs::variable_set *variables, state initial);
+	simulator(graph *base, const ucs::variable_set *variables, state initial);
 	~simulator();
 
 	// This simulator is also used for elaboration, so a lot of the errors we
@@ -107,7 +107,7 @@ struct simulator
 	// Remember these pointers so that we do not have to include them as inputs
 	// to every simulation step. graph is the HSE we are simulating, and
 	// variables keeps a mapping from variable name to index in a minterm.
-	const graph *base;
+	graph *base;
 	const ucs::variable_set *variables;
 
 	// The encoding is a minterm that records our knowledge about the current

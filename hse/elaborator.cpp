@@ -179,7 +179,7 @@ struct simulation
 
 // This converts a given graph to the fully expanded state space through simulation. It systematically
 // simulates all possible transition orderings and determines all of the resulting state information.
-graph to_state_graph(const graph &g, const ucs::variable_set &variables, bool report_progress)
+graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;
 	hashmap<state, petri::iterator, 10000> states;
@@ -364,7 +364,7 @@ struct frame
 	vector<int> indices;
 };
 
-cycle get_cycle(const graph &g, simulator &sim)
+cycle get_cycle(graph &g, simulator &sim)
 {
 	cycle result;
 	vector<int> indices(sim.variables->nodes.size(), 0);
@@ -406,7 +406,7 @@ cycle get_cycle(const graph &g, simulator &sim)
 	return result;
 }
 
-vector<cycle> get_cycles(const graph &g, const ucs::variable_set &variables, bool report_progress)
+vector<cycle> get_cycles(graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	vector<cycle> result;
 	list<frame> frames;
@@ -623,7 +623,7 @@ bool operator==(parc a, parc b)
 
 
 // Converts the HSE into a petri net using index-priority simulation.
-graph to_petri_net(const graph &g, const ucs::variable_set &variables, bool report_progress)
+graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_progress)
 {
 	graph result;
 
