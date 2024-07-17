@@ -259,6 +259,22 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 	return vector_intersection_size(left, right) > 0;
 }
 
+void graph::update_masks() {
+	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++) {
+		places[i.index].mask = 1;
+	}
+
+	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
+	{
+		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
+			if (is_reachable(j, i)) {
+				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
+			}
+		}
+		places[i.index].mask = places[i.index].mask.flip();
+	}
+}
+
 void graph::post_process(const ucs::variable_set &variables, bool proper_nesting, bool aggressive)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
@@ -465,16 +481,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	}
 
 	// Determine the actual starting location of the tokens given the state information
-	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
-	{
-		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
-			if (is_reachable(j, i)) {
-				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
-			}
-		}
-		places[i.index].mask = places[i.index].mask.flip();
-	}
-
+	update_masks();
 	if (reset.size() == 0)
 		reset = source;
 }

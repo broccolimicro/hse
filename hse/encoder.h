@@ -116,7 +116,7 @@ struct encoder
 	void add_suspect(vector<petri::iterator> i, petri::iterator j, int sense);
 	void check(bool senseless = false, bool report_progress = false);
 
-	void insert_state_variables();
+	void insert_state_variables(ucs::variable_set &variables);
 };
 
 }

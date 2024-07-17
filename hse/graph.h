@@ -114,6 +114,8 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	boolean::cover effective_implicant(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
 	bool common_arbiter(petri::iterator a, petri::iterator b) const;
 
+	void update_masks();
+
 	void post_process(const ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
 	void check_variables(const ucs::variable_set &variables);
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);

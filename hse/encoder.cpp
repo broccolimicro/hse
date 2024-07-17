@@ -264,21 +264,127 @@ void encoder::check(bool senseless, bool report_progress)
 // Asynchronous Circuits and Systems. IEEE, 1996.
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
-void encoder::insert_state_variables() {
+void encoder::insert_state_variables(ucs::variable_set &variables) {
+	// Trace all conflicts
 
-	vector<pair<petri::path_set, petri::path_set> > traces;
+	// index 0 indicates that this state variable transition needs to be downgoing
+	// index 1 indicates that this state variable transition needs to be upgoing
+	struct CodingProblem {
+		vector<int> vars;
+		array<petri::path_set, 2> traces;
+	};
+	vector<CodingProblem> problems;
 	for (int i = 0; i < (int)conflicts.size(); i++) {
-		vector<petri::iterator> from = conflicts[i].region;
-		vector<petri::iterator> to;
-		to.push_back(petri::iterator(transition::type, conflicts[i].index.index));
-		traces.push_back(pair<petri::path_set, petri::path_set>(
-			petri::trace(*base, from, to),
-			petri::trace(*base, to, from)
-		));
-
-		cout << i << ": " << traces.back().first << endl;
-		cout << i << ": " << traces.back().second << endl;
+		vector<petri::iterator> from(conflicts[i].region);
+		vector<petri::iterator> to(1, petri::iterator(transition::type, conflicts[i].index.index));
+		
+		if (conflicts[i].sense == conflict::UP) {
+			problems.push_back(CodingProblem{
+				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::DOWN).vars(), {
+				petri::trace(*base, to, from),
+				petri::trace(*base, from, to)
+			}});
+		} else {
+			problems.push_back(CodingProblem{
+				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::UP).vars(), {
+				petri::trace(*base, from, to),
+				petri::trace(*base, to, from)
+			}});
+		}
 	}
+
+	// Cluster those traces
+	for (int i = (int)problems.size()-1; i >= 0; i--) {
+		for (int j = i-1; j >= 0; j--) {
+			if (problems[i].vars == problems[j].vars) {
+				array<petri::path_set, 2> traces = problems[j].traces;
+				if (not traces[0].merge(*base, problems[i].traces[0])) {
+					continue;
+				}
+
+				if (not traces[1].merge(*base, problems[i].traces[1])) {
+					continue;
+				}
+
+				problems[j].traces = traces;
+				problems.erase(problems.begin() + i);
+				break;
+			}
+		}
+	}
+
+	// Insert state variable transitions
+	for (int i = 0; i < (int)problems.size(); i++) {
+		// Create the state variable
+		ucs::variable v;
+		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
+		int vid = variables.define(v);
+
+		array<vector<petri::iterator>, 2> assign;
+
+		// Figure out where to put the state variable transitions
+		for (int j = 0; j < 2; j++) {		
+			while (not problems[i].traces[j].total.is_empty()) {
+				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
+				// TODO(edward.bingham) I should pick the one that triggers the fewest state suspects
+				assign[j].push_back(pos[0]);
+				problems[i].traces[j] = problems[i].traces[j].avoidance(pos[0]);
+			}
+		}
+
+		// Figure out the reset states
+		petri::path_set v0 = petri::trace(*base, assign[0], assign[1]);
+		petri::path_set v1 = petri::trace(*base, assign[1], assign[0]);
+		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
+			int reset = 2;
+			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
+				petri::iterator pos(place::type, t->index);
+				if (v0.total[pos] > 0) {
+					if (reset == 0 or reset == 2) {
+						reset = 0;
+					} else {
+						reset = -1;
+					}
+				} else if (v1.total[pos] > 0) {
+					if (reset == 1 or reset == 2) {
+						reset = 1;
+					} else {
+						reset = -1;
+					}
+				}
+
+				if (reset < 0) {
+					break;
+				}
+			}
+			s->encodings.set(vid, reset);
+		}
+
+		// Insert the transitions into the graph
+		for (int j = 0; j < 2; j++) {
+			for (auto k = assign[j].begin(); k != assign[j].end(); k++) {
+				petri::iterator pos;
+				if (k->type == place::type) {
+					pos = base->insert_before(*k, transition());
+				} else {
+					base->insert_after(*k, transition(
+						1, base->transitions[k->index].local_action,
+						base->transitions[k->index].remote_action));
+					pos = *k;
+				}
+				base->transitions[pos.index].local_action = boolean::cover(vid, j);
+				base->transitions[pos.index].remote_action = base->transitions[pos.index].local_action.remote(variables.get_groups());
+			}
+		}
+
+		//cout << to_string(problems[i].vars) << endl;
+		//cout << "v" << i << "-; " << problems[i].traces[0] << endl;
+		//cout << "v" << i << "+; " << problems[i].traces[1] << endl;
+	}
+
+	printf("done insert state variables\n");
+	base->update_masks();
+	base->source = base->reset;
 
 	// The following steps are guidelines and not hard rules. If you think you
 	// found a better way to approach the problem, then feel free to chase that
