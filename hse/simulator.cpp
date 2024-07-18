@@ -362,19 +362,11 @@ int simulator::enabled(bool sorted)
 	ready.clear();
 
 	for (int i = 0; i < (int)loaded.size(); i++) {
-		if (!has_vacuous or (has_vacuous and loaded[i].vacuous)) {
+		//if (!has_vacuous or (has_vacuous and loaded[i].vacuous)) {
 			for (int j = 0; j < (int)base->transitions[loaded[i].index].local_action.cubes.size(); j++) {
 				ready.push_back(pair<int, int>(i, j));
 			}
-		}
-	}
-
-	if (history.size() > 0) {
-		for (int i = 0; i < (int)loaded.size(); i++) {
-			if (loaded[i].stable) {
-				loaded[i].history.push_back(history.back().second);
-			}
-		}
+		//}
 	}
 
 	return ready.size();
@@ -458,6 +450,12 @@ enabled_transition simulator::fire(int index)
 		}
 	}
 
+	// Restrict the state with the guard
+	if (t.stable && !t.vacuous) {
+		global &= t.guard_action;
+		encoding &= t.guard_action;
+	}
+
 	// Check for interfering transitions. Interfering transitions are the active
 	// transitions that have fired since this active transition was enabled.
 	boolean::cube local_action = base->transitions[t.index].local_action[term];
@@ -479,12 +477,6 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Update the state
-	if (t.stable && !t.vacuous)
-	{
-		global &= t.guard_action;
-		encoding &= t.guard_action;
-	}
-
 	global = local_assign(global, remote_action, t.stable);
 	encoding = remote_assign(local_assign(encoding, local_action, t.stable), global, true);
 
@@ -492,15 +484,11 @@ enabled_transition simulator::fire(int index)
 	// have any effect on the global state. So we remove history items where all of the terms
 	// in their assignments are conflicting with terms in more recent assignments.
 	boolean::cube actions = base->transitions[t.index].local_action.cubes[term].mask();
-	for (list<pair<boolean::cube, term_index> >::reverse_iterator i = history.rbegin(); i != history.rend();)
-	{
-		if (base->transitions[i->second.index].local_action.cubes[i->second.term].mask(actions).is_tautology())
-		{
+	for (list<pair<boolean::cube, term_index> >::reverse_iterator i = history.rbegin(); i != history.rend();) {
+		if (base->transitions[i->second.index].local_action.cubes[i->second.term].mask(actions).is_tautology()) {
 			i++;
 			i = list<pair<boolean::cube, term_index> >::reverse_iterator(history.erase(i.base()));
-		}
-		else
-		{
+		} else {
 			actions = actions.combine_mask(base->transitions[i->second.index].local_action.cubes[i->second.term].mask());
 			i++;
 		}
@@ -508,6 +496,10 @@ enabled_transition simulator::fire(int index)
 
 	// Add the latest firing to the history.
 	history.push_back(pair<boolean::cube, term_index>(t.guard_action, term_index(t.index, term)));
+	
+	for (int i = 0; i < (int)loaded.size(); i++) {
+		loaded[i].history.push_back(term_index(t.index, term));
+	}
 
 	return t;
 }

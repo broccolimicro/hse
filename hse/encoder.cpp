@@ -9,6 +9,7 @@
 #include "graph.h"
 
 #include <petri/path.h>
+#include <interpret_boolean/export.h>
 
 namespace hse
 {
@@ -56,7 +57,6 @@ encoder::encoder()
 encoder::encoder(graph *base)
 {
 	this->base = base;
-	check();
 }
 
 encoder::~encoder()
@@ -144,7 +144,7 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 	}
 }
 
-void encoder::check(bool senseless, bool report_progress)
+void encoder::check(ucs::variable_set &variables, bool senseless, bool report_progress)
 {
 	if (base == NULL)
 		return;
@@ -212,6 +212,12 @@ void encoder::check(bool senseless, bool report_progress)
 
 					// Check if they share a common state encoding given the above checks
 					encoding &= not_action;
+
+					if (t0.index == 0) {
+						cout << "here " << *i << endl;
+						cout << export_expression(term_implicant, variables).to_string() << endl;
+						cout << export_expression(encoding, variables).to_string() << endl;
+					}
 					if (!are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
@@ -293,6 +299,13 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
+	cout << "Before Clustering" << endl;
+	for (int i = 0; i < (int)problems.size(); i++) {
+		cout << to_string(problems[i].vars) << endl;
+		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+	}
+
 	// Cluster those traces
 	for (int i = (int)problems.size()-1; i >= 0; i--) {
 		for (int j = i-1; j >= 0; j--) {
@@ -313,12 +326,12 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
+	cout << "After Clustering" << endl;
 	// Insert state variable transitions
 	for (int i = 0; i < (int)problems.size(); i++) {
-		// Create the state variable
-		ucs::variable v;
-		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
-		int vid = variables.define(v);
+		cout << to_string(problems[i].vars) << endl;
+		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 
 		array<vector<petri::iterator>, 2> assign;
 
@@ -331,6 +344,14 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				problems[i].traces[j] = problems[i].traces[j].avoidance(pos[0]);
 			}
 		}
+		
+		cout << "inserting v" << i << "+ at " << to_string(assign[1]) << endl;
+		cout << "inserting v" << i << "- at " << to_string(assign[0]) << endl;
+
+		// Create the state variable
+		ucs::variable v;
+		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
+		int vid = variables.define(v);
 
 		// Figure out the reset states
 		petri::path_set v0 = petri::trace(*base, assign[0], assign[1]);
@@ -376,10 +397,6 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				base->transitions[pos.index].remote_action = base->transitions[pos.index].local_action.remote(variables.get_groups());
 			}
 		}
-
-		//cout << to_string(problems[i].vars) << endl;
-		//cout << "v" << i << "-; " << problems[i].traces[0] << endl;
-		//cout << "v" << i << "+; " << problems[i].traces[1] << endl;
 	}
 
 	printf("done insert state variables\n");

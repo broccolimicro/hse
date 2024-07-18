@@ -217,19 +217,19 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 {
 	vector<petri::iterator> left, right;
 	if (a.type == petri::place::type) {
-		if (places[a.index].arbiter) {
+		/*if (places[a.index].arbiter) {
 			left.push_back(a);
-		} else {
+		} else {*/
 			return false;
-		}
+		//}
 	}
  
 	if (b.type == petri::place::type) {
-		if (places[b.index].arbiter) {
+		/*if (places[b.index].arbiter) {
 			right.push_back(b);
-		} else {
+		} else {*/
 			return false;
-		}
+		//}
 	}
 
 	if (a.type == petri::transition::type) {
