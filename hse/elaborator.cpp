@@ -122,22 +122,24 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			for (int j = 0; j < (int)sim.loaded[i].tokens.size(); j++)
 				en_out[sim.loaded[i].tokens[j]].insert(sim.loaded[i].index);
 
-		for (int i = 0; i < (int)sim.tokens.size(); i++)
-		{
-			boolean::cover dis = 1;
-			// Not guard because then we'd be in the hidden place in the transition
-			// and not action because then we would have passed this transtion entirely
-			// whether or not the current encoding passes the guard
-			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
-				dis &= ~g.transitions[*j].guard;
+		if (sim.ready.empty() or not sim.loaded[sim.ready[0].first].vacuous) {
+			for (int i = 0; i < (int)sim.tokens.size(); i++)
+			{
+				boolean::cover dis = 1;
+				// Not guard because then we'd be in the hidden place in the transition
+				// and not action because then we would have passed this transtion entirely
+				// whether or not the current encoding passes the guard
+				for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
+					dis &= ~g.transitions[*j].guard;
 
-			// Given the current encoding - sim.encoding
-			// 1. Ignore unstable signals - xoutnulls()
-			// 2. Mask out variables that this process has no visibility for - flipped_mask()
-			// 3. OR this into the predicate for that place
-			g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
-			// Same thing as above, but we exclude any state encoding that passes an outgoing guard - & dis
-			g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
+				// Given the current encoding - sim.encoding
+				// 1. Ignore unstable signals - xoutnulls()
+				// 2. Mask out variables that this process has no visibility for - flipped_mask()
+				// 3. OR this into the predicate for that place
+				g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
+				// Same thing as above, but we exclude any state encoding that passes an outgoing guard - & dis
+				g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
+			}
 		}
 
 		count++;

@@ -362,11 +362,11 @@ int simulator::enabled(bool sorted)
 	ready.clear();
 
 	for (int i = 0; i < (int)loaded.size(); i++) {
-		//if (!has_vacuous or (has_vacuous and loaded[i].vacuous)) {
+		if (!has_vacuous or (has_vacuous and loaded[i].vacuous)) {
 			for (int j = 0; j < (int)base->transitions[loaded[i].index].local_action.cubes.size(); j++) {
 				ready.push_back(pair<int, int>(i, j));
 			}
-		//}
+		}
 	}
 
 	return ready.size();
@@ -428,7 +428,7 @@ enabled_transition simulator::fire(int index)
 	ready.clear();
 
 	// Check to see if this transition is unstable
-	if (!t.stable)
+	if (!t.stable and !t.vacuous)
 	{
 		instability err = instability(t);
 		vector<instability>::iterator loc = lower_bound(instability_errors.begin(), instability_errors.end(), err);
@@ -451,7 +451,7 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Restrict the state with the guard
-	if (t.stable && !t.vacuous) {
+	if (t.stable and !t.vacuous) {
 		global &= t.guard_action;
 		encoding &= t.guard_action;
 	}

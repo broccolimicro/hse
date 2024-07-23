@@ -146,6 +146,26 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 
 void encoder::check(ucs::variable_set &variables, bool senseless, bool report_progress)
 {
+	cout << "Computing Parallel Groups" << endl;
+	base->compute_split_groups(parallel);
+	cout << "Parallel Groups" << endl;
+	for (int i = 0; i < (int)base->places.size(); i++) {
+		cout << "p" << i << " {" << endl;
+		for (int j = 0; j < (int)base->places[i].groups[parallel].size(); j++) {
+			cout << "\t" << base->places[i].groups[parallel][j].to_string() << endl;
+		}
+		cout << "}" << endl;
+	}
+
+	for (int i = 0; i < (int)base->transitions.size(); i++) {
+		cout << "t" << i << " {" << endl;
+		for (int j = 0; j < (int)base->transitions[i].groups[parallel].size(); j++) {
+			cout << "\t" << base->transitions[i].groups[parallel][j].to_string() << endl;
+		}
+		cout << "}" << endl;
+	}
+
+
 	if (base == NULL)
 		return;
 
@@ -213,11 +233,9 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 					// Check if they share a common state encoding given the above checks
 					encoding &= not_action;
 
-					if (t0.index == 0) {
-						cout << "here " << *i << endl;
-						cout << export_expression(term_implicant, variables).to_string() << endl;
-						cout << export_expression(encoding, variables).to_string() << endl;
-					}
+					//cout << "here " << t0 << " -> " << *i << endl;
+					//cout << export_expression(term_implicant, variables).to_string() << endl;
+					//cout << export_expression(encoding, variables).to_string() << endl;
 					if (!are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
@@ -276,7 +294,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// index 0 indicates that this state variable transition needs to be downgoing
 	// index 1 indicates that this state variable transition needs to be upgoing
 	struct CodingProblem {
-		vector<int> vars;
+		boolean::cube term;
 		array<petri::path_set, 2> traces;
 	};
 	vector<CodingProblem> problems;
@@ -286,22 +304,39 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		
 		if (conflicts[i].sense == conflict::UP) {
 			problems.push_back(CodingProblem{
-				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::DOWN).vars(), {
+				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::DOWN), {
 				petri::trace(*base, to, from),
 				petri::trace(*base, from, to)
 			}});
 		} else {
 			problems.push_back(CodingProblem{
-				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::UP).vars(), {
+				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::UP), {
 				petri::trace(*base, from, to),
 				petri::trace(*base, to, from)
 			}});
 		}
+
+		// Remove vacuous traces
+		for (auto j = problems.back().traces[1-conflicts[i].sense].paths.begin(); j != problems.back().traces[1-conflicts[i].sense].paths.end(); ) {
+			bool found = false;
+			for (auto t = base->begin(transition::type); t != base->end(transition::type); t++) {
+				if ((*j)[t] > 0 and are_mutex(base->transitions[t.index].local_action, problems.back().term)) {
+					found = true;
+					break;
+				}
+			}
+			if (not found) {
+				j = problems.back().traces[1-conflicts[i].sense].paths.erase(j);
+			} else {
+				j++;
+			}
+		}
+		problems.back().traces[conflicts[i].sense].repair();
 	}
 
 	cout << "Before Clustering" << endl;
 	for (int i = 0; i < (int)problems.size(); i++) {
-		cout << to_string(problems[i].vars) << endl;
+		cout << to_string(problems[i].term.vars()) << endl;
 		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
 		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 	}
@@ -309,7 +344,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// Cluster those traces
 	for (int i = (int)problems.size()-1; i >= 0; i--) {
 		for (int j = i-1; j >= 0; j--) {
-			if (problems[i].vars == problems[j].vars) {
+			if (problems[i].term.vars() == problems[j].term.vars()) {
 				array<petri::path_set, 2> traces = problems[j].traces;
 				if (not traces[0].merge(*base, problems[i].traces[0])) {
 					continue;
@@ -329,7 +364,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	cout << "After Clustering" << endl;
 	// Insert state variable transitions
 	for (int i = 0; i < (int)problems.size(); i++) {
-		cout << to_string(problems[i].vars) << endl;
+		cout << to_string(problems[i].term.vars()) << endl;
 		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
 		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 
@@ -340,8 +375,23 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			while (not problems[i].traces[j].total.is_empty()) {
 				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
 				// TODO(edward.bingham) I should pick the one that triggers the fewest state suspects
-				assign[j].push_back(pos[0]);
-				problems[i].traces[j] = problems[i].traces[j].avoidance(pos[0]);
+				petri::iterator best;
+				int count = -1;
+				for (auto k = pos.begin(); k != pos.end(); k++) {
+					int cost = 0;
+					for (int l = 0; l < (int)suspects.size(); l++) {
+						if (suspects[l].sense == j and find(suspects[l].first.begin(), suspects[l].first.end(), *k) != suspects[l].first.end()) {
+							cost++;
+						}
+					}
+					if (count < 0 or cost < count) {
+						best = *k;
+						count = cost;
+					}
+				}
+
+				assign[j].push_back(best);
+				problems[i].traces[j] = problems[i].traces[j].avoidance(best);
 			}
 		}
 		
@@ -356,6 +406,9 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// Figure out the reset states
 		petri::path_set v0 = petri::trace(*base, assign[0], assign[1]);
 		petri::path_set v1 = petri::trace(*base, assign[1], assign[0]);
+		cout << "Looking for Reset for v" << i << endl;
+		cout << "v" << i << "-; v" << i << "+ " << v0 << endl;
+		cout << "v" << i << "+; v" << i << "- " << v1 << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
@@ -377,6 +430,9 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				if (reset < 0) {
 					break;
 				}
+			}
+			if (reset < 0) {
+				reset = 2;
 			}
 			s->encodings.set(vid, reset);
 		}
