@@ -146,9 +146,9 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 
 void encoder::check(ucs::variable_set &variables, bool senseless, bool report_progress)
 {
-	cout << "Computing Parallel Groups" << endl;
+	//cout << "Computing Parallel Groups" << endl;
 	base->compute_split_groups(parallel);
-	cout << "Parallel Groups" << endl;
+	/*cout << "Parallel Groups" << endl;
 	for (int i = 0; i < (int)base->places.size(); i++) {
 		cout << "p" << i << " {" << endl;
 		for (int j = 0; j < (int)base->places[i].groups[parallel].size(); j++) {
@@ -163,7 +163,7 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 			cout << "\t" << base->transitions[i].groups[parallel][j].to_string() << endl;
 		}
 		cout << "}" << endl;
-	}
+	}*/
 
 
 	if (base == NULL)
@@ -334,12 +334,12 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		problems.back().traces[conflicts[i].sense].repair();
 	}
 
-	cout << "Before Clustering" << endl;
+	/*cout << "Before Clustering" << endl;
 	for (int i = 0; i < (int)problems.size(); i++) {
 		cout << to_string(problems[i].term.vars()) << endl;
 		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
 		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
-	}
+	}*/
 
 	// Cluster those traces
 	for (int i = (int)problems.size()-1; i >= 0; i--) {
@@ -361,12 +361,21 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
-	cout << "After Clustering" << endl;
-	// Insert state variable transitions
+	// assign[location of state variable insertion][direction of assignment] = {variable uids}
+	map<petri::iterator, array<vector<int>, 2> > groups;
+
+	//cout << "After Clustering" << endl;
+	// Figure out where to insert state variable transitions, create state
+	// variables, and determine their reset state.
 	for (int i = 0; i < (int)problems.size(); i++) {
-		cout << to_string(problems[i].term.vars()) << endl;
-		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
-		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+		//cout << to_string(problems[i].term.vars()) << endl;
+		//cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+		//cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+
+		// Create the state variable
+		ucs::variable v;
+		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
+		int vid = variables.define(v);
 
 		array<vector<petri::iterator>, 2> assign;
 
@@ -374,7 +383,9 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		for (int j = 0; j < 2; j++) {		
 			while (not problems[i].traces[j].total.is_empty()) {
 				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
-				// TODO(edward.bingham) I should pick the one that triggers the fewest state suspects
+				// TODO(edward.bingham) I should check state suspects against previous
+				// insertions. I should insert the assignments that are more certain
+				// first.
 				petri::iterator best;
 				int count = -1;
 				for (auto k = pos.begin(); k != pos.end(); k++) {
@@ -390,25 +401,22 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 					}
 				}
 
+				auto iter = groups.insert(pair<petri::iterator, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
+				iter.first->second[j].push_back(vid);
 				assign[j].push_back(best);
 				problems[i].traces[j] = problems[i].traces[j].avoidance(best);
 			}
 		}
 		
-		cout << "inserting v" << i << "+ at " << to_string(assign[1]) << endl;
-		cout << "inserting v" << i << "- at " << to_string(assign[0]) << endl;
-
-		// Create the state variable
-		ucs::variable v;
-		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
-		int vid = variables.define(v);
+		//cout << "inserting v" << i << "+ at " << to_string(assign[1]) << endl;
+		//cout << "inserting v" << i << "- at " << to_string(assign[0]) << endl;
 
 		// Figure out the reset states
 		petri::path_set v0 = petri::trace(*base, assign[0], assign[1]);
 		petri::path_set v1 = petri::trace(*base, assign[1], assign[0]);
-		cout << "Looking for Reset for v" << i << endl;
-		cout << "v" << i << "-; v" << i << "+ " << v0 << endl;
-		cout << "v" << i << "+; v" << i << "- " << v1 << endl;
+		//cout << "Looking for Reset for v" << i << endl;
+		//cout << "v" << i << "-; v" << i << "+ " << v0 << endl;
+		//cout << "v" << i << "+; v" << i << "- " << v1 << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
@@ -436,81 +444,101 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			}
 			s->encodings.set(vid, reset);
 		}
+	}
 
-		// Insert the transitions into the graph
-		for (int j = 0; j < 2; j++) {
-			for (auto k = assign[j].begin(); k != assign[j].end(); k++) {
-				petri::iterator pos;
-				if (k->type == place::type) {
-					pos = base->insert_before(*k, transition());
+	// This will group state variable transitions by their insertion location.
+	// When multiple state variables are inserted at the same location, we have
+	// to be careful about the composition of those transitions. Given a
+	// downgoing output transition a&~b->x-, we need to insert state variables
+	// like so: [a]; (v0-,v1-); [~b]; (v2+,v3+); x-. For upgoing a&~b->x+, its
+	// inverted: [~b]; (v2+,v3+); [a]; (v0-,v1-); x+. If the guard has multiple
+	// terms with different senses, then this becomes problematic. For example,
+	// a&~b|~a&b->x-.
+
+	// TODO(edward.bingham) handle conflicting multiterm guards.
+
+	// Insert the transitions into the graph
+	for (auto group = groups.begin(); group != groups.end(); group++) {
+		// Figure out the output sense of all of the transitions.
+		vector<petri::iterator> n;
+		if (group->first.type == place::type) {
+			n = base->next(group->first);
+		} else {
+			n.push_back(group->first);
+		}
+
+		int sense = 2;
+		for (auto i = n.begin(); i != n.end(); i++) {
+			if (not base->transitions[i->index].local_action.mask(conflict::DOWN).is_tautology()) {
+				if (sense == 2 or sense == conflict::UP) {
+					sense = conflict::UP;
 				} else {
-					base->insert_after(*k, transition(
-						1, base->transitions[k->index].local_action,
-						base->transitions[k->index].remote_action));
-					pos = *k;
+					sense = -1;
 				}
-				base->transitions[pos.index].local_action = boolean::cover(vid, j);
-				base->transitions[pos.index].remote_action = base->transitions[pos.index].local_action.remote(variables.get_groups());
 			}
+			if (not base->transitions[i->index].local_action.mask(conflict::UP).is_tautology()) {
+				if (sense == 2 or sense == conflict::DOWN) {
+					sense = conflict::DOWN;
+				} else {
+					sense = -1;
+				}
+			}
+		}
+
+		// extract the guard from the transition in the graph if we're inserting at
+		// a transition.
+		boolean::cover guard = 1;
+		int guardsense = 2;
+		if (group->first.type == transition::type) {
+			guard = base->transitions[group->first.index].guard;
+			base->transitions[group->first.index].guard = 1;
+		}
+		if (not guard.mask(conflict::DOWN).is_tautology()) {
+			guardsense = conflict::UP;
+		}
+		if (not guard.mask(conflict::UP).is_tautology()) {
+			if (guardsense == 2 or guardsense == conflict::DOWN) {
+				guardsense = conflict::DOWN;
+			} else {
+				guardsense = -1;
+			}
+		}
+
+		// If the output transitions don't agree on a sense, then ordering the
+		// state variable transitions won't help. So we should just put all of the
+		// transitions in parallel with eachother.
+		if (sense != 0 and sense != 1) {
+			sense = 0;
+		}
+
+		// Otherwise, we want to insert the matched sense transitions first, then
+		// insert the unmatched sense transitions. v0+; v1-; x+
+
+		// Insert matched sense transitions
+		for (int x = 0; x < 2; x++) {
+			if (not group->second[1-sense].empty()) {
+				// Handle the first one, then insert the others in parallel to the first one.
+				vector<petri::iterator> pos = base->duplicate(petri::parallel, 
+					base->insert_before(group->first, transition(guardsense != sense ? guard : boolean::cover(1))),
+					group->second[1-sense].size(), false);
+
+				auto i = group->second[1-sense].begin();
+				auto j = pos.begin();
+				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {
+					base->transitions[j->index].local_action = boolean::cover(*i, 1-sense);
+					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(variables.get_groups());
+				}
+			}
+			sense = 1-sense;
 		}
 	}
 
-	printf("done insert state variables\n");
+	//printf("done insert state variables\n");
 	base->update_masks();
 	base->source = base->reset;
 
-	// The following steps are guidelines and not hard rules. If you think you
-	// found a better way to approach the problem, then feel free to chase that
-	// down. If you need supporting infrastructure anywhere else in the project,
-	// feel free to add that in. If you need to modify this function definition,
-	// go for it.
-
-	// 1. Learn some of the underlying infrastructure.
-	//   a. Create a new variable using ucs::variable_set::define() from
-	//      haystack/lib/ucs/ucs/variable.h
-	//   b. Set up the reset behavior for that variable looking at
-	//      graph::reset[].encodings from haystack/lib/hse/hse/graph.h and
-	//      haystack/lib/hse/hse/state.h
-	//   c. Insert a pair of transitions for that variable into the HSE. Look at
-	//      petri::graph::insert_after(), petri::graph::insert_before(), and
-	//      petri::graph::insert_alongside() from haystack/lib/petri/petri/graph.h
-  //
-  // 2. Create a list of paths that need to be cut.
-	// 	 a. Understand encoder::conflict and encoder::suspects, we
-	// 	    need to cut all of the paths between all of the conflicts,
-	// 	    making sure not to create new conflicts as a result of the
-	// 	    suspects.
-	//   b. For a given conflict, identify all other transitions on
-	//      the variable experiencing this state conflict.
-	//   c. walk the graph from conflict::region to conflict::index
-	//      and trace all paths from one to the other that does not
-	//      include another transition on the same variable.
-	//
-	// 3. Try to cut those paths (this will create new conflicts).
-	//   a. Pick a pair of places which cut the majority of paths
-	//   b. Insert your transitions at those two places.
-	//
-	// 4. Iterate	
-	//   a. Create a depth first search algorithm where we insert
-	//      transitions to disambiguate a conflict, then re-evaluate the
-	//      state encodings and conflicts, and repeat for different
-	//      orderings of conflicts to tackle. The algorithm should
-	//      complete when the first solution is found.
-	//
-	// === Successful completion of project ===
-	// 
-	// Your time is yours, what do you want to tackle next?
-	// Some ideas:
-	// 1. Perhaps find a way to update the predicate space and
-	//    conflicts without redoing the whole simulation
-	// 2. Perhaps find better ways to direct and prune the depth first
-	//    search algorithm
-	// 3. Jump on another project
-
-	// Final cleanup:
-	// 1. Clean up any bugs
-	// 2. Prepare demo
-	// 3. Document as needed
+	// TODO(edward.bingham) Update the predicate space and conflicts without
+	// resimulating the whole state space.
 }
 
 }

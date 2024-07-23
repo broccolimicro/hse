@@ -108,8 +108,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 				error("", d.to_string(variables), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
-
-			simulations.back().merge_errors(sim);
 		}
 
 		// The effective predicate represents the state encodings that don't have
