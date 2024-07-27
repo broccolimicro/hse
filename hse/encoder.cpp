@@ -260,7 +260,7 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// If we aren't specifically checking senses or this transition affects the senses we are checking
-				if (!senseless && action.mask(1-sense).is_tautology()) {
+				if (!senseless && not action.has(sense)) {
 					continue;
 				}
 
@@ -490,17 +490,17 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// insert state variables partially before or partially after a parallel
 	// split.
 
-	// assign[location of state variable insertion][direction of assignment] = {variable uids}
-	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
+	// assign[location of state variable insertion, (before, at, or after)][direction of assignment] = {variable uids}
+	map<pair<petri::iterator, int>, array<vector<int>, 2> > groups;
 
 	int uid = -1;
 	//cout << "After Clustering" << endl;
 	// Figure out where to insert state variable transitions, create state
 	// variables, and determine their reset state.
 	for (int i = 0; i < (int)problems.size(); i++) {
-		//cout << to_string(problems[i].term.vars()) << endl;
-		//cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
-		//cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+		cout << to_string(problems[i].term.vars()) << endl;
+		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 
 		// Create the state variable
 		int vid = -1;
@@ -522,7 +522,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				// TODO(edward.bingham) I should check state suspects against previous
 				// insertions. I should insert the assignments that are more certain
 				// first.
-				vector<petri::iterator> best;
+				pair<petri::iterator, int> best;
 				int count = -1;
 				for (auto k = pos.begin(); k != pos.end(); k++) {
 					vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, *k), j);
@@ -531,16 +531,25 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 					for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
 						cost += not problems[i].traces[j].covers(l->second);
 					}
+					if (k->type == transition::type) {
+						cost += base->transitions[k->index].local_action.has(j);
+					} else {
+						vector<petri::iterator> nn = base->next(*k);
+						sort(nn.begin(), nn.end());
+						nn.erase(unique(nn.begin(), nn.end()), nn.end());
+						for (auto l = nn.begin(); l != nn.end(); l++) {
+							cost += base->transitions[l->index].local_action.has(j);
+						}
+					}
+					cout << "(" << *k << ", 0) -> " << cost << endl;
 					if (count < 0 or cost < count) {
-						best = vector<petri::iterator>(1, *k);
+						best = pair<petri::iterator, int>(*k, 0);
 						count = cost;
 					}
 
+					vector<petri::iterator> p = base->prev(*k);
 					if (k->type == transition::type) {
-						vector<petri::iterator> p = base->prev(*k);
-						vector<petri::iterator> n = base->next(*k);
-						
-						if (p.size() > 1) {
+						if (not base->transitions[k->index].guard.is_tautology() and p.size() > 1 and problems[i].traces[j].touches(p)) {
 							sort(p.begin(), p.end());
 							vector<suspect> new_conflicts = find_suspects(p, j);
 							
@@ -548,31 +557,56 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 							for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
 								cost += not problems[i].traces[j].covers(l->second);
 							}
+							vector<petri::iterator> nn = base->next(p);
+							sort(nn.begin(), nn.end());
+							nn.erase(unique(nn.begin(), nn.end()), nn.end());
+							for (auto l = nn.begin(); l != nn.end(); l++) {
+								cost += base->transitions[l->index].local_action.has(j);
+							}
+
+							cout << "(" << *k << ", -1) -> " << cost << endl;
 							if (count < 0 or cost < count) {
-								best = p;
+								best = pair<petri::iterator, int>(*k, -1);
 								count = cost;
 							}
 						}
-						if (n.size() > 1) {
-							sort(n.begin(), n.end());
-							vector<suspect> new_conflicts = find_suspects(n, j);
-							
-							int cost = 0;
-							for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
-								cost += not problems[i].traces[j].covers(l->second);
-							}
-							if (count < 0 or cost < count) {
-								best = n;
-								count = cost;
+					} else {
+						for (auto m = p.begin(); m != p.end(); m++) {
+							vector<petri::iterator> n = base->next(*m);
+							if (n.size() > 1) {
+								sort(n.begin(), n.end());
+								vector<suspect> new_conflicts = find_suspects(n, j);
+								
+								int cost = 0;
+								for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
+									cost += not problems[i].traces[j].covers(l->second);
+								}
+								vector<petri::iterator> nn = base->next(n);
+								sort(nn.begin(), nn.end());
+								nn.erase(unique(nn.begin(), nn.end()), nn.end());
+								for (auto l = nn.begin(); l != nn.end(); l++) {
+									cost += base->transitions[l->index].local_action.has(j);
+								}
+
+								cout << "(" << *m << ", 1) -> " << cost << endl;
+								if (count < 0 or cost < count) {
+									best = pair<petri::iterator, int>(*m, 1);
+									count = cost;
+								}
 							}
 						}
 					}
 				}
 
-				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
+				cout << "Adding (" << best.first << ", " << best.second << ")" << endl;
+				auto iter = groups.insert(pair<pair<petri::iterator, int>, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
-				assign[j].insert(assign[j].end(), best.begin(), best.end());
-				problems[i].traces[j] = problems[i].traces[j].avoidance(best);
+				assign[j].push_back(best.first);
+				if (best.second == 1) {
+					problems[i].traces[j] = problems[i].traces[j].avoidance(base->next(best.first));
+				} else {
+					problems[i].traces[j] = problems[i].traces[j].avoidance(best.first);
+				}
 			}
 		}
 		
@@ -634,26 +668,24 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 		// Figure out the output sense of all of the transitions.
 		vector<petri::iterator> n;
-		if (group->first[0].type == place::type) {
-			n = base->next(group->first);
-			sort(n.begin(), n.end());
-			n.erase(unique(n.begin(), n.end()), n.end());
+		if (group->first.first.type == place::type) {
+			n = base->next(group->first.first);
 		} else {
-			n = group->first;
+			n.push_back(group->first.first);
 		}
 
 		int sense = 2;
 		for (auto i = n.begin(); i != n.end(); i++) {
-			if (not base->transitions[i->index].local_action.mask(conflict::DOWN).is_tautology()) {
-				if (sense == 2 or sense == conflict::UP) {
-					sense = conflict::UP;
+			if (base->transitions[i->index].local_action.has(1)) {
+				if (sense == 2 or sense == 1) {
+					sense = 1;
 				} else {
 					sense = -1;
 				}
 			}
-			if (not base->transitions[i->index].local_action.mask(conflict::UP).is_tautology()) {
-				if (sense == 2 or sense == conflict::DOWN) {
-					sense = conflict::DOWN;
+			if (base->transitions[i->index].local_action.has(0)) {
+				if (sense == 2 or sense == 0) {
+					sense = 0;
 				} else {
 					sense = -1;
 				}
@@ -664,16 +696,16 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// a transition.
 		boolean::cover guard = 1;
 		int guardsense = 2;
-		if (group->first[0].type == transition::type) {
-			guard = base->transitions[group->first[0].index].guard;
-			base->transitions[group->first[0].index].guard = 1;
+		if (group->first.first.type == transition::type and group->first.second == 0) {
+			guard = base->transitions[group->first.first.index].guard;
+			base->transitions[group->first.first.index].guard = 1;
 		}
-		if (not guard.mask(conflict::DOWN).is_tautology()) {
-			guardsense = conflict::UP;
+		if (guard.has(1)) {
+			guardsense = 1;
 		}
-		if (not guard.mask(conflict::UP).is_tautology()) {
-			if (guardsense == 2 or guardsense == conflict::DOWN) {
-				guardsense = conflict::DOWN;
+		if (guard.has(0)) {
+			if (guardsense == 2 or guardsense == 0) {
+				guardsense = 0;
 			} else {
 				guardsense = -1;
 			}
@@ -694,13 +726,13 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			if (not group->second[1-sense].empty()) {
 				// Handle the first one, then insert the others in parallel to the first one.
 				vector<petri::iterator> pos;
-				if (group->first[0].type == transition::type) {
+				if (group->first.second < 1) {
 					pos = base->duplicate(petri::parallel, 
-						base->insert_before(group->first[0], transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
+						base->insert_before(group->first.first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
 						group->second[1-sense].size(), false);
 				} else {
 					pos = base->duplicate(petri::parallel, 
-						base->insert_at(group->first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
+						base->insert_after(group->first.first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
 						group->second[1-sense].size(), false);
 				}
 				auto i = group->second[1-sense].begin();
