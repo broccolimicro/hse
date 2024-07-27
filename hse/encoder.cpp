@@ -111,6 +111,8 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 	}
 }
 
+
+
 void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sense)
 {
 	// cluster the suspected places into regions. We want to be able to
@@ -151,6 +153,42 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 		suspects.push_back(suspect(sense, i, vector<petri::iterator>(1, j)));
 		suspect_regions.push_back(neighbors);
 	}
+}
+
+vector<suspect> encoder::find_suspects(vector<petri::iterator> pos, int sense) {
+	vector<suspect> result;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		vector<bool> found(result.size(), false);
+		for (auto j = suspects.begin(); j != suspects.end(); j++) {
+			if (j->sense == sense and find(j->first.begin(), j->first.end(), *i) != j->first.end()) {
+				if (i == pos.begin()) {
+					result.push_back(*j);
+				} else {
+					auto best = result.end();
+					int best_score = 0;
+					for (auto k = result.begin(); k != result.end(); k++) {
+						int score = vector_intersection_size(k->second, j->second);
+						if (score > best_score) {
+							best = k;
+							best_score = score;
+						}
+					}
+
+					if (best != result.end()) {
+						found[best-result.begin()] = true;
+						best->second = vector_intersection(best->second, j->second);
+					}
+				}
+			}
+		}
+
+		for (int j = (int)found.size()-1; j >= 0; j--) {
+			if (not found[j]) {
+				result.erase(result.begin() + j);
+			}
+		}
+	}
+	return result;
 }
 
 void encoder::check(ucs::variable_set &variables, bool senseless, bool report_progress)
@@ -237,9 +275,13 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 					// against individual places at the merge as a result of different
 					// parallel states. This suspect will be replicated with places
 					// outside the parallel merge, so we don't need to include it.
-					if (t0_prev.size() > 1 && !are_mutex(predicate.mask(sense), base->effective_implicant(*i)) and find(t0_prev.begin(), t0_prev.end(), *i) == t0_prev.end()) {
-						add_suspect(t0_prev, *i, 1-sense);
-					}
+					//
+					// TODO(edward.bingham) I don't actually think this is necessary. I
+					// think if we take the intersection of the suspects at each place,
+					// we'll get the same result.
+					// if (t0_prev.size() > 1 && !are_mutex(predicate.mask(sense), base->effective_implicant(*i)) and find(t0_prev.begin(), t0_prev.end(), *i) == t0_prev.end()) {
+					// 	add_suspect(t0_prev, *i, 1-sense);
+					// }
 
 					// Get only the state encodings for the place for which the transition is invacuous and
 					// there is no other vacuous transition that would take a token off the place.
@@ -449,7 +491,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// split.
 
 	// assign[location of state variable insertion][direction of assignment] = {variable uids}
-	map<petri::iterator, array<vector<int>, 2> > groups;
+	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
 
 	int uid = -1;
 	//cout << "After Clustering" << endl;
@@ -474,28 +516,62 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// Figure out where to put the state variable transitions
 		for (int j = 0; j < 2; j++) {
 			while (not problems[i].traces[j].total.is_empty()) {
+				// TODO(edward.bingham) This function should generate the multi-place
+				// locations for parallel splits and merges as well.
 				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
 				// TODO(edward.bingham) I should check state suspects against previous
 				// insertions. I should insert the assignments that are more certain
 				// first.
-				petri::iterator best;
+				vector<petri::iterator> best;
 				int count = -1;
 				for (auto k = pos.begin(); k != pos.end(); k++) {
+					vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, *k), j);
+					
 					int cost = 0;
-					for (int l = 0; l < (int)suspects.size(); l++) {
-						if (suspects[l].sense == j and find(suspects[l].first.begin(), suspects[l].first.end(), *k) != suspects[l].first.end() and not problems[i].traces[j].covers(suspects[l].second)) {
-							cost++;
-						}
+					for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
+						cost += not problems[i].traces[j].covers(l->second);
 					}
 					if (count < 0 or cost < count) {
-						best = *k;
+						best = vector<petri::iterator>(1, *k);
 						count = cost;
+					}
+
+					if (k->type == transition::type) {
+						vector<petri::iterator> p = base->prev(*k);
+						vector<petri::iterator> n = base->next(*k);
+						
+						if (p.size() > 1) {
+							sort(p.begin(), p.end());
+							vector<suspect> new_conflicts = find_suspects(p, j);
+							
+							int cost = 0;
+							for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
+								cost += not problems[i].traces[j].covers(l->second);
+							}
+							if (count < 0 or cost < count) {
+								best = p;
+								count = cost;
+							}
+						}
+						if (n.size() > 1) {
+							sort(n.begin(), n.end());
+							vector<suspect> new_conflicts = find_suspects(n, j);
+							
+							int cost = 0;
+							for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
+								cost += not problems[i].traces[j].covers(l->second);
+							}
+							if (count < 0 or cost < count) {
+								best = n;
+								count = cost;
+							}
+						}
 					}
 				}
 
-				auto iter = groups.insert(pair<petri::iterator, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
+				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
-				assign[j].push_back(best);
+				assign[j].insert(assign[j].end(), best.begin(), best.end());
 				problems[i].traces[j] = problems[i].traces[j].avoidance(best);
 			}
 		}
@@ -558,10 +634,12 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 		// Figure out the output sense of all of the transitions.
 		vector<petri::iterator> n;
-		if (group->first.type == place::type) {
+		if (group->first[0].type == place::type) {
 			n = base->next(group->first);
+			sort(n.begin(), n.end());
+			n.erase(unique(n.begin(), n.end()), n.end());
 		} else {
-			n.push_back(group->first);
+			n = group->first;
 		}
 
 		int sense = 2;
@@ -586,9 +664,9 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// a transition.
 		boolean::cover guard = 1;
 		int guardsense = 2;
-		if (group->first.type == transition::type) {
-			guard = base->transitions[group->first.index].guard;
-			base->transitions[group->first.index].guard = 1;
+		if (group->first[0].type == transition::type) {
+			guard = base->transitions[group->first[0].index].guard;
+			base->transitions[group->first[0].index].guard = 1;
 		}
 		if (not guard.mask(conflict::DOWN).is_tautology()) {
 			guardsense = conflict::UP;
@@ -615,10 +693,16 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		for (int x = 0; x < 2; x++) {
 			if (not group->second[1-sense].empty()) {
 				// Handle the first one, then insert the others in parallel to the first one.
-				vector<petri::iterator> pos = base->duplicate(petri::parallel, 
-					base->insert_before(group->first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
-					group->second[1-sense].size(), false);
-
+				vector<petri::iterator> pos;
+				if (group->first[0].type == transition::type) {
+					pos = base->duplicate(petri::parallel, 
+						base->insert_before(group->first[0], transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
+						group->second[1-sense].size(), false);
+				} else {
+					pos = base->duplicate(petri::parallel, 
+						base->insert_at(group->first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
+						group->second[1-sense].size(), false);
+				}
 				auto i = group->second[1-sense].begin();
 				auto j = pos.begin();
 				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {

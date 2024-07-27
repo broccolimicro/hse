@@ -112,8 +112,12 @@ struct encoder
 	// The list of suspects found in the HSE by check().
 	vector<suspect> suspects;
 
+
 	void add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding);
 	void add_suspect(vector<petri::iterator> i, petri::iterator j, int sense);
+
+	vector<suspect> find_suspects(vector<petri::iterator> pos, int sense);
+
 	void check(ucs::variable_set &variables, bool senseless = false, bool report_progress = false);
 
 	void insert_state_variables(ucs::variable_set &variables);
