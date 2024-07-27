@@ -137,6 +137,14 @@ graph::~graph()
 
 }
 
+hse::transition &graph::at(term_index idx) {
+	return transitions[idx.index];
+}
+
+boolean::cube &graph::term(term_index idx) {
+	return transitions[idx.index].local_action[idx.term];
+}
+
 boolean::cover graph::predicate(petri::iterator i, vector<petri::iterator> *prev) const
 {
 	if (i.type == petri::place::type) {
@@ -174,6 +182,21 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 	return pred;
 }
 
+bool graph::firing_conflicts(petri::iterator i, boolean::cover term_implicant, boolean::cube action) const
+{
+	boolean::cube other;
+	if (i.type == petri::transition::type) {
+		other = transitions[i.index].local_action.subcube();
+	} else {
+		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
+			if (arc->from.index == i.index and transitions[arc->to.index].guard.is_tautology()) {
+				other &= transitions[arc->to.index].local_action.subcube();
+			}
+		}
+	}
+	return not other.is_subset_of(action);
+}
+
 boolean::cover graph::implicant(petri::iterator i, vector<petri::iterator> *prev) const
 {
 	if (i.type == petri::place::type) {
@@ -196,7 +219,14 @@ boolean::cover graph::implicant(petri::iterator i, vector<petri::iterator> *prev
 boolean::cover graph::effective_implicant(petri::iterator i, vector<petri::iterator> *prev) const
 {
 	if (i.type == petri::place::type) {
-		return places[i.index].effective;
+		//return places[i.index].effective;
+		boolean::cover pred = places[i.index].predicate;
+		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
+			if (arc->from.index == i.index) {
+				pred &= ~transitions[arc->to.index].guard;
+			}
+		}
+		return pred;
 	}
 	
 	boolean::cover pred = 1;
@@ -532,6 +562,13 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 					!common_arbiter(curr[i], j));
 		}
 
+		for (int i = 0; i < (int)curr.size() and relevant; i++) {
+			for (int k = 0; k < (int)arcs[transition::type].size() and curr[i].type == transition::type and relevant; k++) {
+				relevant = (arcs[transition::type][k].from.index != curr[i].index or arcs[transition::type][k].to.index != j.index);
+			}
+		}
+
+
 		if (relevant) {
 			result.push_back(j);
 		}
@@ -551,6 +588,12 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 			relevant = (j != curr[i] &&
 					!is(parallel, j, curr[i]) &&
 					!common_arbiter(curr[i], j));
+		}
+
+		for (int i = 0; i < (int)curr.size() and relevant; i++) {
+			for (int k = 0; k < (int)arcs[place::type].size() and curr[i].type == place::type and relevant; k++) {
+				relevant = (arcs[place::type][k].from.index != curr[i].index or arcs[place::type][k].to.index != j.index);
+			}
 		}
 
 		if (relevant) {

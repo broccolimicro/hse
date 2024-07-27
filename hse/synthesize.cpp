@@ -147,8 +147,8 @@ void gate_set::load(bool senseless) {
 
 		// The transition actively affects the state of the system
 		for (auto term = t0i->local_action.cubes.begin(); term != t0i->local_action.cubes.end(); term++) {
-			vector<int> vars = term->vars();
-			for (auto var = vars.begin(); var != vars.end(); var++) {
+			vector<int> term_vars = term->vars();
+			for (auto var = term_vars.begin(); var != term_vars.end(); var++) {
 				int val = term->get(*var);
 
 				// we cannot use the variables affected by the transitions in their rules because that would

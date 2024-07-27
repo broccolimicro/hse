@@ -70,14 +70,16 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 	// eliminate entire regions of these conflicts with a single state variable.
 
 	// get the input and output transitions of the place we are comparing against
-	vector<petri::iterator> neighbors = base->neighbors(node, true);
+	vector<petri::iterator> neighbors = base->neighbors(node, false);
+	neighbors.push_back(node);
+	sort(neighbors.begin(), neighbors.end());
 
 	vector<int> merge;
 	for (int i = 0; i < (int)conflicts.size(); i++) {
 		if (conflicts[i].index.index == tid &&
 				conflicts[i].index.term == term &&
 				conflicts[i].sense == sense && 
-				vector_intersection_size(neighbors, conflict_regions[i]) > 0) {
+				vector_intersects(neighbors, conflict_regions[i])) {
 			merge.push_back(i);
 		}
 	}
@@ -115,7 +117,9 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 	// eliminate entire regions of these conflicts with a single state variable.
 
 	// get the input and output transitions of the place we are comparing against
-	vector<petri::iterator> neighbors = base->neighbors(j, true);
+	vector<petri::iterator> neighbors = base->neighbors(j, false);
+	neighbors.push_back(j);
+	sort(neighbors.begin(), neighbors.end());
 
 	vector<int> merge;
 	for (int l = 0; l < (int)suspects.size(); l++) {
@@ -124,7 +128,7 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 		}
 	}
 
-	if (merge.size() > 0) {
+	if (not merge.empty()) {
 		for (int l = 1; l < (int)merge.size(); l++) {
 			suspects[merge[0]].second.insert(suspects[merge[0]].second.end(), suspects[merge[l]].second.begin(), suspects[merge[l]].second.end());
 			suspect_regions[merge[0]].insert(suspect_regions[merge[0]].end(), suspect_regions[merge[l]].begin(), suspect_regions[merge[l]].end());
@@ -137,7 +141,12 @@ void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sens
 
 		suspects[merge[0]].second.push_back(j);
 		suspect_regions[merge[0]].insert(suspect_regions[merge[0]].end(), neighbors.begin(), neighbors.end());
+		
+		sort(suspects[merge[0]].second.begin(), suspects[merge[0]].second.end());
+		suspects[merge[0]].second.erase(unique(suspects[merge[0]].second.begin(), suspects[merge[0]].second.end()), suspects[merge[0]].second.end());
+		
 		sort(suspect_regions[merge[0]].begin(), suspect_regions[merge[0]].end());
+		suspect_regions[merge[0]].erase(unique(suspect_regions[merge[0]].begin(), suspect_regions[merge[0]].end()), suspect_regions[merge[0]].end());
 	} else {
 		suspects.push_back(suspect(sense, i, vector<petri::iterator>(1, j)));
 		suspect_regions.push_back(neighbors);
@@ -190,6 +199,23 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 		boolean::cover implicant = predicate & t0i->guard;
 		vector<petri::iterator> relevant = base->relevant_nodes(vector<petri::iterator>(1, t0));
 
+		for (auto p1 = relevant.begin(); p1 != relevant.end(); p1++) {
+			if (report_progress) {
+				progress("", "T" + ::to_string(t0.index) + "->P" + ::to_string(p1->index), __FILE__, __LINE__);
+			}
+
+			boolean::cover p1_effective = base->effective_implicant(*p1);
+		
+			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
+				// Check the implicant predicate against the other place's effective.
+				// The predicate is used because inserting a state variable
+				// transition will negate any "you might as well be here" effects.
+				if (!are_mutex(implicant.mask(sense), p1_effective)) {
+					add_suspect(vector<petri::iterator>(1, t0), *p1, 1-sense);
+				}
+			}
+		}
+
 		for (int term = 0; term < (int)t0i->local_action.cubes.size(); term++) {
 			boolean::cube action = t0i->local_action.cubes[term];
 			boolean::cover not_action = ~action;
@@ -207,9 +233,12 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 				for (auto i = relevant.begin(); i != relevant.end(); i++) {
 					// Get the list of places that are suspect against parallel merges
 					// A place is suspect if making it an implicant for an active transition
-					// could make it a conflict.
-					if (t0_prev.size() > 1 && !are_mutex(predicate.mask(sense), base->effective(*i))) {
-						add_suspect(t0_prev, *i, sense);
+					// could make it a conflict. A parallel merge can end up as a suspect
+					// against individual places at the merge as a result of different
+					// parallel states. This suspect will be replicated with places
+					// outside the parallel merge, so we don't need to include it.
+					if (t0_prev.size() > 1 && !are_mutex(predicate.mask(sense), base->effective_implicant(*i)) and find(t0_prev.begin(), t0_prev.end(), *i) == t0_prev.end()) {
+						add_suspect(t0_prev, *i, 1-sense);
 					}
 
 					// Get only the state encodings for the place for which the transition is invacuous and
@@ -219,8 +248,12 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 					// The implicant states for any actions that would have the same effect as the transition we're checking
 					// can be removed from our check because "it could have fired there anyways"
 					// If all terms cover all of the assignments in t0, then it can't conflict
-					if (i->type == petri::transition::type &&
-							base->transitions[i->index].local_action.is_subset_of(action)) {
+					
+					if (t0.index == 14 and i->type == place::type and i->index == 19) {
+						cout << "base encoding" << export_expression(encoding, variables).to_string() << endl;
+					}
+
+					if (not base->firing_conflicts(*i, term_implicant, action)) {
 						continue;
 					}
 
@@ -233,9 +266,11 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 					// Check if they share a common state encoding given the above checks
 					encoding &= not_action;
 
-					//cout << "here " << t0 << " -> " << *i << endl;
-					//cout << export_expression(term_implicant, variables).to_string() << endl;
-					//cout << export_expression(encoding, variables).to_string() << endl;
+					if (t0.index == 14 and i->type == place::type and i->index == 19) {
+						cout << "here " << t0 << " -> " << *i << endl;
+						cout << "term implicant" << export_expression(term_implicant, variables).to_string() << endl;
+						cout << "final encoding" << export_expression(encoding, variables).to_string() << endl;
+					}
 					if (!are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
@@ -254,14 +289,14 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 				progress("", "P" + ::to_string(p0.index) + "->P" + ::to_string(p1->index), __FILE__, __LINE__);
 			}
 
-			boolean::cover p1_effective = base->effective(*p1);
+			boolean::cover p1_effective = base->effective_implicant(*p1);
 		
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// Check the implicant predicate against the other place's effective.
 				// The predicate is used because inserting a state variable
 				// transition will negate any "you might as well be here" effects.
 				if (!are_mutex(p0_predicate.mask(sense), p1_effective)) {
-					add_suspect(vector<petri::iterator>(1, p0), *p1, sense);
+					add_suspect(vector<petri::iterator>(1, p0), *p1, 1-sense);
 				}
 			}
 		}
@@ -295,28 +330,31 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// index 1 indicates that this state variable transition needs to be upgoing
 	struct CodingProblem {
 		boolean::cube term;
+		// Group paths into rings, then merge after the fact.
 		array<petri::path_set, 2> traces;
 	};
 	vector<CodingProblem> problems;
 	for (int i = 0; i < (int)conflicts.size(); i++) {
 		vector<petri::iterator> from(conflicts[i].region);
-		vector<petri::iterator> to(1, petri::iterator(transition::type, conflicts[i].index.index));
+		vector<petri::iterator> to(1, conflicts[i].index.iter());
 		
 		if (conflicts[i].sense == conflict::UP) {
 			problems.push_back(CodingProblem{
-				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::DOWN), {
+				base->term(conflicts[i].index).mask(conflict::DOWN), {
 				petri::trace(*base, to, from),
 				petri::trace(*base, from, to)
 			}});
 		} else {
 			problems.push_back(CodingProblem{
-				base->transitions[conflicts[i].index.index].local_action[conflicts[i].index.term].mask(conflict::UP), {
+				base->term(conflicts[i].index).mask(conflict::UP), {
 				petri::trace(*base, from, to),
 				petri::trace(*base, to, from)
 			}});
 		}
 
 		// Remove vacuous traces
+		// DESIGN(edward.bingham) There is guaranteed to be exactly one path set in
+		// each of the trace lists for each coding problem by construction.
 		for (auto j = problems.back().traces[1-conflicts[i].sense].paths.begin(); j != problems.back().traces[1-conflicts[i].sense].paths.end(); ) {
 			bool found = false;
 			for (auto t = base->begin(transition::type); t != base->end(transition::type); t++) {
@@ -341,6 +379,37 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 	}*/
 
+	// TODO(edward.bingham) State variable insertion ended up being far more
+	// complicated that initially thought. Currently, we're implementing a very
+	// naive trace clustering algorithm, but we can do better.
+	//
+	// Clustering:
+	//
+	// 1. determine which conflicts and suspects are mergible, create a graph of
+	//    mergible suspects and conflicts such that the edges of that graph are
+	//    weighted by the mergibility type. There are two types of mergibility
+	//    between two conflicts/suspects:
+	//    Type 1: The merged conflicts can be solved with a pair of transitions v0+; v0-
+	//    Type 2: The merged conflicts can be solved with four transitions v0+; v0-; v0+; v0-
+	//
+	// 2. Find all maximal cliques in the graph of type 1 and 2 mergible
+	//    conflicts and type 1 mergible conflicts and suspects. This prevents us
+	//    from adding transitions into the handshaking expansion unecessarily as
+	//    a result of untriggered suspects.
+	//    *** This actually doesn't work. up-down patterns create cycles, not cliques.   
+	//
+	// 3. Select the smallest subset of non-overlapping cliques that maximizes
+	//    coverage of all conflicts.
+	//
+	// 4. Given that subset, for any two overlapping cliques, remove the
+	//    overlapped vertex from one of the two cliques with preference toward
+	//    elimination/reduction of type 2 mergibility. This gives us more options
+	//    for where to place the state variable transition to solve the encoding
+	//    problem.
+	//
+	// Search and Solve:
+	//
+	// 1. 
 	// Cluster those traces
 	for (int i = (int)problems.size()-1; i >= 0; i--) {
 		for (int j = i-1; j >= 0; j--) {
@@ -361,9 +430,28 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
+	// TODO(edward.bingham) I need to make it possible to insert a state
+	// variable transition before/after a parallel split or merge. To me, it
+	// seems the simplest way to do this is to have four insertion classes.
+	// 1. At a place
+	// 2. At a transition
+	// 3. After a transition
+	// 4. Before a transition
+	// However, certain places will overlap with insertions before or after a
+	// transition. So the insertions before or after transition may only be
+	// valid if there are multiple inputs/outputs to that transition.
+	// A pair of places will never share *both* an input transition and an
+	// output transition. If so, then we would simply delete one of the two
+	// plces in the post_process() function. This means that we could represent
+	// the "before this transition" as a set of input places and the "after
+	// this transition" as a set of output places. This would also allow us to
+	// insert state variables partially before or partially after a parallel
+	// split.
+
 	// assign[location of state variable insertion][direction of assignment] = {variable uids}
 	map<petri::iterator, array<vector<int>, 2> > groups;
 
+	int uid = -1;
 	//cout << "After Clustering" << endl;
 	// Figure out where to insert state variable transitions, create state
 	// variables, and determine their reset state.
@@ -373,14 +461,18 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		//cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 
 		// Create the state variable
-		ucs::variable v;
-		v.name.push_back(ucs::instance("v" + ::to_string(i), vector<int>()));
-		int vid = variables.define(v);
+		int vid = -1;
+		while (vid < 0) {
+			++uid;
+			ucs::variable v;
+			v.name.push_back(ucs::instance("v" + ::to_string(uid), vector<int>()));
+			vid = variables.define(v);
+		}
 
 		array<vector<petri::iterator>, 2> assign;
 
 		// Figure out where to put the state variable transitions
-		for (int j = 0; j < 2; j++) {		
+		for (int j = 0; j < 2; j++) {
 			while (not problems[i].traces[j].total.is_empty()) {
 				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
 				// TODO(edward.bingham) I should check state suspects against previous
@@ -391,7 +483,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				for (auto k = pos.begin(); k != pos.end(); k++) {
 					int cost = 0;
 					for (int l = 0; l < (int)suspects.size(); l++) {
-						if (suspects[l].sense == j and find(suspects[l].first.begin(), suspects[l].first.end(), *k) != suspects[l].first.end()) {
+						if (suspects[l].sense == j and find(suspects[l].first.begin(), suspects[l].first.end(), *k) != suspects[l].first.end() and not problems[i].traces[j].covers(suspects[l].second)) {
 							cost++;
 						}
 					}
@@ -408,15 +500,15 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			}
 		}
 		
-		//cout << "inserting v" << i << "+ at " << to_string(assign[1]) << endl;
-		//cout << "inserting v" << i << "- at " << to_string(assign[0]) << endl;
+		cout << "inserting v" << uid << "+ at " << to_string(assign[1]) << endl;
+		cout << "inserting v" << uid << "- at " << to_string(assign[0]) << endl;
 
 		// Figure out the reset states
-		petri::path_set v0 = petri::trace(*base, assign[0], assign[1]);
-		petri::path_set v1 = petri::trace(*base, assign[1], assign[0]);
-		//cout << "Looking for Reset for v" << i << endl;
-		//cout << "v" << i << "-; v" << i << "+ " << v0 << endl;
-		//cout << "v" << i << "+; v" << i << "- " << v1 << endl;
+		petri::path_set v0 = petri::trace(*base, assign[0], assign[1], true);
+		petri::path_set v1 = petri::trace(*base, assign[1], assign[0], true);
+		cout << "Looking for Reset for v" << uid << endl;
+		cout << "v" << i << "-; v" << uid << "+ " << v0 << endl;
+		cout << "v" << i << "+; v" << uid << "- " << v1 << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
@@ -459,6 +551,11 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 
 	// Insert the transitions into the graph
 	for (auto group = groups.begin(); group != groups.end(); group++) {
+		if (group->second[0].empty() and group->second[1].empty()) {
+			// This should never happen
+			cout << "error: both sides of state transition group are empty" << endl;
+			continue;
+		}
 		// Figure out the output sense of all of the transitions.
 		vector<petri::iterator> n;
 		if (group->first.type == place::type) {
@@ -519,7 +616,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			if (not group->second[1-sense].empty()) {
 				// Handle the first one, then insert the others in parallel to the first one.
 				vector<petri::iterator> pos = base->duplicate(petri::parallel, 
-					base->insert_before(group->first, transition(guardsense != sense ? guard : boolean::cover(1))),
+					base->insert_before(group->first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
 					group->second[1-sense].size(), false);
 
 				auto i = group->second[1-sense].begin();

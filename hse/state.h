@@ -27,6 +27,7 @@ struct term_index
 	void hash(hasher &hash) const;
 
 	string to_string(const graph &g, const ucs::variable_set &v);
+	petri::iterator iter();
 };
 
 bool operator<(term_index i, term_index j);

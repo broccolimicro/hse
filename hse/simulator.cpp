@@ -463,6 +463,8 @@ enabled_transition simulator::fire(int index)
 	for (int j = 0; j < (int)t.history.size(); j++) {
 		if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
 		{
+			cout << "local action: " << local_action << endl;
+			cout << "remote action: " << remote_action << endl;
 			interference err(term_index(t.index, term), t.history[j]);
 			vector<interference>::iterator loc = lower_bound(interference_errors.begin(), interference_errors.end(), err);
 			if (loc == interference_errors.end() || *loc != err)
