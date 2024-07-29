@@ -2,6 +2,7 @@
 
 #include <common/standard.h>
 #include "state.h"
+#include <petri/path.h>
 
 namespace hse
 {
@@ -119,6 +120,10 @@ struct encoder
 	vector<suspect> find_suspects(vector<petri::iterator> pos, int sense);
 
 	void check(ucs::variable_set &variables, bool senseless = false, bool report_progress = false);
+
+	int score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare);
+	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result);
+	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result);
 
 	void insert_state_variables(ucs::variable_set &variables);
 };

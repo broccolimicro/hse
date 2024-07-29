@@ -348,6 +348,79 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 		done_progress();
 }
 
+int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare) {
+	sort(pos.begin(), pos.end());
+	vector<suspect> new_conflicts = find_suspects(pos, sense);
+	
+	int cost = 0;
+	for (auto i = new_conflicts.begin(); i != new_conflicts.end(); i++) {
+		// TODO(edward.bingham) I should check state suspects against
+		// previous insertions. I should insert the assignments that are
+		// more certain first.
+
+		cost += not dontcare.covers(i->second);
+	}
+
+	if (pos.size() == 1 and pos[0].type == transition::type) {
+		cost += base->transitions[pos[0].index].local_action.has(sense);
+	} else {
+		vector<petri::iterator> nn = base->next(pos);
+		sort(nn.begin(), nn.end());
+		nn.erase(unique(nn.begin(), nn.end()), nn.end());
+		for (auto i = nn.begin(); i != nn.end(); i++) {
+			cost += base->transitions[i->index].local_action.has(sense);
+		}
+	}
+
+	return cost;
+}
+
+int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result) {
+	vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, pos), sense);
+
+	int bestcost = score_insertion(sense, vector<petri::iterator>(1, pos), dontcare);
+	pair<petri::iterator, int> best(pos, 0);
+	//cout << "(" << pos << ", 0) -> " << bestcost << endl;
+
+	vector<petri::iterator> p = base->prev(pos);
+	if (pos.type == transition::type) {
+		if (not base->transitions[pos.index].guard.is_tautology() and p.size() > 1 and dontcare.touches(p)) {
+			int cost = score_insertion(sense, p, dontcare);
+			//cout << "(" << pos << ", -1) -> " << cost << endl;
+			if (cost < bestcost) {
+				bestcost = cost;
+				best.second = -1;
+			}
+		}
+	} else {
+		for (auto m = p.begin(); m != p.end(); m++) {
+			vector<petri::iterator> n = base->next(*m);
+			if (n.size() > 1) {
+				int cost = score_insertion(sense, n, dontcare);
+				//cout << "(" << *m << ", 1) -> " << cost << endl;
+				if (cost < bestcost) {
+					bestcost = cost;
+					best.first = *m;
+					best.second = 1;
+				}		
+			}
+		}
+	}
+
+	if (result != nullptr) {
+		result->push_back(best);
+	}
+	return bestcost;
+}
+
+int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result) {
+	int cost = 0;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		cost += score_insertion(sense, *i, dontcare, result);
+	}
+	return cost;
+}
+
 
 // TODO State Variable Insertion
 //
@@ -511,125 +584,76 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			vid = variables.define(v);
 		}
 
-		array<vector<petri::iterator>, 2> assign;
+		array<vector<vector<petri::iterator> >, 2> options;
+		options[0] = problems[i].traces[0].enumerate();
+		options[1] = problems[i].traces[1].enumerate();
+
+		array<vector<pair<petri::iterator, int> >, 2> best;
+		array<petri::path_set, 2> colorings({
+			petri::path_set(base->places.size(), base->transitions.size()),
+			petri::path_set(base->places.size(), base->transitions.size())
+		});
+		int min_cost = -1;
+
+		cout << "options[0] = " << to_string(options[0]) << endl;
+		cout << "options[1] = " << to_string(options[1]) << endl;
 
 		// Figure out where to put the state variable transitions
-		for (int j = 0; j < 2; j++) {
-			while (not problems[i].traces[j].total.is_empty()) {
-				// TODO(edward.bingham) This function should generate the multi-place
-				// locations for parallel splits and merges as well.
-				vector<petri::iterator> pos = problems[i].traces[j].total.maxima();
-				// TODO(edward.bingham) I should check state suspects against previous
-				// insertions. I should insert the assignments that are more certain
-				// first.
-				pair<petri::iterator, int> best;
-				int count = -1;
-				for (auto k = pos.begin(); k != pos.end(); k++) {
-					vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, *k), j);
-					
-					int cost = 0;
-					for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
-						cost += not problems[i].traces[j].covers(l->second);
-					}
-					if (k->type == transition::type) {
-						cost += base->transitions[k->index].local_action.has(j);
-					} else {
-						vector<petri::iterator> nn = base->next(*k);
-						sort(nn.begin(), nn.end());
-						nn.erase(unique(nn.begin(), nn.end()), nn.end());
-						for (auto l = nn.begin(); l != nn.end(); l++) {
-							cost += base->transitions[l->index].local_action.has(j);
-						}
-					}
-					cout << "(" << *k << ", 0) -> " << cost << endl;
-					if (count < 0 or cost < count) {
-						best = pair<petri::iterator, int>(*k, 0);
-						count = cost;
-					}
-
-					vector<petri::iterator> p = base->prev(*k);
-					if (k->type == transition::type) {
-						if (not base->transitions[k->index].guard.is_tautology() and p.size() > 1 and problems[i].traces[j].touches(p)) {
-							sort(p.begin(), p.end());
-							vector<suspect> new_conflicts = find_suspects(p, j);
-							
-							int cost = 0;
-							for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
-								cost += not problems[i].traces[j].covers(l->second);
-							}
-							vector<petri::iterator> nn = base->next(p);
-							sort(nn.begin(), nn.end());
-							nn.erase(unique(nn.begin(), nn.end()), nn.end());
-							for (auto l = nn.begin(); l != nn.end(); l++) {
-								cost += base->transitions[l->index].local_action.has(j);
-							}
-
-							cout << "(" << *k << ", -1) -> " << cost << endl;
-							if (count < 0 or cost < count) {
-								best = pair<petri::iterator, int>(*k, -1);
-								count = cost;
-							}
-						}
-					} else {
-						for (auto m = p.begin(); m != p.end(); m++) {
-							vector<petri::iterator> n = base->next(*m);
-							if (n.size() > 1) {
-								sort(n.begin(), n.end());
-								vector<suspect> new_conflicts = find_suspects(n, j);
-								
-								int cost = 0;
-								for (auto l = new_conflicts.begin(); l != new_conflicts.end(); l++) {
-									cost += not problems[i].traces[j].covers(l->second);
-								}
-								vector<petri::iterator> nn = base->next(n);
-								sort(nn.begin(), nn.end());
-								nn.erase(unique(nn.begin(), nn.end()), nn.end());
-								for (auto l = nn.begin(); l != nn.end(); l++) {
-									cost += base->transitions[l->index].local_action.has(j);
-								}
-
-								cout << "(" << *m << ", 1) -> " << cost << endl;
-								if (count < 0 or cost < count) {
-									best = pair<petri::iterator, int>(*m, 1);
-									count = cost;
-								}
-							}
-						}
+		for (auto j = options[0].begin(); j != options[0].end(); j++) {
+			for (auto k = options[1].begin(); k != options[1].end(); k++) {
+				// Check for interfering transitions
+				bool interfering = false;
+				for (auto ji = j->begin(); ji != j->end() and not interfering; ji++) {
+					for (auto ki = k->begin(); ki != k->end() and not interfering; ki++) {
+						interfering = base->is(parallel, *ji, *ki);
 					}
 				}
 
-				cout << "Adding (" << best.first << ", " << best.second << ")" << endl;
-				auto iter = groups.insert(pair<pair<petri::iterator, int>, array<vector<int>, 2> >(best, array<vector<int>, 2>()));
-				iter.first->second[j].push_back(vid);
-				assign[j].push_back(best.first);
-				if (best.second == 1) {
-					problems[i].traces[j] = problems[i].traces[j].avoidance(base->next(best.first));
-				} else {
-					problems[i].traces[j] = problems[i].traces[j].avoidance(best.first);
+				if (not interfering) {
+					petri::path_set v0 = petri::trace(*base, *j, *k, true);
+					petri::path_set v1 = petri::trace(*base, *k, *j, true);
+
+					// check each transition against suspects and generate a score
+					// find the pair with the best score.
+					array<vector<pair<petri::iterator, int> >, 2> curr;
+					int cost = score_insertions(1, *k, v1, &curr[1])
+						+ score_insertions(0, *j, v0, &curr[0]);
+					if (min_cost < 0 or cost < min_cost) {
+						min_cost = cost;
+						best = curr;
+						colorings[0] = v0;
+						colorings[1] = v1;
+					}
 				}
 			}
 		}
+
+		for (int j = 0; j < 2; j++) {
+			for (auto k = best[j].begin(); k != best[j].end(); k++) {
+				cout << "Adding (" << k->first << ", " << k->second << ")" << endl;
+				auto iter = groups.insert(pair<pair<petri::iterator, int>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
+				iter.first->second[j].push_back(vid);
+			}
+		}
 		
-		cout << "inserting v" << uid << "+ at " << to_string(assign[1]) << endl;
-		cout << "inserting v" << uid << "- at " << to_string(assign[0]) << endl;
+		cout << "inserting v" << uid << "+ at " << to_string(best[1]) << endl;
+		cout << "inserting v" << uid << "- at " << to_string(best[0]) << endl;
 
 		// Figure out the reset states
-		petri::path_set v0 = petri::trace(*base, assign[0], assign[1], true);
-		petri::path_set v1 = petri::trace(*base, assign[1], assign[0], true);
 		cout << "Looking for Reset for v" << uid << endl;
-		cout << "v" << i << "-; v" << uid << "+ " << v0 << endl;
-		cout << "v" << i << "+; v" << uid << "- " << v1 << endl;
+		cout << "v" << i << "-; v" << uid << "+ " << colorings[0] << endl;
+		cout << "v" << i << "+; v" << uid << "- " << colorings[1] << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
 				petri::iterator pos(place::type, t->index);
-				if (v0.total[pos] > 0) {
+				if (colorings[0].total[pos] > 0) {
 					if (reset == 0 or reset == 2) {
 						reset = 0;
 					} else {
 						reset = -1;
 					}
-				} else if (v1.total[pos] > 0) {
+				} else if (colorings[1].total[pos] > 0) {
 					if (reset == 1 or reset == 2) {
 						reset = 1;
 					} else {
