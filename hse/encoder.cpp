@@ -615,6 +615,24 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 
 					// check each transition against suspects and generate a score
 					// find the pair with the best score.
+
+					// TODO(edward.bingham) search all partial states from this
+					// insertion for the one that minimizes the number of new conflicts.
+					// I actually know that answer ahead of time based on the overlap in
+					// the set of suspects of the two parallel places and the sense of
+					// the input and output transitions. Pruning the search using this
+					// parameters would make for a very efficient greedy algorithm which
+					// is quadratic time relative to the number of parallel nodes. The
+					// only problem with this approach is that it requires that I use
+					// petri::insert_at() which ends up removing places. Those removed
+					// places would have been used in other overlapping insertions.
+					// Step 1: Tackle the insert_at() approach
+					//   * I could keep all of the redundant places until after all of
+					//     the state variable insertions have been done, then do a
+					//     search for redundant places and remove them. This would
+					//     maintain the indices and structure needed for the other state
+					//     variable insertions.
+					// Step 2: Partial state searching 
 					array<vector<pair<petri::iterator, int> >, 2> curr;
 					int cost = score_insertions(1, *k, v1, &curr[1])
 						+ score_insertions(0, *j, v0, &curr[0]);
