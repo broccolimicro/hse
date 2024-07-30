@@ -122,8 +122,8 @@ struct encoder
 	void check(ucs::variable_set &variables, bool senseless = false, bool report_progress = false);
 
 	int score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare);
-	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result);
-	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result);
+	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
+	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
 
 	void insert_state_variables(ucs::variable_set &variables);
 };

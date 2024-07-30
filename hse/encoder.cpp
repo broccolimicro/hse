@@ -375,11 +375,11 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 	return cost;
 }
 
-int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result) {
+int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
 	vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, pos), sense);
 
 	int bestcost = score_insertion(sense, vector<petri::iterator>(1, pos), dontcare);
-	pair<petri::iterator, int> best(pos, 0);
+	vector<petri::iterator> best(1, pos);
 	//cout << "(" << pos << ", 0) -> " << bestcost << endl;
 
 	vector<petri::iterator> p = base->prev(pos);
@@ -389,7 +389,7 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 			//cout << "(" << pos << ", -1) -> " << cost << endl;
 			if (cost < bestcost) {
 				bestcost = cost;
-				best.second = -1;
+				best = p;
 			}
 		}
 	} else {
@@ -400,8 +400,7 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 				//cout << "(" << *m << ", 1) -> " << cost << endl;
 				if (cost < bestcost) {
 					bestcost = cost;
-					best.first = *m;
-					best.second = 1;
+					best = n;
 				}		
 			}
 		}
@@ -413,7 +412,7 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 	return bestcost;
 }
 
-int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<pair<petri::iterator, int> > *result) {
+int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
 	int cost = 0;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
 		cost += score_insertion(sense, *i, dontcare, result);
@@ -563,8 +562,8 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// insert state variables partially before or partially after a parallel
 	// split.
 
-	// assign[location of state variable insertion, (before, at, or after)][direction of assignment] = {variable uids}
-	map<pair<petri::iterator, int>, array<vector<int>, 2> > groups;
+	// assign[location of state variable insertion][direction of assignment] = {variable uids}
+	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
 
 	int uid = -1;
 	//cout << "After Clustering" << endl;
@@ -588,7 +587,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		options[0] = problems[i].traces[0].enumerate();
 		options[1] = problems[i].traces[1].enumerate();
 
-		array<vector<pair<petri::iterator, int> >, 2> best;
+		array<vector<vector<petri::iterator> >, 2> best;
 		array<petri::path_set, 2> colorings({
 			petri::path_set(base->places.size(), base->transitions.size()),
 			petri::path_set(base->places.size(), base->transitions.size())
@@ -632,8 +631,11 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 					//     search for redundant places and remove them. This would
 					//     maintain the indices and structure needed for the other state
 					//     variable insertions.
+					//   * As I execute overalapping insertions, I need to add all newly
+					//     redundant places into the next insertion. See page 228 of my
+					//     "circuits" notebook.
 					// Step 2: Partial state searching 
-					array<vector<pair<petri::iterator, int> >, 2> curr;
+					array<vector<vector<petri::iterator> >, 2> curr;
 					int cost = score_insertions(1, *k, v1, &curr[1])
 						+ score_insertions(0, *j, v0, &curr[0]);
 					if (min_cost < 0 or cost < min_cost) {
@@ -648,8 +650,8 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 
 		for (int j = 0; j < 2; j++) {
 			for (auto k = best[j].begin(); k != best[j].end(); k++) {
-				cout << "Adding (" << k->first << ", " << k->second << ")" << endl;
-				auto iter = groups.insert(pair<pair<petri::iterator, int>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
+				cout << "Adding (" << to_string(*k) << endl;
+				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
 			}
 		}
@@ -708,16 +710,22 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			cout << "error: both sides of state transition group are empty" << endl;
 			continue;
 		}
-		// Figure out the output sense of all of the transitions.
+		// This is the set of output transitions (n) and input places (p) for this state variable insertion.
 		vector<petri::iterator> n;
-		if (group->first.first.type == place::type) {
-			n = base->next(group->first.first);
-		} else {
-			n.push_back(group->first.first);
+		for (auto i = group->first.begin(); i != group->first.end(); i++) {
+			if (i->type == transition::type) {
+				n.push_back(*i);
+			} else {
+				vector<petri::iterator> nn = base->next(*i);
+				n.insert(n.end(), nn.begin(), nn.end());
+			}
 		}
+		sort(n.begin(), n.end());
+		n.erase(unique(n.begin(), n.end()), n.end());
 
+		// Figure out the output sense of all of the transitions.
 		int sense = 2;
-		for (auto i = n.begin(); i != n.end(); i++) {
+		for (auto i = n.begin(); i != n.end() and sense >= 0; i++) {
 			if (base->transitions[i->index].local_action.has(1)) {
 				if (sense == 2 or sense == 1) {
 					sense = 1;
@@ -737,11 +745,13 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// extract the guard from the transition in the graph if we're inserting at
 		// a transition.
 		boolean::cover guard = 1;
-		int guardsense = 2;
-		if (group->first.first.type == transition::type and group->first.second == 0) {
-			guard = base->transitions[group->first.first.index].guard;
-			base->transitions[group->first.first.index].guard = 1;
+		for (auto i = group->first.begin(); i != group->first.end(); i++) {
+			if (i->type == transition::type) {
+				guard &= base->transitions[i->index].guard;
+				base->transitions[i->index].guard = 1;
+			}
 		}
+		int guardsense = 2;
 		if (guard.has(1)) {
 			guardsense = 1;
 		}
@@ -767,16 +777,15 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		for (int x = 0; x < 2; x++) {
 			if (not group->second[1-sense].empty()) {
 				// Handle the first one, then insert the others in parallel to the first one.
-				vector<petri::iterator> pos;
-				if (group->first.second < 1) {
-					pos = base->duplicate(petri::parallel, 
-						base->insert_before(group->first.first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
-						group->second[1-sense].size(), false);
-				} else {
-					pos = base->duplicate(petri::parallel, 
-						base->insert_after(group->first.first, transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))),
-						group->second[1-sense].size(), false);
-				}
+				vector<petri::iterator> pos = base->duplicate(
+						petri::parallel, 
+						base->insert_at(
+							base->add_redundant(group->first),
+							transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
+						),
+						group->second[1-sense].size(),
+						false);
+
 				auto i = group->second[1-sense].begin();
 				auto j = pos.begin();
 				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {
@@ -788,7 +797,23 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
+	for (auto i = base->places.begin(); i != base->places.end(); i++) {
+		cout << "p" << (i-base->places.begin()) << ":" << endl;
+		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			cout << "\t" << j->to_string() << endl;
+		}
+	}
+
+	for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
+		cout << "t" << (i-base->transitions.begin()) << ":" << endl;
+		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			cout << "\t" << j->to_string() << endl;
+		}
+	}
+
+
 	//printf("done insert state variables\n");
+	base->erase_redundant();
 	base->update_masks();
 	base->source = base->reset;
 
