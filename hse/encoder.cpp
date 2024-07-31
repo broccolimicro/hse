@@ -10,6 +10,7 @@
 
 #include <petri/path.h>
 #include <interpret_boolean/export.h>
+#include <limits>
 
 namespace hse
 {
@@ -32,31 +33,15 @@ conflict::~conflict()
 
 }
 
-suspect::suspect()
-{
-	sense = -1;
-}
-
-suspect::suspect(int sense, vector<petri::iterator> first, vector<petri::iterator> second)
-{
-	this->sense = sense;
-	this->first = first;
-	this->second = second;
-}
-
-suspect::~suspect()
-{
-
-}
-
 encoder::encoder()
 {
 	base = NULL;
 }
 
-encoder::encoder(graph *base)
+encoder::encoder(graph *base, ucs::variable_set *variables)
 {
 	this->base = base;
+	this->variables = variables;
 }
 
 encoder::~encoder()
@@ -111,87 +96,7 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 	}
 }
 
-
-
-void encoder::add_suspect(vector<petri::iterator> i, petri::iterator j, int sense)
-{
-	// cluster the suspected places into regions. We want to be able to
-	// eliminate entire regions of these conflicts with a single state variable.
-
-	// get the input and output transitions of the place we are comparing against
-	vector<petri::iterator> neighbors = base->neighbors(j, false);
-	neighbors.push_back(j);
-	sort(neighbors.begin(), neighbors.end());
-
-	vector<int> merge;
-	for (int l = 0; l < (int)suspects.size(); l++) {
-		if (suspects[l].first == i && suspects[l].sense == sense && vector_intersection_size(neighbors, suspect_regions[l]) > 0) {
-			merge.push_back(l);
-		}
-	}
-
-	if (not merge.empty()) {
-		for (int l = 1; l < (int)merge.size(); l++) {
-			suspects[merge[0]].second.insert(suspects[merge[0]].second.end(), suspects[merge[l]].second.begin(), suspects[merge[l]].second.end());
-			suspect_regions[merge[0]].insert(suspect_regions[merge[0]].end(), suspect_regions[merge[l]].begin(), suspect_regions[merge[l]].end());
-		}
-
-		for (int l = (int)merge.size()-1; l > 0; l--) {
-			suspects.erase(suspects.begin() + merge[l]);
-			suspect_regions.erase(suspect_regions.begin() + merge[l]);
-		}
-
-		suspects[merge[0]].second.push_back(j);
-		suspect_regions[merge[0]].insert(suspect_regions[merge[0]].end(), neighbors.begin(), neighbors.end());
-		
-		sort(suspects[merge[0]].second.begin(), suspects[merge[0]].second.end());
-		suspects[merge[0]].second.erase(unique(suspects[merge[0]].second.begin(), suspects[merge[0]].second.end()), suspects[merge[0]].second.end());
-		
-		sort(suspect_regions[merge[0]].begin(), suspect_regions[merge[0]].end());
-		suspect_regions[merge[0]].erase(unique(suspect_regions[merge[0]].begin(), suspect_regions[merge[0]].end()), suspect_regions[merge[0]].end());
-	} else {
-		suspects.push_back(suspect(sense, i, vector<petri::iterator>(1, j)));
-		suspect_regions.push_back(neighbors);
-	}
-}
-
-vector<suspect> encoder::find_suspects(vector<petri::iterator> pos, int sense) {
-	vector<suspect> result;
-	for (auto i = pos.begin(); i != pos.end(); i++) {
-		vector<bool> found(result.size(), false);
-		for (auto j = suspects.begin(); j != suspects.end(); j++) {
-			if (j->sense == sense and find(j->first.begin(), j->first.end(), *i) != j->first.end()) {
-				if (i == pos.begin()) {
-					result.push_back(*j);
-				} else {
-					auto best = result.end();
-					int best_score = 0;
-					for (auto k = result.begin(); k != result.end(); k++) {
-						int score = vector_intersection_size(k->second, j->second);
-						if (score > best_score) {
-							best = k;
-							best_score = score;
-						}
-					}
-
-					if (best != result.end()) {
-						found[best-result.begin()] = true;
-						best->second = vector_intersection(best->second, j->second);
-					}
-				}
-			}
-		}
-
-		for (int j = (int)found.size()-1; j >= 0; j--) {
-			if (not found[j]) {
-				result.erase(result.begin() + j);
-			}
-		}
-	}
-	return result;
-}
-
-void encoder::check(ucs::variable_set &variables, bool senseless, bool report_progress)
+void encoder::check(bool senseless, bool report_progress)
 {
 	//cout << "Computing Parallel Groups" << endl;
 	base->compute_split_groups(parallel);
@@ -217,9 +122,7 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 		return;
 
 	conflict_regions.clear();
-	suspect_regions.clear();
 	conflicts.clear();
-	suspects.clear();
 
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
 	for (auto t0i = base->transitions.begin(); t0i != base->transitions.end(); t0i++) {
@@ -232,27 +135,8 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 		if (t0i->local_action.is_tautology())
 			continue;
 
-		vector<petri::iterator> t0_prev;
-		boolean::cover predicate = base->predicate(t0, &t0_prev);
-		boolean::cover implicant = predicate & t0i->guard;
+		boolean::cover implicant = base->implicant(vector<petri::iterator>(1, t0));
 		vector<petri::iterator> relevant = base->relevant_nodes(vector<petri::iterator>(1, t0));
-
-		for (auto p1 = relevant.begin(); p1 != relevant.end(); p1++) {
-			if (report_progress) {
-				progress("", "T" + ::to_string(t0.index) + "->P" + ::to_string(p1->index), __FILE__, __LINE__);
-			}
-
-			boolean::cover p1_effective = base->effective_implicant(*p1);
-		
-			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
-				// Check the implicant predicate against the other place's effective.
-				// The predicate is used because inserting a state variable
-				// transition will negate any "you might as well be here" effects.
-				if (!are_mutex(implicant.mask(sense), p1_effective)) {
-					add_suspect(vector<petri::iterator>(1, t0), *p1, 1-sense);
-				}
-			}
-		}
 
 		for (int term = 0; term < (int)t0i->local_action.cubes.size(); term++) {
 			boolean::cube action = t0i->local_action.cubes[term];
@@ -260,7 +144,7 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// If we aren't specifically checking senses or this transition affects the senses we are checking
-				if (!senseless && not action.has(sense)) {
+				if (!senseless && not action.has(1-sense)) {
 					continue;
 				}
 
@@ -269,32 +153,14 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 				boolean::cover term_implicant = (implicant & not_action).mask(action.mask()).mask(sense);
 
 				for (auto i = relevant.begin(); i != relevant.end(); i++) {
-					// Get the list of places that are suspect against parallel merges
-					// A place is suspect if making it an implicant for an active transition
-					// could make it a conflict. A parallel merge can end up as a suspect
-					// against individual places at the merge as a result of different
-					// parallel states. This suspect will be replicated with places
-					// outside the parallel merge, so we don't need to include it.
-					//
-					// TODO(edward.bingham) I don't actually think this is necessary. I
-					// think if we take the intersection of the suspects at each place,
-					// we'll get the same result.
-					// if (t0_prev.size() > 1 && !are_mutex(predicate.mask(sense), base->effective_implicant(*i)) and find(t0_prev.begin(), t0_prev.end(), *i) == t0_prev.end()) {
-					// 	add_suspect(t0_prev, *i, 1-sense);
-					// }
-
 					// Get only the state encodings for the place for which the transition is invacuous and
 					// there is no other vacuous transition that would take a token off the place.
-					boolean::cover encoding = base->effective_implicant(*i);
+					boolean::cover encoding = base->effective_implicant(vector<petri::iterator>(1, *i));
 
-					// The implicant states for any actions that would have the same effect as the transition we're checking
-					// can be removed from our check because "it could have fired there anyways"
-					// If all terms cover all of the assignments in t0, then it can't conflict
-					
-					if (t0.index == 14 and i->type == place::type and i->index == 19) {
-						cout << "base encoding" << export_expression(encoding, variables).to_string() << endl;
-					}
-
+					// The implicant states for any actions that would have the same
+					// effect as the transition we're checking can be removed from our
+					// check because "it could have fired there anyways" If all terms
+					// cover all of the assignments in t0, then it can't conflict
 					if (not base->firing_conflicts(*i, term_implicant, action)) {
 						continue;
 					}
@@ -307,38 +173,9 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 
 					// Check if they share a common state encoding given the above checks
 					encoding &= not_action;
-
-					if (t0.index == 14 and i->type == place::type and i->index == 19) {
-						cout << "here " << t0 << " -> " << *i << endl;
-						cout << "term implicant" << export_expression(term_implicant, variables).to_string() << endl;
-						cout << "final encoding" << export_expression(encoding, variables).to_string() << endl;
-					}
-					if (!are_mutex(term_implicant, encoding)) {
+					if (not are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
-				}
-			}
-		}
-	}
-
-	// get the list of places that are suspect against other places
-	for (auto p0 = base->begin(petri::place::type); p0 != base->end(petri::place::type); p0++) {
-		boolean::cover p0_predicate = base->predicate(p0);
-
-		vector<petri::iterator> relevant = base->relevant_nodes(vector<petri::iterator>(1, p0));
-		for (auto p1 = relevant.begin(); p1 != relevant.end(); p1++) {
-			if (report_progress) {
-				progress("", "P" + ::to_string(p0.index) + "->P" + ::to_string(p1->index), __FILE__, __LINE__);
-			}
-
-			boolean::cover p1_effective = base->effective_implicant(*p1);
-		
-			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
-				// Check the implicant predicate against the other place's effective.
-				// The predicate is used because inserting a state variable
-				// transition will negate any "you might as well be here" effects.
-				if (!are_mutex(p0_predicate.mask(sense), p1_effective)) {
-					add_suspect(vector<petri::iterator>(1, p0), *p1, 1-sense);
 				}
 			}
 		}
@@ -350,72 +187,156 @@ void encoder::check(ucs::variable_set &variables, bool senseless, bool report_pr
 
 int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare) {
 	sort(pos.begin(), pos.end());
-	vector<suspect> new_conflicts = find_suspects(pos, sense);
-	
+
+	cout << "score_insertion(sense=" << sense << ", " << to_string(pos) << ")" << endl;
+	// Unfortunately, it is not enough to put new transitions in to disambiguate
+	// states. Inserting those transitions can create new conflicts with those
+	// transitions. The input places of the inserted transition might conflict with
+	// some other region where the state variable needs to have the opposite value.
+	// We can get some understanding of this by comparing the predicates for
+	// various pairs of places. If they are not disambiguated, then they are
+	// considered a state suspect. It means that if we insert a transition that
+	// uses one of these places as an input place, then that transition will also
+	// fire in the other place and that might create a conflict.
+
+	boolean::cover implicant = base->implicant(pos).mask(1-sense);
+	if (implicant.is_null() or base->crosses_reset(pos)) {
+		cout << "null implicant or crosses reset" << endl;
+		return std::numeric_limits<int>::max();
+	}
+
+	vector<petri::iterator> relevant = base->relevant_nodes(pos);
 	int cost = 0;
-	for (auto i = new_conflicts.begin(); i != new_conflicts.end(); i++) {
+	cout << "\treviewing relevant nodes " << to_string(relevant) << endl;
+	for (auto i = relevant.begin(); i != relevant.end(); i++) {
 		// TODO(edward.bingham) I should check state suspects against
 		// previous insertions. I should insert the assignments that are
 		// more certain first.
 
-		cost += not dontcare.covers(i->second);
+		cout << "\t\tlooking at " << *i << " for " << export_expression(implicant, *variables).to_string() << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
+		int conflict = not dontcare.covers(*i) and not are_mutex(implicant, base->effective_implicant(vector<petri::iterator>(1, *i)));
+		if (conflict != 0) {
+			cout << "\t\tfound conflict" ;
+		}
+		cost += conflict;
 	}
 
-	if (pos.size() == 1 and pos[0].type == transition::type) {
-		cost += base->transitions[pos[0].index].local_action.has(sense);
-	} else {
-		vector<petri::iterator> nn = base->next(pos);
-		sort(nn.begin(), nn.end());
-		nn.erase(unique(nn.begin(), nn.end()), nn.end());
-		for (auto i = nn.begin(); i != nn.end(); i++) {
-			cost += base->transitions[i->index].local_action.has(sense);
+	vector<petri::iterator> nn;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == transition::type) {
+			nn.push_back(*i);
+		} else {
+			vector<petri::iterator> n = base->next(*i);
+			nn.insert(nn.end(), n.begin(), n.end());
 		}
 	}
+
+	sort(nn.begin(), nn.end());
+	nn.erase(unique(nn.begin(), nn.end()), nn.end());
+	cout << "\treviewing output nodes " << to_string(nn) << endl;
+	for (auto i = nn.begin(); i != nn.end(); i++) {
+		if (base->transitions[i->index].local_action.has(sense)) {
+			cout << "\t\tfound conflict with output transition " << export_composition(base->transitions[i->index].local_action, *variables).to_string() << endl;
+		}
+		cost += base->transitions[i->index].local_action.has(sense);
+	}
+
+	cout << "done score_insertion() computed cost is " << cost << endl;
 
 	return cost;
 }
 
-int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
-	vector<suspect> new_conflicts = find_suspects(vector<petri::iterator>(1, pos), sense);
+int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result) {
+	// Search all partial states from this insertion for the one that minimizes
+	// the number of new conflicts. I actually know that answer ahead of time
+	// based on the overlap in the set of suspects of the two parallel places and
+	// the sense of the input and output transitions. Pruning the search using
+	// this parameters would make for a very efficient greedy algorithm which is
+	// quadratic time relative to the number of parallel nodes.
 
-	int bestcost = score_insertion(sense, vector<petri::iterator>(1, pos), dontcare);
-	vector<petri::iterator> best(1, pos);
-	//cout << "(" << pos << ", 0) -> " << bestcost << endl;
-
-	vector<petri::iterator> p = base->prev(pos);
-	if (pos.type == transition::type) {
-		if (not base->transitions[pos.index].guard.is_tautology() and p.size() > 1 and dontcare.touches(p)) {
-			int cost = score_insertion(sense, p, dontcare);
-			//cout << "(" << pos << ", -1) -> " << cost << endl;
-			if (cost < bestcost) {
-				bestcost = cost;
-				best = p;
-			}
+	// Identify all parallel nodes (that are in the same process) for partial state creation
+	vector<petri::iterator> para;
+	for (auto p = base->begin(place::type); p != base->end(place::type); p++) {
+		if ((base->is_reachable(pos, p) or base->is_reachable(p, pos)) and base->is(parallel, pos, p)) {
+			para.push_back(p);
 		}
-	} else {
-		for (auto m = p.begin(); m != p.end(); m++) {
-			vector<petri::iterator> n = base->next(*m);
-			if (n.size() > 1) {
-				int cost = score_insertion(sense, n, dontcare);
-				//cout << "(" << *m << ", 1) -> " << cost << endl;
-				if (cost < bestcost) {
-					bestcost = cost;
-					best = n;
-				}		
-			}
+	}
+	for (auto p = base->begin(transition::type); p != base->end(transition::type); p++) {
+		if ((base->is_reachable(pos, p) or base->is_reachable(p, pos)) and base->is(parallel, pos, p)) {
+			para.push_back(p);
 		}
 	}
 
+	vector<petri::iterator> interfering;
+	for (auto i = exclude.begin(); i != exclude.end(); i++) {
+		if (base->is(parallel, *i, pos)) {
+			interfering.push_back(*i);
+		}
+	}
+
+	vector<petri::iterator> best(1, pos);
+	int bestcost = score_insertion(sense, best, dontcare);
+	cout << "starting score_insertion(sense=" << sense << ", pos=" << pos << ") at " << to_string(interfering) << "," << bestcost << " for " << to_string(best) << endl;
+	while (not para.empty() and (not interfering.empty() or bestcost > 0)) {
+		cout << "step" << endl;
+		// Try to pick partial states that aren't in parallel with the exclusion path
+		// Try to pick partial states that minimize the number of new conflicts
+		petri::iterator n;
+		int stepcost = bestcost;
+		vector<petri::iterator> bestremaining = interfering;
+		for (auto p = para.begin(); p != para.end(); p++) {
+			best.push_back(*p);
+
+			vector<petri::iterator> remaining;
+			for (auto i = interfering.begin(); i != interfering.end(); i++) {
+				if (base->is(parallel, vector<petri::iterator>(1, *i), best)) {
+					remaining.push_back(*i);
+				}
+			}
+
+			int cost = score_insertion(sense, best, dontcare);
+			cout << "\t" << to_string(remaining) << "," << cost << " for " << to_string(best) << endl;
+			if (remaining.size() < bestremaining.size() or (remaining.size() == bestremaining.size() and bestcost < stepcost)) {
+				stepcost = cost;
+				n = *p;
+				bestremaining = remaining;
+			}
+			best.pop_back();
+		}	
+
+		if (bestremaining.size() < interfering.size() or (bestremaining.size() == interfering.size() and stepcost < bestcost)) {
+			for (int i = (int)para.size()-1; i >= 0; i--) {
+				if (not base->is(parallel, n, para[i])) {
+					para.erase(para.begin() + i);
+				}
+			}
+
+			best.push_back(n);
+			bestcost = stepcost;
+			interfering = bestremaining;
+		} else {
+			break;
+		}
+	}
+
+	// If it is not possible to make this non-interfering, then we need to
+	// exclude it as an option for state variable insertion.
+	if (not interfering.empty()) {
+		bestcost = std::numeric_limits<int>::max();
+	}
+
+	cout << "done score_insertion() final cost is " << to_string(interfering) << "," << bestcost << " for " << to_string(best) << endl << endl;
+	
 	if (result != nullptr) {
 		result->push_back(best);
 	}
 	return bestcost;
 }
 
-int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
+int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result) {
 	int cost = 0;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
-		cost += score_insertion(sense, *i, dontcare, result);
+		cost += score_insertion(sense, *i, dontcare, exclude, result);
 	}
 	return cost;
 }
@@ -437,8 +358,21 @@ int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petr
 // Asynchronous Circuits and Systems. IEEE, 1996.
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
-void encoder::insert_state_variables(ucs::variable_set &variables) {
+void encoder::insert_state_variables() {
 	// Trace all conflicts
+	for (auto i = base->places.begin(); i != base->places.end(); i++) {
+		cout << "p" << (i-base->places.begin()) << ":" << endl;
+		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			cout << "\t" << j->to_string() << endl;
+		}
+	}
+
+	for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
+		cout << "t" << (i-base->transitions.begin()) << ":" << endl;
+		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			cout << "\t" << j->to_string() << endl;
+		}
+	}
 
 	// index 0 indicates that this state variable transition needs to be downgoing
 	// index 1 indicates that this state variable transition needs to be upgoing
@@ -544,9 +478,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		}
 	}
 
-	// TODO(edward.bingham) I need to make it possible to insert a state
-	// variable transition before/after a parallel split or merge. To me, it
-	// seems the simplest way to do this is to have four insertion classes.
+	// There are four insertion classes.
 	// 1. At a place
 	// 2. At a transition
 	// 3. After a transition
@@ -556,7 +488,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 	// valid if there are multiple inputs/outputs to that transition.
 	// A pair of places will never share *both* an input transition and an
 	// output transition. If so, then we would simply delete one of the two
-	// plces in the post_process() function. This means that we could represent
+	// places in the post_process() function. This means that we could represent
 	// the "before this transition" as a set of input places and the "after
 	// this transition" as a set of output places. This would also allow us to
 	// insert state variables partially before or partially after a parallel
@@ -580,7 +512,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 			++uid;
 			ucs::variable v;
 			v.name.push_back(ucs::instance("v" + ::to_string(uid), vector<int>()));
-			vid = variables.define(v);
+			vid = variables->define(v);
 		}
 
 		array<vector<vector<petri::iterator> >, 2> options;
@@ -600,56 +532,36 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 		// Figure out where to put the state variable transitions
 		for (auto j = options[0].begin(); j != options[0].end(); j++) {
 			for (auto k = options[1].begin(); k != options[1].end(); k++) {
-				// Check for interfering transitions
-				bool interfering = false;
-				for (auto ji = j->begin(); ji != j->end() and not interfering; ji++) {
-					for (auto ki = k->begin(); ki != k->end() and not interfering; ki++) {
-						interfering = base->is(parallel, *ji, *ki);
-					}
-				}
+				// TODO(edward.bingham) This isn't enough. I need to iterate through
+				// all insertions at all partial states. That's a much bigger search
+				// space. So that bit of code that searches the parallel places in
+				// score_insertion() needs to be merged into here. What's happening is
+				// that one place may be in parallel with the other place, suggesting
+				// an interfering transition. However, there exists a pair of partial
+				// states, one for each place, that aren't in parallel. But to be able
+				// to recognize those two states, we need to check them together.
+				petri::path_set v0 = petri::trace(*base, *j, *k, true);
+				petri::path_set v1 = petri::trace(*base, *k, *j, true);
+				cout << "checking up:" << to_string(*k) << "," << v1 << " down:" << to_string(*j) << "," << v0 << endl;
 
-				if (not interfering) {
-					petri::path_set v0 = petri::trace(*base, *j, *k, true);
-					petri::path_set v1 = petri::trace(*base, *k, *j, true);
-
-					// check each transition against suspects and generate a score
-					// find the pair with the best score.
-
-					// TODO(edward.bingham) search all partial states from this
-					// insertion for the one that minimizes the number of new conflicts.
-					// I actually know that answer ahead of time based on the overlap in
-					// the set of suspects of the two parallel places and the sense of
-					// the input and output transitions. Pruning the search using this
-					// parameters would make for a very efficient greedy algorithm which
-					// is quadratic time relative to the number of parallel nodes. The
-					// only problem with this approach is that it requires that I use
-					// petri::insert_at() which ends up removing places. Those removed
-					// places would have been used in other overlapping insertions.
-					// Step 1: Tackle the insert_at() approach
-					//   * I could keep all of the redundant places until after all of
-					//     the state variable insertions have been done, then do a
-					//     search for redundant places and remove them. This would
-					//     maintain the indices and structure needed for the other state
-					//     variable insertions.
-					//   * As I execute overalapping insertions, I need to add all newly
-					//     redundant places into the next insertion. See page 228 of my
-					//     "circuits" notebook.
-					// Step 2: Partial state searching 
-					array<vector<vector<petri::iterator> >, 2> curr;
-					int cost = score_insertions(1, *k, v1, &curr[1])
-						+ score_insertions(0, *j, v0, &curr[0]);
-					if (min_cost < 0 or cost < min_cost) {
-						min_cost = cost;
-						best = curr;
-						colorings[0] = v0;
-						colorings[1] = v1;
-					}
+				// check each transition against suspects and generate a score
+				// find the pair with the best score.
+				array<vector<vector<petri::iterator> >, 2> curr;
+				int cost = score_insertions(1, *k, v1, *j, &curr[1])
+					+ score_insertions(0, *j, v0, *k, &curr[0]);
+				cout << "final cost is " << cost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+				if (min_cost < 0 or cost < min_cost) {
+					min_cost = cost;
+					best = curr;
+					colorings[0] = v0;
+					colorings[1] = v1;
 				}
 			}
 		}
 
 		for (int j = 0; j < 2; j++) {
 			for (auto k = best[j].begin(); k != best[j].end(); k++) {
+				*k = base->add_redundant(*k);
 				cout << "Adding (" << to_string(*k) << endl;
 				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
@@ -780,7 +692,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				vector<petri::iterator> pos = base->duplicate(
 						petri::parallel, 
 						base->insert_at(
-							base->add_redundant(group->first),
+							group->first, //base->add_redundant(group->first),
 							transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
 						),
 						group->second[1-sense].size(),
@@ -790,7 +702,7 @@ void encoder::insert_state_variables(ucs::variable_set &variables) {
 				auto j = pos.begin();
 				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {
 					base->transitions[j->index].local_action = boolean::cover(*i, 1-sense);
-					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(variables.get_groups());
+					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(variables->get_groups());
 				}
 			}
 			sense = 1-sense;

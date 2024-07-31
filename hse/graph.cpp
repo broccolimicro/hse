@@ -145,22 +145,21 @@ boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
 }
 
-boolean::cover graph::predicate(petri::iterator i, vector<petri::iterator> *prev) const
-{
-	if (i.type == petri::place::type) {
-		return places[i.index].predicate;
-	}
-	
-	boolean::cover pred = 1;
-	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
-		if (arc->to.index == i.index) {
-			pred &= places[arc->from.index].predicate;
-			if (prev != nullptr) {
-				prev->push_back(arc->from);
+boolean::cover graph::predicate(vector<petri::iterator> pos) const {
+	boolean::cover result = 1;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == petri::place::type) {
+			result &= places[i->index].predicate;
+		} else {
+			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
+				if (arc->to.index == i->index) {
+					result &= places[arc->from.index].predicate;
+				}
 			}
 		}
 	}
-	return pred;
+	
+	return result;
 }
 
 boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev) const
@@ -197,49 +196,44 @@ bool graph::firing_conflicts(petri::iterator i, boolean::cover term_implicant, b
 	return not other.is_subset_of(action);
 }
 
-boolean::cover graph::implicant(petri::iterator i, vector<petri::iterator> *prev) const
-{
-	if (i.type == petri::place::type) {
-		return places[i.index].predicate;
-	}
-	
-	boolean::cover pred = 1;
-	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
-		if (arc->to.index == i.index) {
-			pred &= places[arc->from.index].predicate;
-			if (prev != nullptr) {
-				prev->push_back(arc->from);
+boolean::cover graph::implicant(vector<petri::iterator> pos) const {
+	boolean::cover result = 1;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == petri::place::type) {
+			result &= places[i->index].predicate;
+		} else {
+			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
+				if (arc->to.index == i->index) {
+					result &= places[arc->from.index].predicate;
+				}
 			}
+			result &= transitions[i->index].guard;
 		}
 	}
-	pred &= transitions[i.index].guard;
-	return pred;
+	
+	return result;
 }
 
-boolean::cover graph::effective_implicant(petri::iterator i, vector<petri::iterator> *prev) const
-{
-	if (i.type == petri::place::type) {
-		//return places[i.index].effective;
-		boolean::cover pred = places[i.index].predicate;
-		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
-			if (arc->from.index == i.index) {
-				pred &= ~transitions[arc->to.index].guard;
+boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
+	boolean::cover result = 1;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == petri::place::type) {
+			result &= places[i->index].predicate;
+			for (auto arc = arcs[i->type].begin(); arc != arcs[i->type].end(); arc++) {
+				if (arc->from.index == i->index) {
+					result &= ~transitions[arc->to.index].guard;
+				}
 			}
-		}
-		return pred;
-	}
-	
-	boolean::cover pred = 1;
-	for (auto arc = arcs[1-i.type].begin(); arc != arcs[1-i.type].end(); arc++) {
-		if (arc->to.index == i.index) {
-			pred &= places[arc->from.index].predicate;
-			if (prev != nullptr) {
-				prev->push_back(arc->from);
+		} else {
+			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
+				if (arc->to.index == i->index) {
+					result &= places[arc->from.index].predicate;
+				}
 			}
+			result &= transitions[i->index].guard & ~transitions[i->index].local_action;
 		}
 	}
-	pred &= transitions[i.index].guard & ~transitions[i.index].local_action;
-	return pred;
+	return result;
 }
 
 // assumes all vector<int> inputs are sorted
@@ -552,22 +546,21 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		// and they aren't forced to be mutually exclusive by an arbiter
 	
 		bool relevant = false;
-		for (int i = 0; i < (int)curr.size() && !relevant; i++) {
-			relevant = (is_reachable(curr[i], j) || is_reachable(j, curr[i]));
+		for (int i = 0; i < (int)curr.size() and not relevant; i++) {
+			relevant = (is_reachable(curr[i], j) or is_reachable(j, curr[i]));
 		}
 
-		for (int i = 0; i < (int)curr.size() && relevant; i++) {
-			relevant = (j != curr[i] &&
-					!is(parallel, j, curr[i]) &&
-					!common_arbiter(curr[i], j));
+		for (int i = 0; i < (int)curr.size() and relevant; i++) {
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
 		}
+
+		relevant = relevant and not is(parallel, vector<petri::iterator>(1, j), curr);
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[transition::type].size() and curr[i].type == transition::type and relevant; k++) {
 				relevant = (arcs[transition::type][k].from.index != curr[i].index or arcs[transition::type][k].to.index != j.index);
 			}
 		}
-
 
 		if (relevant) {
 			result.push_back(j);
@@ -580,15 +573,15 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		// and its not in parallel with the transition we're checking,
 		// and they aren't forced to be mutually exclusive by an arbiter
 		bool relevant = false;
-		for (int i = 0; i < (int)curr.size() && !relevant; i++) {
-			relevant = (is_reachable(curr[i], j) || is_reachable(j, curr[i]));
+		for (int i = 0; i < (int)curr.size() and not relevant; i++) {
+			relevant = (is_reachable(curr[i], j) or is_reachable(j, curr[i]));
 		}
 
-		for (int i = 0; i < (int)curr.size() && relevant; i++) {
-			relevant = (j != curr[i] &&
-					!is(parallel, j, curr[i]) &&
-					!common_arbiter(curr[i], j));
+		for (int i = 0; i < (int)curr.size() and relevant; i++) {
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
 		}
+		
+		relevant = relevant and not is(parallel, vector<petri::iterator>(1, j), curr);
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[place::type].size() and curr[i].type == place::type and relevant; k++) {

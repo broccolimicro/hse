@@ -57,75 +57,36 @@ struct conflict
 	vector<petri::iterator> region;
 };
 
-// Unfortunately, it is not enough to put new transitions in to disambiguate
-// states. Inserting those transitions can create new conflicts with those
-// transitions. The input places of the inserted transition might conflict with
-// some other region where the state variable needs to have the opposite value.
-// We can get some understanding of this by comparing the predicates for
-// various pairs of places. If they are not disambiguated, then they are
-// considered a state suspect. It means that if we insert a transition that
-// uses one of these places as an input place, then that transition will also
-// fire in the other place and that might create a conflict.
-struct suspect
-{
-	suspect();
-	suspect(int sense, vector<petri::iterator> first, vector<petri::iterator> second);
-	~suspect();
-
-	enum {
-		// a non-directional conflict ignores the fact that CMOS logic is inverting
-		// and uses all of the state information in the predicates of the two
-		// places to determine whether they are sufficiently disambiguated.
-		NONE = -1,
-		// a downgoing conflict ignores all inverted literals in the predicates of
-		// the two places.
-		DOWN = 0,
-		// an upgoing conflict ignores all non-inverted literals in the predicates
-		// of the two places.
-		UP = 1
-	};
-	int sense;
-	vector<petri::iterator> first;
-	vector<petri::iterator> second;
-};
-
 // This structure is responsible for checking an HSE for conflicts and then
 // solving those conflicts with state-variable insertion.
 struct encoder
 {
 	encoder();
-	encoder(graph *base);
+	encoder(graph *base, ucs::variable_set *variables);
 	~encoder();
 
 	graph *base;
+	ucs::variable_set *variables;
 
-	// conflict_regions is like conflict::region and suspect_regions is list
-	// suspect::first and suspect::second except that it includes all of the
-	// neighboring nodes so that we can check for intersection to make clustering
-	// easier. These two members are only to be used by the add_conflict() and
-	// add_suspect() functions. In a way, they are just temporary variables.
+	// conflict_regions is like conflict::region except that it includes all of
+	// the neighboring nodes so that we can check for intersection to make
+	// clustering easier. These two members are only to be used by the
+	// add_conflict() function. In a way, they are just temporary variables.
 	vector<vector<petri::iterator> > conflict_regions;
-	vector<vector<petri::iterator> > suspect_regions;
 
 	// The list of conflicts found in the HSE by check().
 	vector<conflict> conflicts;
 
-	// The list of suspects found in the HSE by check().
-	vector<suspect> suspects;
-
 
 	void add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding);
-	void add_suspect(vector<petri::iterator> i, petri::iterator j, int sense);
 
-	vector<suspect> find_suspects(vector<petri::iterator> pos, int sense);
-
-	void check(ucs::variable_set &variables, bool senseless = false, bool report_progress = false);
+	void check(bool senseless = false, bool report_progress = false);
 
 	int score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare);
-	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
-	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
+	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result);
+	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result);
 
-	void insert_state_variables(ucs::variable_set &variables);
+	void insert_state_variables();
 };
 
 }
