@@ -83,8 +83,8 @@ struct encoder
 	void check(bool senseless = false, bool report_progress = false);
 
 	int score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare);
-	int score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result);
-	int score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result);
+	int find_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
+	int find_insertions(int sense, vector<vector<petri::iterator> > pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
 
 	void insert_state_variables();
 };

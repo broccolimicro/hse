@@ -246,7 +246,7 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 	return cost;
 }
 
-int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result) {
+int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
 	// Search all partial states from this insertion for the one that minimizes
 	// the number of new conflicts. I actually know that answer ahead of time
 	// based on the overlap in the set of suspects of the two parallel places and
@@ -256,55 +256,36 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 
 	// Identify all parallel nodes (that are in the same process) for partial state creation
 	vector<petri::iterator> para;
-	for (auto p = base->begin(place::type); p != base->end(place::type); p++) {
-		if ((base->is_reachable(pos, p) or base->is_reachable(p, pos)) and base->is(parallel, pos, p)) {
-			para.push_back(p);
-		}
-	}
-	for (auto p = base->begin(transition::type); p != base->end(transition::type); p++) {
-		if ((base->is_reachable(pos, p) or base->is_reachable(p, pos)) and base->is(parallel, pos, p)) {
-			para.push_back(p);
+	for (int type = 0; type < 2; type++) {
+		for (auto p = base->begin(type); p != base->end(type); p++) {
+			if ((base->is_reachable(pos, vector<petri::iterator>(1, p)) or base->is_reachable(vector<petri::iterator>(1, p), pos)) and base->is(parallel, pos, vector<petri::iterator>(1, p))) {
+				para.push_back(p);
+			}
 		}
 	}
 
-	vector<petri::iterator> interfering;
-	for (auto i = exclude.begin(); i != exclude.end(); i++) {
-		if (base->is(parallel, *i, pos)) {
-			interfering.push_back(*i);
-		}
-	}
-
-	vector<petri::iterator> best(1, pos);
+	vector<petri::iterator> best = pos;
 	int bestcost = score_insertion(sense, best, dontcare);
-	cout << "starting score_insertion(sense=" << sense << ", pos=" << pos << ") at " << to_string(interfering) << "," << bestcost << " for " << to_string(best) << endl;
-	while (not para.empty() and (not interfering.empty() or bestcost > 0)) {
+	cout << "starting find_insertion(sense=" << sense << ", pos=" << to_string(pos) << ") at " << bestcost << " for " << to_string(best) << endl;
+	while (not para.empty() and bestcost > 0) {
 		cout << "step" << endl;
 		// Try to pick partial states that aren't in parallel with the exclusion path
 		// Try to pick partial states that minimize the number of new conflicts
 		petri::iterator n;
 		int stepcost = bestcost;
-		vector<petri::iterator> bestremaining = interfering;
 		for (auto p = para.begin(); p != para.end(); p++) {
 			best.push_back(*p);
 
-			vector<petri::iterator> remaining;
-			for (auto i = interfering.begin(); i != interfering.end(); i++) {
-				if (base->is(parallel, vector<petri::iterator>(1, *i), best)) {
-					remaining.push_back(*i);
-				}
-			}
-
 			int cost = score_insertion(sense, best, dontcare);
-			cout << "\t" << to_string(remaining) << "," << cost << " for " << to_string(best) << endl;
-			if (remaining.size() < bestremaining.size() or (remaining.size() == bestremaining.size() and bestcost < stepcost)) {
+			cout << "\t" << cost << " for " << to_string(best) << endl;
+			if (bestcost < stepcost) {
 				stepcost = cost;
 				n = *p;
-				bestremaining = remaining;
 			}
 			best.pop_back();
 		}	
 
-		if (bestremaining.size() < interfering.size() or (bestremaining.size() == interfering.size() and stepcost < bestcost)) {
+		if (stepcost < bestcost) {
 			for (int i = (int)para.size()-1; i >= 0; i--) {
 				if (not base->is(parallel, n, para[i])) {
 					para.erase(para.begin() + i);
@@ -313,19 +294,12 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 
 			best.push_back(n);
 			bestcost = stepcost;
-			interfering = bestremaining;
 		} else {
 			break;
 		}
 	}
 
-	// If it is not possible to make this non-interfering, then we need to
-	// exclude it as an option for state variable insertion.
-	if (not interfering.empty()) {
-		bestcost = std::numeric_limits<int>::max();
-	}
-
-	cout << "done score_insertion() final cost is " << to_string(interfering) << "," << bestcost << " for " << to_string(best) << endl << endl;
+	cout << "done find_insertion() final cost is " << bestcost << " for " << to_string(best) << endl << endl;
 	
 	if (result != nullptr) {
 		result->push_back(best);
@@ -333,14 +307,13 @@ int encoder::score_insertion(int sense, petri::iterator pos, const petri::path_s
 	return bestcost;
 }
 
-int encoder::score_insertions(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, const vector<petri::iterator> &exclude, vector<vector<petri::iterator> > *result) {
+int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
 	int cost = 0;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
-		cost += score_insertion(sense, *i, dontcare, exclude, result);
+		cost += find_insertion(sense, *i, dontcare, result);
 	}
 	return cost;
 }
-
 
 // TODO State Variable Insertion
 //
@@ -389,14 +362,14 @@ void encoder::insert_state_variables() {
 		if (conflicts[i].sense == conflict::UP) {
 			problems.push_back(CodingProblem{
 				base->term(conflicts[i].index).mask(conflict::DOWN), {
-				petri::trace(*base, to, from),
-				petri::trace(*base, from, to)
+				petri::trace(*base, base->select(parallel, to), from),
+				petri::trace(*base, base->select(parallel, from), to)
 			}});
 		} else {
 			problems.push_back(CodingProblem{
 				base->term(conflicts[i].index).mask(conflict::UP), {
-				petri::trace(*base, from, to),
-				petri::trace(*base, to, from)
+				petri::trace(*base, base->select(parallel, from), to),
+				petri::trace(*base, base->select(parallel, to), from)
 			}});
 		}
 
@@ -532,29 +505,32 @@ void encoder::insert_state_variables() {
 		// Figure out where to put the state variable transitions
 		for (auto j = options[0].begin(); j != options[0].end(); j++) {
 			for (auto k = options[1].begin(); k != options[1].end(); k++) {
-				// TODO(edward.bingham) This isn't enough. I need to iterate through
-				// all insertions at all partial states. That's a much bigger search
-				// space. So that bit of code that searches the parallel places in
-				// score_insertion() needs to be merged into here. What's happening is
-				// that one place may be in parallel with the other place, suggesting
-				// an interfering transition. However, there exists a pair of partial
-				// states, one for each place, that aren't in parallel. But to be able
-				// to recognize those two states, we need to check them together.
-				petri::path_set v0 = petri::trace(*base, *j, *k, true);
-				petri::path_set v1 = petri::trace(*base, *k, *j, true);
-				cout << "checking up:" << to_string(*k) << "," << v1 << " down:" << to_string(*j) << "," << v0 << endl;
+				auto insertions = base->deinterfere_choice(*j, *k);
+				for (auto it = insertions.begin(); it != insertions.end(); it++) {
+					// TODO(edward.bingham) This isn't enough. I need to iterate through
+					// all insertions at all partial states. That's a much bigger search
+					// space. So that bit of code that searches the parallel places in
+					// score_insertion() needs to be merged into here. What's happening is
+					// that one place may be in parallel with the other place, suggesting
+					// an interfering transition. However, there exists a pair of partial
+					// states, one for each place, that aren't in parallel. But to be able
+					// to recognize those two states, we need to check them together.
+					petri::path_set v0 = petri::trace(*base, (*it)[0], base->deselect((*it)[1]), true);
+					petri::path_set v1 = petri::trace(*base, (*it)[1], base->deselect((*it)[0]), true);
+					cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
 
-				// check each transition against suspects and generate a score
-				// find the pair with the best score.
-				array<vector<vector<petri::iterator> >, 2> curr;
-				int cost = score_insertions(1, *k, v1, *j, &curr[1])
-					+ score_insertions(0, *j, v0, *k, &curr[0]);
-				cout << "final cost is " << cost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
-				if (min_cost < 0 or cost < min_cost) {
-					min_cost = cost;
-					best = curr;
-					colorings[0] = v0;
-					colorings[1] = v1;
+					// check each transition against suspects and generate a score
+					// find the pair with the best score.
+					array<vector<vector<petri::iterator> >, 2> curr;
+					int cost = find_insertions(1, (*it)[1], v1, &curr[1])
+					         + find_insertions(0, (*it)[0], v0, &curr[0]);
+					cout << "final cost is " << cost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+					if (min_cost < 0 or cost < min_cost) {
+						min_cost = cost;
+						best = curr;
+						colorings[0] = v0;
+						colorings[1] = v1;
+					}
 				}
 			}
 		}
