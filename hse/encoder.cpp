@@ -451,11 +451,12 @@ void encoder::insert_state_variables() {
 		}
 	}
 
-	// There are four insertion classes.
+	// TODO(edward.bingham) There should be five insertion classes.
 	// 1. At a place
 	// 2. At a transition
 	// 3. After a transition
 	// 4. Before a transition
+	// 5. In parallel with a transition
 	// However, certain places will overlap with insertions before or after a
 	// transition. So the insertions before or after transition may only be
 	// valid if there are multiple inputs/outputs to that transition.
@@ -466,6 +467,14 @@ void encoder::insert_state_variables() {
 	// this transition" as a set of output places. This would also allow us to
 	// insert state variables partially before or partially after a parallel
 	// split.
+
+	// TODO(edward.bingham) I need to insert each state variable one at a time
+	// and update the state space between each new insertion so that subsequent
+	// state variable insertions will have more accurate information about
+	// potential state suspects. Is it possible to sufficiently update the state
+	// space without re-running the full simulation? Doing this will prevent
+	// symmetic state variable insertions on symmetric state encoding problems
+	// that recreate the original state encoding problem.
 
 	// assign[location of state variable insertion][direction of assignment] = {variable uids}
 	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
@@ -505,16 +514,13 @@ void encoder::insert_state_variables() {
 		// Figure out where to put the state variable transitions
 		for (auto j = options[0].begin(); j != options[0].end(); j++) {
 			for (auto k = options[1].begin(); k != options[1].end(); k++) {
+				// What's happening is that one place may be in parallel with the
+				// other place, suggesting an interfering transition. However, there
+				// exists a pair of partial states, one for each place, that aren't
+				// in parallel. But to be able to recognize those two states, we need
+				// to check them together.
 				auto insertions = base->deinterfere_choice(*j, *k);
 				for (auto it = insertions.begin(); it != insertions.end(); it++) {
-					// TODO(edward.bingham) This isn't enough. I need to iterate through
-					// all insertions at all partial states. That's a much bigger search
-					// space. So that bit of code that searches the parallel places in
-					// score_insertion() needs to be merged into here. What's happening is
-					// that one place may be in parallel with the other place, suggesting
-					// an interfering transition. However, there exists a pair of partial
-					// states, one for each place, that aren't in parallel. But to be able
-					// to recognize those two states, we need to check them together.
 					petri::path_set v0 = petri::trace(*base, (*it)[0], base->deselect((*it)[1]), true);
 					petri::path_set v1 = petri::trace(*base, (*it)[1], base->deselect((*it)[0]), true);
 					cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
