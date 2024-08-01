@@ -202,7 +202,7 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 	boolean::cover implicant = base->implicant(pos).mask(1-sense);
 	if (implicant.is_null() or base->crosses_reset(pos)) {
 		cout << "null implicant or crosses reset" << endl;
-		return std::numeric_limits<int>::max();
+		return -1;
 	}
 
 	vector<petri::iterator> relevant = base->relevant_nodes(pos);
@@ -278,14 +278,14 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 
 			int cost = score_insertion(sense, best, dontcare);
 			cout << "\t" << cost << " for " << to_string(best) << endl;
-			if (bestcost < stepcost) {
+			if (cost >= 0 and (stepcost < 0 or cost < stepcost)) {
 				stepcost = cost;
 				n = *p;
 			}
 			best.pop_back();
 		}	
 
-		if (stepcost < bestcost) {
+		if (stepcost >= 0 and (bestcost < 0 or stepcost < bestcost)) {
 			for (int i = (int)para.size()-1; i >= 0; i--) {
 				if (not base->is(parallel, n, para[i])) {
 					para.erase(para.begin() + i);
@@ -308,11 +308,15 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 }
 
 int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
-	int cost = 0;
+	int total = 0;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
-		cost += find_insertion(sense, *i, dontcare, result);
+		int cost = find_insertion(sense, *i, dontcare, result);
+		if (cost < 0) {
+			return -1;
+		}
+		total += cost;
 	}
-	return cost;
+	return total;
 }
 
 // TODO State Variable Insertion
@@ -528,17 +532,21 @@ void encoder::insert_state_variables() {
 					// check each transition against suspects and generate a score
 					// find the pair with the best score.
 					array<vector<vector<petri::iterator> >, 2> curr;
-					int cost = find_insertions(1, (*it)[1], v1, &curr[1])
-					         + find_insertions(0, (*it)[0], v0, &curr[0]);
-					cout << "final cost is " << cost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
-					if (min_cost < 0 or cost < min_cost) {
-						min_cost = cost;
+					int upcost = find_insertions(1, (*it)[1], v1, &curr[1]);
+					int dncost = find_insertions(0, (*it)[0], v0, &curr[0]);
+					cout << "final cost is " << upcost << "+" << dncost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+					if (upcost >= 0 and dncost >= 0 and (min_cost < 0 or upcost+dncost < min_cost)) {
+						min_cost = upcost+dncost;
 						best = curr;
 						colorings[0] = v0;
 						colorings[1] = v1;
 					}
 				}
 			}
+		}
+
+		if (min_cost < 0) {
+			cout << "error: failed to find solution" << endl;
 		}
 
 		for (int j = 0; j < 2; j++) {
