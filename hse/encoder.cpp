@@ -571,6 +571,9 @@ void encoder::insert_state_variables() {
 				// we should be removing all redundant nodes in between each step, we
 				// should never need to add redundant nodes to the insertion because
 				// there shouldn't be any.
+				// Although, once we can support inserting before and after nodes, then
+				// we can tune the add_redundant() function to ensure the result doesn't
+				// cross reset.
 				//*k = base->add_redundant(*k);
 				cout << "Adding (" << to_string(*k) << endl;
 				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
