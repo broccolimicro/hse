@@ -142,6 +142,8 @@ void encoder::check(bool senseless, bool report_progress)
 			boolean::cube action = t0i->local_action.cubes[term];
 			boolean::cover not_action = ~action;
 
+			//cout << "checking " << t0 << " " << export_expression(implicant, *variables).to_string() << " " << to_string(relevant) << " -> " << export_composition(action, *variables).to_string() << endl;
+
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// If we aren't specifically checking senses or this transition affects the senses we are checking
 				if (!senseless && not action.has(1-sense)) {
@@ -151,19 +153,18 @@ void encoder::check(bool senseless, bool report_progress)
 				// we cannot use the variables affected by the transitions in their rules because that would
 				// make the rules self-invalidating, so we have to mask them out.
 				boolean::cover term_implicant = (implicant & not_action).mask(action.mask()).mask(sense);
+				//cout << "\tterm_implicant " << export_expression(term_implicant, *variables).to_string() << endl;
 
 				for (auto i = relevant.begin(); i != relevant.end(); i++) {
 					// Get only the state encodings for the place for which the transition is invacuous and
 					// there is no other vacuous transition that would take a token off the place.
 					boolean::cover encoding = base->effective_implicant(vector<petri::iterator>(1, *i));
+					//cout << "\t against " << *i << " " << export_expression(encoding, *variables).to_string() << endl;
 
 					// The implicant states for any actions that would have the same
 					// effect as the transition we're checking can be removed from our
 					// check because "it could have fired there anyways" If all terms
 					// cover all of the assignments in t0, then it can't conflict
-					if (not base->firing_conflicts(*i, term_implicant, action)) {
-						continue;
-					}
 
 					// The state encodings for the implicant set of states of the transition.
 					// these are the state encodings for which there is no vacuous transition that would
@@ -172,7 +173,8 @@ void encoder::check(bool senseless, bool report_progress)
 					// there is no other vacuous transition that would take a token off the place.
 
 					// Check if they share a common state encoding given the above checks
-					encoding &= not_action;
+					encoding = base->filter_vacuous(*i, encoding, action);
+					//cout << "\t final encoding " << export_expression(encoding, *variables).to_string() << endl;
 					if (not are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}

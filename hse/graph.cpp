@@ -181,19 +181,40 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 	return pred;
 }
 
-bool graph::firing_conflicts(petri::iterator i, boolean::cover term_implicant, boolean::cube action) const
+boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const
 {
-	boolean::cube other;
+	// I need to select encodings that are either affected by a transition that
+	// wouldn't otherwise happen, or that enable an interfering transition.
+	// action is not vacuous and action is not covered by equal actions in the output transition
+	// or action conflicts with opposing actions in the output transition
 	if (i.type == petri::transition::type) {
-		other = transitions[i.index].local_action.subcube();
-	} else {
-		for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
-			if (arc->from.index == i.index and transitions[arc->to.index].guard.is_tautology()) {
-				other &= transitions[arc->to.index].local_action.subcube();
-			}
+		// No guards to contend with for transitions
+		boolean::cube other = transitions[i.index].local_action.subcube();
+		if (interfere(action, other).is_null()) {
+			// First, check if action conflicts with opposing actions in the output transition
+			// if so, then return all encodings
+			return encoding;
+		}
+
+		if (other.is_subset_of(action)) {
+			// Then, check if action is covered by equal actions in the output transition
+			// if so, then return no encodings
+			return boolean::cover(0);
+		}
+		
+		// Then, filter out all encodings for which action is vacuous by anding against not_action
+		return encoding & ~action;
+	}
+
+	boolean::cover result(0);
+	// This is a place, so we need to check all of the output transitions
+	for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
+		if (arc->from.index == i.index) {
+			boolean::cover predicate = encoding & transitions[arc->to.index].guard;
+			result |= filter_vacuous(arc->to, predicate, action);
 		}
 	}
-	return not other.is_subset_of(action);
+	return result;
 }
 
 boolean::cover graph::implicant(vector<petri::iterator> pos) const {
