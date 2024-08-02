@@ -459,11 +459,11 @@ void encoder::insert_state_variables() {
 	}
 
 	// TODO(edward.bingham) There should be five insertion classes.
-	// 1. At a place
-	// 2. At a transition
-	// 3. After a transition
-	// 4. Before a transition
-	// 5. In parallel with a transition
+	// 1. at a place
+	// 2. at a transition
+	// 3. after a transition
+	// 4. before a transition
+	// 5. in parallel with a transition
 	// However, certain places will overlap with insertions before or after a
 	// transition. So the insertions before or after transition may only be
 	// valid if there are multiple inputs/outputs to that transition.
@@ -482,6 +482,14 @@ void encoder::insert_state_variables() {
 	// space without re-running the full simulation? Doing this will prevent
 	// symmetic state variable insertions on symmetric state encoding problems
 	// that recreate the original state encoding problem.
+
+	// TODO(edward.bingham) Part two of the previous todo is that when inserting
+	// multiple state variables at a time, it is possible to insert them such
+	// that their predicate states cross, creating a cyclic dependency that
+	// induces deadlock. If we insert state variables one at a time, then this is
+	// no longer possible. If we continue to insert multiple state variables per
+	// cycle, then we need to find some way to identify crossed insertions and
+	// rule out those insertions as a possibility.
 
 	// assign[location of state variable insertion][direction of assignment] = {variable uids}
 	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
@@ -725,7 +733,61 @@ void encoder::insert_state_variables() {
 	base->source = base->reset;
 
 	// TODO(edward.bingham) Update the predicate space and conflicts without
-	// resimulating the whole state space.
+	// re-elaborating the whole state space. This is not required, it is an
+	// optimization. Also, how do I prove that I have identified all of the
+	// possible effects and covered them in my update function? Interactions
+	// between non-properly nested parallel and conditional branches can get
+	// quite complex.
+	//
+	// When inserting transitions, a couple of things can happen.
+	// 1. There is a new variable in the handshake with assignments who's effect
+	// should propagate down stream.
+	//    a. If that assignment is on a branch of a conditional, then we need to
+	//    correctly propagate its effects to only the encodings that belong to
+	//    that conditional.
+	//
+	//    b. Maybe we could annotate the encoding with a special variable that
+	//    indicates which branch of which conditional that encoding came from?
+	//    How does that annotation get removed? Same way the effects of a
+	//    transition in a conditional branch is eventually removed - boolean
+	//    expression simplification. given a pair of branches [1->a+:1->b+], we'd
+	//    end up with a&b0|b&b1 (would be a|b without the annotations) in the
+	//    output place. Then the next transition sets a-,b-. Our encoding would
+	//    become ~a&~b&(b0|b1)... That doesn't quit work. What if we set up a raw
+	//    binary encoding for the branches and then OR in any illegal values of
+	//    that encoding? [1->a+:1->b+:1->c+], we'd get
+	//    a&(~b0&~b1|b0&b1)|b&(b0&~b1|b0&b1)|c&(~b0&b1|b0&b1) which simplifies to
+	//    a&(~b0&~b1|b0&b1)|b&b0|c&b1. Then on the next transition a-,b-,c-, we'd
+	//    get ~a&~b&~c&(~b0&~b1|b0&b1)|~a&~b&~c&b0|~a&~b&~c&b1 which simplifies
+	//    to ~a&~b&~c&(~b0&~b1|b0&b1|b0|b1) which simplifies to ~a&~b&~c.
+	// 2. A new transition can remove parallelism from the handshake. This means
+	// that we end up eliminating states from the state graph.
+	//    a. Maybe we could take advantage of this to implement handshake
+	//    reshuffling at the same time that we are executing state variable
+	//    insertion? Or do we want to prevent that and split up those two stages?
+	//    Given that both stages are about eliminating conflicts in the HSE and
+	//    both stages are interdependent, then it stands to reason that handshake
+	//    reshuffling and state variable insertion are actually the same process.
+	//    We'd need to run automatic parallelization algorithms given knowledge
+	//    about event timings to ensure that we have the most parallel possible
+	//    implementation before starting. Or do we leave that responsibility up
+	//    to the designer/CHP compiler system? If a person writes a particular
+	//    HSE with a particular amount of parallelism, then the assumption is
+	//    that they indended to write in those handshake limitations. Don't try
+	//    to guess when the designer wanted. We need to build in an understanding
+	//    of how that sequencing will affect conflicts (and cycle time, energy,
+	//    etc) downstream so that we can either prioritize or deprioritize them
+	//    in the heuristic... How?
+	//
+	//    b. So how do we go about removing encodings now that we know certain
+	//    parallel states no longer exist? We have to identify the set of partial
+	//    states that we can guarantee have been eliminated from the handshake.
+	//    Then we determine the predicate represented by each of those states,
+	//    and then AND out that predicate from each of those places. So, how do
+	//    we identify a partial state that is no longer in the handshake? For
+	//    each place in the handshake that is in sequence with the insertion, we
+	//    determine if it is sequenced before or after the insertion. Then we
+	//    identify all partial states that cross that insertion.
 }
 
 }
