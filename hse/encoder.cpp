@@ -146,7 +146,7 @@ void encoder::check(bool senseless, bool report_progress)
 
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// If we aren't specifically checking senses or this transition affects the senses we are checking
-				if (!senseless && not action.has(1-sense)) {
+				if (not senseless and not action.has(1-sense)) {
 					continue;
 				}
 
@@ -379,9 +379,12 @@ void encoder::insert_state_variables() {
 			}});
 		}
 
-		// Remove vacuous traces
 		// DESIGN(edward.bingham) There is guaranteed to be exactly one path set in
 		// each of the trace lists for each coding problem by construction.
+		// Remove vacuous traces - Given a conflict, we know that there
+		// is a transition that fires where it shouldn't. Every path for
+		// that conflict must cross an opposing transition or the firing
+		// is vacuous and therefore we don't have to cut that path.
 		for (auto j = problems.back().traces[1-conflicts[i].sense].paths.begin(); j != problems.back().traces[1-conflicts[i].sense].paths.end(); ) {
 			bool found = false;
 			for (auto t = base->begin(transition::type); t != base->end(transition::type); t++) {
@@ -433,10 +436,8 @@ void encoder::insert_state_variables() {
 	//    elimination/reduction of type 2 mergibility. This gives us more options
 	//    for where to place the state variable transition to solve the encoding
 	//    problem.
-	//
-	// Search and Solve:
-	//
-	// 1. 
+
+
 	// Cluster those traces
 	for (int i = (int)problems.size()-1; i >= 0; i--) {
 		for (int j = i-1; j >= 0; j--) {
@@ -717,6 +718,8 @@ void encoder::insert_state_variables() {
 
 
 	//printf("done insert state variables\n");
+	// TODO(edward.bingham) There seems to be a bug in identifying redundant
+	// states, but I can't seem to pin it down.
 	base->erase_redundant();
 	base->update_masks();
 	base->source = base->reset;
