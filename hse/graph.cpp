@@ -206,14 +206,21 @@ boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding,
 		return encoding & ~action;
 	}
 
+	// TODO(edward.bingham) This currently filters out the input places to the
+	// action being tested because that action "would have fired there anyway,"
+	// except that it's firing there without satisfying the guard because the
+	// sense of the guard is equal to the sense of the transition.
 	boolean::cover result(0);
 	// This is a place, so we need to check all of the output transitions
+	boolean::cover wait = encoding & ~action;
 	for (auto arc = arcs[i.type].begin(); arc != arcs[i.type].end(); arc++) {
 		if (arc->from.index == i.index) {
 			boolean::cover predicate = encoding & transitions[arc->to.index].guard;
 			result |= filter_vacuous(arc->to, predicate, action);
+			wait &= ~transitions[arc->to.index].guard;
 		}
 	}
+	result |= wait;
 	return result;
 }
 

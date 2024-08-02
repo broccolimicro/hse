@@ -498,7 +498,8 @@ void encoder::insert_state_variables() {
 	//cout << "After Clustering" << endl;
 	// Figure out where to insert state variable transitions, create state
 	// variables, and determine their reset state.
-	for (int i = 0; i < (int)problems.size(); i++) {
+	// TODO(edward.bingham) This is a simple hack to try inserting only one state variable at a time
+	for (int i = 0; i < (int)problems.size() and i < 1; i++) {  
 		cout << to_string(problems[i].term.vars()) << endl;
 		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
 		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
