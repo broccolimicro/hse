@@ -563,7 +563,15 @@ void encoder::insert_state_variables() {
 
 		for (int j = 0; j < 2; j++) {
 			for (auto k = best[j].begin(); k != best[j].end(); k++) {
-				*k = base->add_redundant(*k);
+				// TODO(edward.bingham) this ends up adding places to the insertion
+				// that belong to reset. If the current insertion is designed to occur
+				// after reset, then the resulting partial state will cross reset and
+				// create a deadlock scenario.
+				// Given that we should be solving only one conflict at a time and that
+				// we should be removing all redundant nodes in between each step, we
+				// should never need to add redundant nodes to the insertion because
+				// there shouldn't be any.
+				//*k = base->add_redundant(*k);
 				cout << "Adding (" << to_string(*k) << endl;
 				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
