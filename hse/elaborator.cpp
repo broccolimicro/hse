@@ -114,21 +114,48 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		// duplicates in later states. I have to loop through all of the enabled
 		// transitions, and then loop through all orderings of their dependent
 		// guards, saving the state
+		//vector<set<int> > en_in(sim.tokens.size(), set<int>());
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
+
+		/*bool change = true;
+		while (change) {
+			change = false;
+			for (int i = 0; i < (int)sim.loaded.size(); i++) {
+				set<int> total_in;
+				for (int j = 0; j < (int)sim.loaded[i].tokens.size(); j++) {
+					total_in.insert(en_in[sim.loaded[i].tokens[j]].begin(), en_in[sim.loaded[i].tokens[j]].end());
+				}
+				total_in.insert(sim.loaded[i].index);
+
+				for (int j = 0; j < (int)sim.loaded[i].output_marking.size(); j++) {
+					set<int> old_in = en_in[sim.loaded[i].output_marking[j]];
+					en_in[sim.loaded[i].output_marking[j]].insert(total_in.begin(), total_in.end());
+					change = change or (en_in[sim.loaded[i].output_marking[j]] != old_in);
+				}
+			}
+		}*/
 
 		for (int i = 0; i < (int)sim.loaded.size(); i++)
 			for (int j = 0; j < (int)sim.loaded[i].tokens.size(); j++)
-				en_out[sim.loaded[i].tokens[j]].insert(sim.loaded[i].index);
+				en_out[sim.loaded[i].tokens[j]].insert(i);
 
-		if (sim.ready.empty() or not sim.loaded[sim.ready[0].first].vacuous) {
-			for (int i = 0; i < (int)sim.tokens.size(); i++)
-			{
+		for (int i = 0; i < (int)sim.tokens.size(); i++) {
+			bool vacuous = true;
+			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end() and vacuous; j++) {
+				vacuous = sim.loaded[*j].vacuous;
+			}
+	
+			if (not vacuous) {
+				// TODO(edward.bingham) only save this state to this place if there is a non-vacuous outgoing transition from this token
+				//boolean::cover en = 1;
 				boolean::cover dis = 1;
+				//for (set<int>::iterator j = en_in[i].begin(); j != en_in[i].end(); j++)
+				//	en &= g.transitions[*j].local_action;
 				// Not guard because then we'd be in the hidden place in the transition
 				// and not action because then we would have passed this transtion entirely
 				// whether or not the current encoding passes the guard
 				for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end(); j++)
-					dis &= ~g.transitions[*j].guard;
+					dis &= ~g.transitions[sim.loaded[*j].index].guard;
 
 				// Given the current encoding - sim.encoding
 				// 1. Ignore unstable signals - xoutnulls()

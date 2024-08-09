@@ -50,6 +50,7 @@ struct enabled_transition : petri::enabled_transition
 	// int index;
 	// vector<int> tokens;
 
+	vector<int> output_marking;
 	vector<term_index> history;
 	
 	// The intersection of all of the terms of the guard of this transition which
@@ -61,10 +62,14 @@ struct enabled_transition : petri::enabled_transition
 	// "effective guard" is a bit lengthy, see simulator.cpp for a thorough
 	// discussion.
 	boolean::cover guard;
-	
+
+	// The collection of all the guards through vacuous transitions leading to
+	// this transition.
+	boolean::cover depend;
+
 	// The set of assignments up to and including the last non-vacuous assignment
-	// preceding this enabled transition. See the todo in simulator.cpp
-	// boolean::cover sequence;
+	// preceding this enabled transition.
+	boolean::cover sequence;
 
 	// An enabled transition is vacuous if the assignment would leave the current
 	// state encoding unaffected.
@@ -93,17 +98,24 @@ struct token : petri::token
 	//token(const hse::token &t);
 	//token(petri::token t, boolean::cover guard, boolean::cover sequence);
 	token(petri::token t);
-	token(int index);
-	token(int index, boolean::cover sequence);
+	token(int index, boolean::cover guard, boolean::cover sequence, int cause=-1);
 	~token();
 
 	// The current place this token resides at.
 	// inherited from petri::token
 	// int index
 
+	// Contains the previous guards not acknowledged by a non-vacuous transition.
+	boolean::cover guard;
+
 	// Contains the previous assignments experienced by the input tokens.
-	// See the todo in simulator.cpp
-	// boolean::cover sequence;
+	boolean::cover sequence;
+
+	// If this token is an extension of the base
+	// state through a vacuous transition, which
+	// preloaded transition caused that extension?
+	// index into simulator::enabled::preload
+	int cause;
 	
 	string to_string();
 };

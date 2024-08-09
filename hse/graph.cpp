@@ -181,6 +181,46 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 	return pred;
 }
 
+boolean::cover graph::implicant(vector<petri::iterator> pos) const {
+	boolean::cover result = 1;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == petri::place::type) {
+			result &= places[i->index].predicate;
+		} else {
+			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
+				if (arc->to.index == i->index) {
+					result &= places[arc->from.index].predicate;
+				}
+			}
+			result &= transitions[i->index].guard;
+		}
+	}
+	
+	return result;
+}
+
+boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
+	boolean::cover result = 1;
+	for (auto i = pos.begin(); i != pos.end(); i++) {
+		if (i->type == petri::place::type) {
+			result &= places[i->index].predicate;
+			for (auto arc = arcs[i->type].begin(); arc != arcs[i->type].end(); arc++) {
+				if (arc->from.index == i->index) {
+					result &= ~transitions[arc->to.index].guard;
+				}
+			}
+		} else {
+			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
+				if (arc->to.index == i->index) {
+					result &= places[arc->from.index].predicate;
+				}
+			}
+			result &= transitions[i->index].guard & ~transitions[i->index].local_action;
+		}
+	}
+	return result;
+}
+
 boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const
 {
 	// I need to select encodings that are either affected by a transition that
@@ -224,41 +264,18 @@ boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding,
 	return result;
 }
 
-boolean::cover graph::implicant(vector<petri::iterator> pos) const {
-	boolean::cover result = 1;
-	for (auto i = pos.begin(); i != pos.end(); i++) {
-		if (i->type == petri::place::type) {
-			result &= places[i->index].predicate;
-		} else {
-			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
-				if (arc->to.index == i->index) {
-					result &= places[arc->from.index].predicate;
-				}
-			}
-			result &= transitions[i->index].guard;
-		}
-	}
+boolean::cover graph::exclusion(int index) const {
+	boolean::cover result;
+	vector<int> p = prev(transition::type, index);
 	
-	return result;
-}
-
-boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
-	boolean::cover result = 1;
-	for (auto i = pos.begin(); i != pos.end(); i++) {
-		if (i->type == petri::place::type) {
-			result &= places[i->index].predicate;
-			for (auto arc = arcs[i->type].begin(); arc != arcs[i->type].end(); arc++) {
-				if (arc->from.index == i->index) {
-					result &= ~transitions[arc->to.index].guard;
+	for (int i = 0; i < (int)p.size(); i++) {
+		vector<int> n = next(place::type, p[i]);
+		if (n.size() > 1) {
+			for (int j = 0; j < (int)n.size(); j++) {
+				if (n[j] != index) {
+					result |= transitions[n[j]].guard;
 				}
 			}
-		} else {
-			for (auto arc = arcs[1-i->type].begin(); arc != arcs[1-i->type].end(); arc++) {
-				if (arc->to.index == i->index) {
-					result &= places[arc->from.index].predicate;
-				}
-			}
-			result &= transitions[i->index].guard & ~transitions[i->index].local_action;
 		}
 	}
 	return result;

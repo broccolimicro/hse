@@ -91,7 +91,8 @@ enabled_transition::enabled_transition()
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	// sequence = 1;
+	depend = 1;
+	sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index)
@@ -100,7 +101,8 @@ enabled_transition::enabled_transition(int index)
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	// sequence = 1;
+	depend = 1;
+	sequence = 1;
 }
 
 enabled_transition::enabled_transition(int index, int term)
@@ -109,7 +111,8 @@ enabled_transition::enabled_transition(int index, int term)
 	vacuous = true;
 	stable = true;
 	guard = 1;
-	// sequence = 1;
+	depend = 1;
+	sequence = 1;
 }
 
 enabled_transition::~enabled_transition()
@@ -159,37 +162,25 @@ bool operator!=(enabled_transition i, enabled_transition j)
 token::token()
 {
 	index = 0;
-	// sequence = 1;
+	guard = 1;
+	cause = -1;
+	sequence = 1;
 }
-
-/*token::token(const hse::token &t)
-{
-	index = t.index;
-	sequence = t.sequence;
-}
-
-token::token(petri::token t, boolean::cover sequence)
-{
-	index = t.index;
-	this->sequence = sequence;
-}*/
 
 token::token(petri::token t)
 {
 	index = t.index;
-	// sequence = 1;
+	guard = 1;
+	cause = -1;
+	sequence = 1;
 }
 
-token::token(int index)
+token::token(int index, boolean::cover guard, boolean::cover sequence, int cause)
 {
 	this->index = index;
-	// this->sequence = 1;
-}
-
-token::token(int index, boolean::cover sequence)
-{
-	this->index = index;
-	// this->sequence = sequence;
+	this->guard = guard;
+	this->sequence = sequence;
+	this->cause = cause;
 }
 
 token::~token()

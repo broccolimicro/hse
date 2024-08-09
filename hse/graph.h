@@ -116,6 +116,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	boolean::cover implicant(vector<petri::iterator> pos) const;
 	boolean::cover effective_implicant(vector<petri::iterator> pos) const;
 	boolean::cover filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const;
+	boolean::cover exclusion(int index) const;
 	bool common_arbiter(petri::iterator a, petri::iterator b) const;
 
 	void update_masks();
