@@ -190,7 +190,7 @@ void encoder::check(bool senseless, bool report_progress)
 int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare) {
 	sort(pos.begin(), pos.end());
 
-	cout << "score_insertion(sense=" << sense << ", " << to_string(pos) << ")" << endl;
+	//cout << "score_insertion(sense=" << sense << ", " << to_string(pos) << ")" << endl;
 	// Unfortunately, it is not enough to put new transitions in to disambiguate
 	// states. Inserting those transitions can create new conflicts with those
 	// transitions. The input places of the inserted transition might conflict with
@@ -203,22 +203,22 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 
 	boolean::cover implicant = base->implicant(pos).mask(1-sense);
 	if (implicant.is_null() or base->crosses_reset(pos)) {
-		cout << "null implicant or crosses reset" << endl;
+		//cout << "null implicant or crosses reset" << endl;
 		return -1;
 	}
 
 	vector<petri::iterator> relevant = base->relevant_nodes(pos);
 	int cost = 0;
-	cout << "\treviewing relevant nodes " << to_string(relevant) << endl;
+	//cout << "\treviewing relevant nodes " << to_string(relevant) << endl;
 	for (auto i = relevant.begin(); i != relevant.end(); i++) {
 		// TODO(edward.bingham) I should check state suspects against
 		// previous insertions. I should insert the assignments that are
 		// more certain first.
 
-		cout << "\t\tlooking at " << *i << " for " << export_expression(implicant, *variables).to_string() << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
+		//cout << "\t\tlooking at " << *i << " for " << export_expression(implicant, *variables).to_string() << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
 		int conflict = not dontcare.covers(*i) and not are_mutex(implicant, base->effective_implicant(vector<petri::iterator>(1, *i)));
 		if (conflict != 0) {
-			cout << "\t\tfound conflict" ;
+			//cout << "\t\tfound conflict" ;
 		}
 		cost += conflict;
 	}
@@ -235,15 +235,15 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 
 	sort(nn.begin(), nn.end());
 	nn.erase(unique(nn.begin(), nn.end()), nn.end());
-	cout << "\treviewing output nodes " << to_string(nn) << endl;
+	//cout << "\treviewing output nodes " << to_string(nn) << endl;
 	for (auto i = nn.begin(); i != nn.end(); i++) {
-		if (base->transitions[i->index].local_action.has(sense)) {
-			cout << "\t\tfound conflict with output transition " << export_composition(base->transitions[i->index].local_action, *variables).to_string() << endl;
-		}
+		//if (base->transitions[i->index].local_action.has(sense)) {
+		//	cout << "\t\tfound conflict with output transition " << export_composition(base->transitions[i->index].local_action, *variables).to_string() << endl;
+		//}
 		cost += base->transitions[i->index].local_action.has(sense);
 	}
 
-	cout << "done score_insertion() computed cost is " << cost << endl;
+	//cout << "done score_insertion() computed cost is " << cost << endl;
 
 	return cost;
 }
@@ -268,9 +268,9 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 
 	vector<petri::iterator> best = pos;
 	int bestcost = score_insertion(sense, best, dontcare);
-	cout << "starting find_insertion(sense=" << sense << ", pos=" << to_string(pos) << ") at " << bestcost << " for " << to_string(best) << endl;
+	//cout << "starting find_insertion(sense=" << sense << ", pos=" << to_string(pos) << ") at " << bestcost << " for " << to_string(best) << endl;
 	while (not para.empty() and bestcost > 0) {
-		cout << "step" << endl;
+		//cout << "step" << endl;
 		// Try to pick partial states that aren't in parallel with the exclusion path
 		// Try to pick partial states that minimize the number of new conflicts
 		petri::iterator n;
@@ -279,7 +279,7 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 			best.push_back(*p);
 
 			int cost = score_insertion(sense, best, dontcare);
-			cout << "\t" << cost << " for " << to_string(best) << endl;
+			//cout << "\t" << cost << " for " << to_string(best) << endl;
 			if (cost >= 0 and (stepcost < 0 or cost < stepcost)) {
 				stepcost = cost;
 				n = *p;
@@ -301,7 +301,7 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 		}
 	}
 
-	cout << "done find_insertion() final cost is " << bestcost << " for " << to_string(best) << endl << endl;
+	//cout << "done find_insertion() final cost is " << bestcost << " for " << to_string(best) << endl << endl;
 	
 	if (result != nullptr) {
 		result->push_back(best);
@@ -339,7 +339,7 @@ int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, co
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
 void encoder::insert_state_variables() {
 	// Trace all conflicts
-	for (auto i = base->places.begin(); i != base->places.end(); i++) {
+	/*for (auto i = base->places.begin(); i != base->places.end(); i++) {
 		cout << "p" << (i-base->places.begin()) << ":" << endl;
 		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
 			cout << "\t" << j->to_string() << endl;
@@ -351,7 +351,7 @@ void encoder::insert_state_variables() {
 		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
 			cout << "\t" << j->to_string() << endl;
 		}
-	}
+	}*/
 
 	// index 0 indicates that this state variable transition needs to be downgoing
 	// index 1 indicates that this state variable transition needs to be upgoing
@@ -500,9 +500,9 @@ void encoder::insert_state_variables() {
 	// variables, and determine their reset state.
 	// TODO(edward.bingham) This is a simple hack to try inserting only one state variable at a time
 	for (int i = 0; i < (int)problems.size() and i < 1; i++) {  
-		cout << to_string(problems[i].term.vars()) << endl;
-		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
-		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+		//cout << to_string(problems[i].term.vars()) << endl;
+		//cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+		//cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
 
 		// Create the state variable
 		int vid = -1;
@@ -524,8 +524,8 @@ void encoder::insert_state_variables() {
 		});
 		int min_cost = -1;
 
-		cout << "options[0] = " << to_string(options[0]) << endl;
-		cout << "options[1] = " << to_string(options[1]) << endl;
+		//cout << "options[0] = " << to_string(options[0]) << endl;
+		//cout << "options[1] = " << to_string(options[1]) << endl;
 
 		// Figure out where to put the state variable transitions
 		for (auto j = options[0].begin(); j != options[0].end(); j++) {
@@ -539,14 +539,14 @@ void encoder::insert_state_variables() {
 				for (auto it = insertions.begin(); it != insertions.end(); it++) {
 					petri::path_set v0 = petri::trace(*base, (*it)[0], base->deselect((*it)[1]), true);
 					petri::path_set v1 = petri::trace(*base, (*it)[1], base->deselect((*it)[0]), true);
-					cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
+					//cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
 
 					// check each transition against suspects and generate a score
 					// find the pair with the best score.
 					array<vector<vector<petri::iterator> >, 2> curr;
 					int upcost = find_insertions(1, (*it)[1], v1, &curr[1]);
 					int dncost = find_insertions(0, (*it)[0], v0, &curr[0]);
-					cout << "final cost is " << upcost << "+" << dncost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+					//cout << "final cost is " << upcost << "+" << dncost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
 					if (upcost >= 0 and dncost >= 0 and (min_cost < 0 or upcost+dncost < min_cost)) {
 						min_cost = upcost+dncost;
 						best = curr;
@@ -575,19 +575,19 @@ void encoder::insert_state_variables() {
 				// we can tune the add_redundant() function to ensure the result doesn't
 				// cross reset.
 				//*k = base->add_redundant(*k);
-				cout << "Adding (" << to_string(*k) << endl;
+				//cout << "Adding (" << to_string(*k) << endl;
 				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
 				iter.first->second[j].push_back(vid);
 			}
 		}
 		
-		cout << "inserting v" << uid << "+ at " << to_string(best[1]) << endl;
-		cout << "inserting v" << uid << "- at " << to_string(best[0]) << endl;
+		//cout << "inserting v" << uid << "+ at " << to_string(best[1]) << endl;
+		//cout << "inserting v" << uid << "- at " << to_string(best[0]) << endl;
 
 		// Figure out the reset states
-		cout << "Looking for Reset for v" << uid << endl;
-		cout << "v" << i << "-; v" << uid << "+ " << colorings[0] << endl;
-		cout << "v" << i << "+; v" << uid << "- " << colorings[1] << endl;
+		//cout << "Looking for Reset for v" << uid << endl;
+		//cout << "v" << i << "-; v" << uid << "+ " << colorings[0] << endl;
+		//cout << "v" << i << "+; v" << uid << "- " << colorings[1] << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
@@ -722,7 +722,7 @@ void encoder::insert_state_variables() {
 		}
 	}
 
-	for (auto i = base->places.begin(); i != base->places.end(); i++) {
+	/*for (auto i = base->places.begin(); i != base->places.end(); i++) {
 		cout << "p" << (i-base->places.begin()) << ":" << endl;
 		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
 			cout << "\t" << j->to_string() << endl;
@@ -734,7 +734,7 @@ void encoder::insert_state_variables() {
 		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
 			cout << "\t" << j->to_string() << endl;
 		}
-	}
+	}*/
 
 
 	//printf("done insert state variables\n");
