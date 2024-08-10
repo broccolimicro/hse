@@ -174,17 +174,17 @@ int simulator::enabled(bool sorted) {
 	vector<enabled_transition> preload;
 	vector<enabled_transition> potential;
 	vector<int> global_disabled;
-
+	vector<int> disabled;
+	disabled.reserve(max(0, (int)base->transitions.size() - (int)preload.size()));
+	
 	int preload_size = 0;
 	do {
-		vector<int> disabled = global_disabled;
-		disabled.reserve(max(0, (int)base->transitions.size() - (int)preload.size()));
+		disabled = global_disabled;
 		preload_size = preload.size();
 		for (auto a = base->arcs[place::type].begin(); a != base->arcs[place::type].end(); a++) {
 			// A transition will only be in disabled if we've already determined that it can't be enabled.
-			vector<int>::iterator d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
-			if (d == disabled.end() || *d != a->to.index)
-			{
+			auto d = lower_bound(disabled.begin(), disabled.end(), a->to.index);
+			if (d == disabled.end() or *d != a->to.index) {
 				// Find the index of this transition (if any) in the loaded pool
 				bool loaded_found = false;
 				for (int i = (int)preload.size()-1; i >= 0; i--) {
@@ -203,15 +203,16 @@ int simulator::enabled(bool sorted) {
 									// any of the transitions in the chain
 									bool used = false;
 									vector<int> test = preload[i].tokens;
-									for (int k = 0; k < (int)test.size() && !used; k++) {
+									for (int k = 0; k < (int)test.size() and not used; k++) {
 										used = (test[k] == j);
 										if (tokens[test[k]].cause >= 0) {
 											test.insert(test.end(), preload[tokens[test[k]].cause].tokens.begin(), preload[tokens[test[k]].cause].tokens.end());
 										}
 									}
 
-									if (!used)
+									if (not used) {
 										matching_tokens.push_back(j);
+									}
 								}
 							}
 
@@ -221,7 +222,7 @@ int simulator::enabled(bool sorted) {
 								preload.back().tokens.push_back(matching_tokens[j]);
 							}
 
-							if ((int)matching_tokens.size() > 0) {
+							if (not matching_tokens.empty()) {
 								preload[i].tokens.push_back(matching_tokens[0]);
 							} else {
 								// If we didn't find a token at the input place, then we know that this transition can't
@@ -400,8 +401,10 @@ int simulator::enabled(bool sorted) {
 						}
 					}
 
-					global_disabled.push_back(preload[i].index);
-					sort(global_disabled.begin(), global_disabled.end());
+					auto d = lower_bound(global_disabled.begin(), global_disabled.end(), preload[i].index);
+					if (d == global_disabled.end() or *d != preload[i].index) {
+						global_disabled.insert(d, preload[i].index);
+					}
 					preload.erase(preload.begin() + i);
 				} else {
 					boolean::cover guard = preload[i].depend;
@@ -438,8 +441,10 @@ int simulator::enabled(bool sorted) {
 					}
 				}
 
-				global_disabled.push_back(preload[i].index);
-				sort(global_disabled.begin(), global_disabled.end());
+				auto d = lower_bound(global_disabled.begin(), global_disabled.end(), preload[i].index);
+				if (d == global_disabled.end() or *d != preload[i].index) {
+					global_disabled.insert(d, preload[i].index);
+				}
 				preload.erase(preload.begin() + i);
 			}
 		}
