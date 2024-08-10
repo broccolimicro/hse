@@ -115,6 +115,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		// transitions, and then loop through all orderings of their dependent
 		// guards, saving the state
 		//vector<set<int> > en_in(sim.tokens.size(), set<int>());
+		vector<bool> en_in(sim.tokens.size(), false);
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
 
 		/*bool change = true;
@@ -139,13 +140,20 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			for (int j = 0; j < (int)sim.loaded[i].tokens.size(); j++)
 				en_out[sim.loaded[i].tokens[j]].insert(i);
 
+		for (int i = 0; i < (int)sim.loaded.size(); i++)
+			for (int j = 0; j < (int)sim.loaded[i].output_marking.size(); j++)
+				if (not sim.loaded[i].vacuous)
+					en_in[sim.loaded[i].output_marking[j]] = true;
+
 		for (int i = 0; i < (int)sim.tokens.size(); i++) {
-			bool vacuous = true;
-			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end() and vacuous; j++) {
-				vacuous = sim.loaded[*j].vacuous;
+			bool isOutput = en_out[i].empty() and en_in[i];
+
+			bool isVacuous = false;
+			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end() and not isVacuous; j++) {
+				isVacuous = sim.loaded[*j].vacuous;
 			}
 	
-			if (not vacuous) {
+			if (not isVacuous and not isOutput) {
 				// TODO(edward.bingham) only save this state to this place if there is a non-vacuous outgoing transition from this token
 				//boolean::cover en = 1;
 				boolean::cover dis = 1;
