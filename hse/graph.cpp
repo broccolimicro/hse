@@ -246,10 +246,6 @@ boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding,
 		return encoding & ~action;
 	}
 
-	// TODO(edward.bingham) This currently filters out the input places to the
-	// action being tested because that action "would have fired there anyway,"
-	// except that it's firing there without satisfying the guard because the
-	// sense of the guard is equal to the sense of the transition.
 	boolean::cover result(0);
 	// This is a place, so we need to check all of the output transitions
 	boolean::cover wait = encoding & ~action;
@@ -442,9 +438,10 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	while (change) {
 		super::reduce(proper_nesting, aggressive);
 
+		// Remove skips
 		change = false;
 		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
-			if (transitions[i.index].local_action == 1) {
+			if (transitions[i.index].local_action.is_tautology()) {
 				vector<petri::iterator> n = next(i); // places
 				if (n.size() > 1) {
 					vector<petri::iterator> p = prev(i); // places
@@ -479,11 +476,16 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 		if (change)
 			continue;
 
+		// If there is a guard at the end of a conditional branch, then we unzip
+		// the conditional merge by one transition (make copies of the next
+		// transition on each branch and move the merge down the sequence). This
+		// allows us to merge that guard at the end of the conditional branch into
+		// the transition.
 		for (petri::iterator i(place::type, 0); i < (int)places.size() && !change; i++) {
 			vector<petri::iterator> p = prev(i);
 			vector<petri::iterator> active, passive;
 			for (int k = 0; k < (int)p.size(); k++) {
-				if (transitions[p[k].index].local_action == 1) {
+				if (transitions[p[k].index].local_action.is_tautology()) {
 					passive.push_back(p[k]);
 				} else {
 					active.push_back(p[k]);
@@ -516,7 +518,7 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 					}
 
 					if (k >= (int)copies.size()) {
-						copies.push_back(copy(i));
+						copies.push_back(create(places[i.index]));
 						for (int l = 0; l < (int)n.size(); l++) {
 							petri::iterator x = copy(n[l]);
 							connect(copies.back(), x);

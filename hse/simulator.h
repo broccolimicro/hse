@@ -71,7 +71,7 @@ struct deadlock : state
 // programmatically.
 struct simulator
 {
-	// TODO(edward.bingham) this may no longer be necessary
+	// This is used by hse::graph to roll up the reset transitions.
 	typedef petri::simulator<hse::place, hse::transition, petri::token, hse::state> super;
 
 	simulator();
