@@ -154,7 +154,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			}
 	
 			if (not isVacuous and not isOutput) {
-				// TODO(edward.bingham) only save this state to this place if there is a non-vacuous outgoing transition from this token
 				//boolean::cover en = 1;
 				boolean::cover dis = 1;
 				//for (set<int>::iterator j = en_in[i].begin(); j != en_in[i].end(); j++)
