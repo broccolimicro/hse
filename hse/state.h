@@ -50,7 +50,16 @@ struct enabled_transition : petri::enabled_transition
 	// int index;
 	// vector<int> tokens;
 
+	// An enabled transition creates tokens on its output before we ever fire it.
+	// If the transition is vacuous, these tokens can then be used to enable the
+	// next non-vacuous transition. This vector keeps track of the index of each
+	// of those output tokens.
 	vector<int> output_marking;
+
+	// An enabled transition's history keeps track of every transition that fired
+	// between when this transition was enabled and when it fires. This allows us
+	// to determine whether this transition was stable and non-interfering when
+	// we finally decide to let the event fire.
 	vector<term_index> history;
 	
 	// The intersection of all of the terms of the guard of this transition which

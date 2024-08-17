@@ -175,7 +175,7 @@ int simulator::enabled(bool sorted) {
 	vector<enabled_transition> potential;
 	vector<int> global_disabled;
 	vector<int> disabled;
-	disabled.reserve(max(0, (int)base->transitions.size() - (int)preload.size()));
+	disabled.reserve(base->transitions.size());
 	
 	int preload_size = 0;
 	do {
@@ -318,10 +318,10 @@ int simulator::enabled(bool sorted) {
 			// As a result of graph::post_process(), all of the guards should have been
 			// merged into the closest assignment.
 			preload[i].depend = 1;
-			preload[i].sequence = 1;
+			//preload[i].sequence = 1;
 			for (int j = 0; j < (int)preload[i].tokens.size(); j++) {
 				preload[i].depend &= tokens[preload[i].tokens[j]].guard;
-				preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
+				//preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
 			}
 			//preload[i].depend.hide(base->transitions[preload[i].index].local_action.vars());
 			//preload[i].sequence.hide(base->transitions[preload[i].index].local_action.vars());
@@ -408,11 +408,11 @@ int simulator::enabled(bool sorted) {
 					preload.erase(preload.begin() + i);
 				} else {
 					boolean::cover guard = preload[i].depend;
-					boolean::cover sequence = preload[i].sequence;
+					//boolean::cover sequence = preload[i].sequence;
 					if (base->transitions[preload[i].index].local_action.is_tautology()) {
 						guard &= base->transitions[preload[i].index].guard;
 					} else {
-						sequence = base->transitions[preload[i].index].local_action;
+						//sequence = base->transitions[preload[i].index].local_action;
 						// the guard should be the most minimal possible guard necessary to
 						// guard any multi-branch selection statement (unless the
 						// transition is a skip, in which case any guard should be passed
@@ -427,7 +427,7 @@ int simulator::enabled(bool sorted) {
 					for (int j = 0; j < (int)output.size(); j++)
 					{
 						preload[i].output_marking.push_back((int)tokens.size());
-						tokens.push_back(token(output[j], guard, sequence, i));
+						tokens.push_back(token(output[j], guard, 1/*sequence*/, i));
 					}
 				}
 			} else {
