@@ -350,7 +350,6 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 	while (change)
 	{
 		super::reduce(proper_nesting, aggressive);
-		change = true;
 
 		for (int i = 0; i < (int)source.size(); i++)
 		{
