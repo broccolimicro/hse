@@ -706,7 +706,7 @@ void encoder::insert_state_variables() {
 						petri::parallel, 
 						base->insert_at(
 							group->first, //base->add_redundant(group->first),
-							transition(guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
+							transition(1, guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
 						),
 						group->second[1-sense].size(),
 						false);

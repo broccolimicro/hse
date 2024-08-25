@@ -163,6 +163,7 @@ token::token()
 {
 	index = 0;
 	guard = 1;
+	assume = 1;
 	cause = -1;
 	sequence = 1;
 }
@@ -171,14 +172,16 @@ token::token(petri::token t)
 {
 	index = t.index;
 	guard = 1;
+	assume = 1;
 	cause = -1;
 	sequence = 1;
 }
 
-token::token(int index, boolean::cover guard, boolean::cover sequence, int cause)
+token::token(int index, boolean::cover assume, boolean::cover guard, boolean::cover sequence, int cause)
 {
 	this->index = index;
 	this->guard = guard;
+	this->assume = assume;
 	this->sequence = sequence;
 	this->cause = cause;
 }

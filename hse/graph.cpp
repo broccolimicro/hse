@@ -19,6 +19,7 @@ namespace hse
 place::place()
 {
 	arbiter = false;
+	synchronizer = false;
 }
 
 place::place(boolean::cover predicate)
@@ -26,6 +27,7 @@ place::place(boolean::cover predicate)
 	this->predicate = predicate;
 	this->effective = predicate;
 	arbiter = false;
+	synchronizer = false;
 }
 
 place::~place()
@@ -53,11 +55,13 @@ place place::merge(int composition, const place &p0, const place &p1)
 		result.predicate = p0.predicate | p1.predicate;
 	}
 	result.arbiter = (p0.arbiter or p1.arbiter);
+	result.synchronizer = (p0.synchronizer or p1.synchronizer);
 	return result;
 }
 
-transition::transition(boolean::cover guard, boolean::cover local_action, boolean::cover remote_action)
+transition::transition(boolean::cover assume, boolean::cover guard, boolean::cover local_action, boolean::cover remote_action)
 {
+	this->assume = assume;
 	this->guard = guard;
 	this->local_action = local_action;
 	this->remote_action = remote_action;
@@ -71,11 +75,11 @@ transition::~transition()
 transition transition::subdivide(int term) const
 {
 	if (term < (int)local_action.cubes.size() && term < (int)remote_action.cubes.size())
-		return transition(guard, boolean::cover(local_action.cubes[term]), boolean::cover(remote_action.cubes[term]));
+		return transition(assume, guard, boolean::cover(local_action.cubes[term]), boolean::cover(remote_action.cubes[term]));
 	else if (term < (int)local_action.cubes.size())
-		return transition(guard, boolean::cover(local_action.cubes[term]));
+		return transition(assume, guard, boolean::cover(local_action.cubes[term]));
 	else
-		return transition(guard);
+		return transition(assume, guard);
 }
 
 transition transition::merge(int composition, const transition &t0, const transition &t1)
@@ -83,12 +87,14 @@ transition transition::merge(int composition, const transition &t0, const transi
 	transition result;
 	if (composition == petri::parallel || composition == petri::sequence)
 	{
+		result.assume = t0.assume & t1.assume;
 		result.guard = t0.guard & t1.guard;
 		result.local_action = t0.local_action & t1.local_action;
 		result.remote_action = t0.remote_action & t1.remote_action;
 	}
 	else if (composition == petri::choice)
 	{
+		result.assume = t0.assume | t1.assume;
 		result.guard = t0.guard | t1.guard;
 		result.local_action = t0.local_action | t1.local_action;
 		result.remote_action = t0.remote_action | t1.remote_action;
@@ -103,7 +109,7 @@ bool transition::mergeable(int composition, const transition &t0, const transiti
 	}
 
 	// choice or parallel
-	return (t0.guard == t1.guard) ||
+	return (t0.guard == t1.guard and t0.assume == t1.assume) or
 				 (t0.local_action == t1.local_action);
 }
 
@@ -112,7 +118,7 @@ bool transition::mergeable(int composition, const transition &t0, const transiti
 // this only answers either TRUE or MAYBE.
 bool transition::is_infeasible() const
 {
-	return guard.is_null() || local_action.is_null();
+	return guard.is_null() or local_action.is_null();
 }
 
 // Vacuous transitions are transitions that do not have any effect on the state
@@ -125,7 +131,7 @@ bool transition::is_infeasible() const
 // really returns either TRUE or MAYBE.
 bool transition::is_vacuous() const
 {
-	return guard.is_tautology() && local_action.is_tautology();
+	return assume.is_tautology() and guard.is_tautology() and local_action.is_tautology();
 }
 
 graph::graph()
@@ -277,6 +283,26 @@ boolean::cover graph::exclusion(int index) const {
 	return result;
 }
 
+boolean::cover graph::arbitration(int index) const {
+	boolean::cover result;
+	vector<int> p = prev(transition::type, index);
+	
+	for (int i = 0; i < (int)p.size(); i++) {
+		if (places[p[i]].arbiter or places[p[i]].synchronizer) {
+			vector<int> n = next(place::type, p[i]);
+			if (n.size() > 1) {
+				for (int j = 0; j < (int)n.size(); j++) {
+					if (n[j] != index) {
+						result |= transitions[n[j]].local_action;
+					}
+				}
+			}
+		}
+	}
+	return ~result;
+}
+
+
 // assumes all vector<int> inputs are sorted
 bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 {
@@ -300,7 +326,7 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 	if (a.type == petri::transition::type) {
 		vector<petri::iterator> p = prev(a);
 		for (int i = 0; i < (int)p.size(); i++) {
-			if (places[p[i].index].arbiter) {
+			if (places[p[i].index].arbiter or places[p[i].index].synchronizer) {
 				left.push_back(p[i]);
 			}
 		}
@@ -312,7 +338,7 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 	if (b.type == petri::transition::type) {
 		vector<petri::iterator> p = prev(b);
 		for (int i = 0; i < (int)p.size(); i++) {
-			if (places[p[i].index].arbiter) {
+			if (places[p[i].index].arbiter or places[p[i].index].synchronizer) {
 				right.push_back(p[i]);
 			}
 		}
@@ -333,7 +359,7 @@ void graph::update_masks() {
 	{
 		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
 			if (is_reachable(j, i)) {
-				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
+				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].assume.mask()).combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
 			}
 		}
 		places[i.index].mask = places[i.index].mask.flip();
@@ -571,6 +597,11 @@ void graph::check_variables(const ucs::variable_set &variables)
 			}
 
 			vars = transitions[j].guard.vars();
+			if (find(vars.begin(), vars.end(), i) != vars.end()) {
+				read.push_back(j);
+			}
+
+			vars = transitions[j].assume.vars();
 			if (find(vars.begin(), vars.end(), i) != vars.end()) {
 				read.push_back(j);
 			}

@@ -318,9 +318,11 @@ int simulator::enabled(bool sorted) {
 			// As a result of graph::post_process(), all of the guards should have been
 			// merged into the closest assignment.
 			preload[i].depend = 1;
+			preload[i].assume = 1;
 			//preload[i].sequence = 1;
 			for (int j = 0; j < (int)preload[i].tokens.size(); j++) {
 				preload[i].depend &= tokens[preload[i].tokens[j]].guard;
+				preload[i].assume &= tokens[preload[i].tokens[j]].assume;
 				//preload[i].sequence &= tokens[preload[i].tokens[j]].sequence;
 			}
 			//preload[i].depend.hide(base->transitions[preload[i].index].local_action.vars());
@@ -362,6 +364,7 @@ int simulator::enabled(bool sorted) {
 			}
 			guard.minimize();*/
 			boolean::cover guard = preload[i].depend & base->transitions[preload[i].index].guard;
+			preload[i].assume &= base->transitions[preload[i].index].assume;
 
 			// Check for unstable transitions
 			bool previously_enabled = false;
@@ -373,7 +376,8 @@ int simulator::enabled(bool sorted) {
 			}
 
 			// Now we check to see if the current state passes the guard
-			int isReady = boolean::passes_guard(encoding, global, guard, &preload[i].guard_action);
+			// TODO(edward.bingham) assume should be built into passes_guard
+			int isReady = boolean::passes_guard(encoding, global, preload[i].assume, guard, &preload[i].guard_action);
 			if (isReady < 0 && previously_enabled) {
 				isReady = 0;
 			}
@@ -408,6 +412,7 @@ int simulator::enabled(bool sorted) {
 					preload.erase(preload.begin() + i);
 				} else {
 					boolean::cover guard = preload[i].depend;
+					boolean::cover assume = preload[i].assume & base->transitions[preload[i].index].assume;
 					//boolean::cover sequence = preload[i].sequence;
 					if (base->transitions[preload[i].index].local_action.is_tautology()) {
 						guard &= base->transitions[preload[i].index].guard;
@@ -427,7 +432,7 @@ int simulator::enabled(bool sorted) {
 					for (int j = 0; j < (int)output.size(); j++)
 					{
 						preload[i].output_marking.push_back((int)tokens.size());
-						tokens.push_back(token(output[j], guard, 1/*sequence*/, i));
+						tokens.push_back(token(output[j], assume, guard, 1/*sequence*/, i));
 					}
 				}
 			} else {
@@ -454,7 +459,7 @@ int simulator::enabled(bool sorted) {
 		vector<int> output = base->next(transition::type, potential[i].index);
 		for (int j = 0; j < (int)output.size(); j++) {
 			potential[i].output_marking.push_back((int)tokens.size());
-			tokens.push_back(token(output[j], 1, base->transitions[potential[i].index].local_action, preload.size()));
+			tokens.push_back(token(output[j], 1/*assume*/, 1/*guard*/, base->transitions[potential[i].index].local_action, preload.size()));
 		}
 
 		preload.push_back(potential[i]);
@@ -484,6 +489,8 @@ enabled_transition simulator::fire(int index)
 
 	enabled_transition t = loaded[ready[index].first];
 	int term = ready[index].second;
+	boolean::cube local_action = base->transitions[t.index].local_action[term];
+	boolean::cube remote_action = base->transitions[t.index].remote_action[term];
 
 	// We need to go through the potential list of transitions and flatten their input and output tokens.
 	// Since we know that no transition can use the same token twice, we can simply mush them all
@@ -522,21 +529,21 @@ enabled_transition simulator::fire(int index)
 
 	// disable any transitions that were dependent on at least one of the same tokens
 	// This is only necessary to check for unstable transitions in the enabled() function
-	for (int i = (int)loaded.size()-1, j = ready.size()-1; i >= 0; i--)
+	for (int i = (int)loaded.size()-1; i >= 0; i--)
 	{
-		vector<int> intersect = vector_intersection(loaded[i].tokens, t.tokens);
-		if (intersect.size() > 0)
-		{
-			// ASSUME ready array is sorted in ascending order
-			bool is_effective = false;
-			for (; j >= 0 && !is_effective; j--)
-				is_effective = (ready[j].first == i);
+		if (loaded[i].index == t.index) {
+			loaded.erase(loaded.begin() + i);
+			continue;
+		}
 
+		vector<int> intersect = vector_intersection(loaded[i].tokens, t.tokens);
+		if (not intersect.empty())
+		{
 			bool is_deterministic = true;
 			for (int k = 0; k < (int)intersect.size() && is_deterministic; k++)
 				is_deterministic = not base->places[tokens[intersect[k]].index].arbiter;
 
-			if (is_effective && is_deterministic && loaded[i].index != t.index)
+			if (not loaded[i].vacuous and is_deterministic)
 			{
 				cout << "Intersect: (";
 				for (int l = 0; l < (int)intersect.size(); l++)
@@ -610,8 +617,6 @@ enabled_transition simulator::fire(int index)
 
 	// Check for interfering transitions. Interfering transitions are the active
 	// transitions that have fired since this active transition was enabled.
-	boolean::cube local_action = base->transitions[t.index].local_action[term];
-	boolean::cube remote_action = base->transitions[t.index].remote_action[term];
 	for (int j = 0; j < (int)t.history.size(); j++) {
 		if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
 		{
@@ -631,6 +636,13 @@ enabled_transition simulator::fire(int index)
 	// Update the state
 	global = local_assign(global, remote_action, t.stable);
 	encoding = remote_assign(local_assign(encoding, local_action, t.stable), global, true);
+
+	for (int i = (int)loaded.size()-1; i >= 0; i--) {
+		if (are_mutex(loaded[i].assume, global)
+			or (are_mutex(local_assign(global, base->transitions[loaded[i].index].remote_action, true), t.assume) and not loaded[i].stable)) {
+			loaded.erase(loaded.begin() + i);
+		}
+	}
 
 	// Update the history. The first thing we need to do is remove any assignments that no longer
 	// have any effect on the global state. So we remove history items where all of the terms

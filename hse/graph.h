@@ -49,8 +49,9 @@ struct place : petri::place
 	// if true, more than one output transition from this place can be enabled
 	// simultaneously. This means that the hardware needs to make a
 	// non-deterministic decision about which one to fire. This is generally done
-	// with an arbiter.
+	// with an arbiter or synchronizer depending on whether the guards are stable.
 	bool arbiter;
+	bool synchronizer;
 
 	static place merge(int composition, const place &p0, const place &p1);
 };
@@ -60,7 +61,7 @@ struct place : petri::place
 // of the circuit.
 struct transition : petri::transition
 {
-	transition(boolean::cover guard = 1, boolean::cover local_action = 1, boolean::cover remote_action = 1);
+	transition(boolean::cover assume=1, boolean::cover guard = 1, boolean::cover local_action = 1, boolean::cover remote_action = 1);
 	~transition();
 
 	// inherited from petri::transition
@@ -78,6 +79,30 @@ struct transition : petri::transition
 	// The remote_action is the effect this assignment has on the state encodings
 	// of the tokens that aren't affected by this transition.
 	boolean::cover remote_action;
+
+	// TODO(edward.bingham) How do I represent timing assumptions in HSE?
+	// What kinds of timing assumptions can be made?
+	// 
+	// 1. Assume this transition arrives before this other transition arrived or
+	//    would have arrived (adversarial path assumption), stable and unstable variants?
+	// 2. Assume this transition arrives after this other transition arrived or
+	//    would have arrived, stable and unstable variants?
+	// 
+	// Wait a bounded amount of time after entering a certain state for all
+	// potential transitions on a wire to propagate and for that wire to be
+	// stable. A given state MIGHT trigger a transition, and we don't have enough
+	// information in the state to acknowledge that transition if it were to
+	// happen. Therefore, wait for a bounded amount of time after that state for
+	// the resulting glitch to stabilize.
+
+
+	// This expression must evaluate to true against the current state before
+	// this transition is allowed to be enabled or fired. If 'assume' is
+	// tautilogically false, then all transitions in this process must be
+	// disabled before this transition is allowed to be enabled.
+
+	// assumptions must propagate through vacuous transitions like guards.
+	boolean::cover assume;
 
 	transition subdivide(int term) const;
 
@@ -117,6 +142,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	boolean::cover effective_implicant(vector<petri::iterator> pos) const;
 	boolean::cover filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const;
 	boolean::cover exclusion(int index) const;
+	boolean::cover arbitration(int index) const;
 	bool common_arbiter(petri::iterator a, petri::iterator b) const;
 
 	void update_masks();

@@ -76,6 +76,10 @@ struct enabled_transition : petri::enabled_transition
 	// this transition.
 	boolean::cover depend;
 
+	// The collection of all assumptions through vacuous transitions leading to
+	// this transition.
+	boolean::cover assume;
+
 	// The set of assignments up to and including the last non-vacuous assignment
 	// preceding this enabled transition.
 	boolean::cover sequence;
@@ -107,7 +111,7 @@ struct token : petri::token
 	//token(const hse::token &t);
 	//token(petri::token t, boolean::cover guard, boolean::cover sequence);
 	token(petri::token t);
-	token(int index, boolean::cover guard, boolean::cover sequence, int cause=-1);
+	token(int index, boolean::cover assume, boolean::cover guard, boolean::cover sequence, int cause=-1);
 	~token();
 
 	// The current place this token resides at.
@@ -116,6 +120,9 @@ struct token : petri::token
 
 	// Contains the previous guards not acknowledged by a non-vacuous transition.
 	boolean::cover guard;
+
+	// Contains the previous assumptions not implemented by a non-vacuous transition.
+	boolean::cover assume;
 
 	// Contains the previous assignments experienced by the input tokens.
 	boolean::cover sequence;

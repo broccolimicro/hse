@@ -144,6 +144,7 @@ void gate_set::load(bool senseless) {
 		// take a token off of any of the places.
 		boolean::cover predicate = base->predicate(vector<petri::iterator>(1, t0));
 		boolean::cover implicant = predicate & t0i->guard;
+		boolean::cover assume = base->arbitration(t0.index) & t0i->assume;
 
 		// The transition actively affects the state of the system
 		for (auto term = t0i->local_action.cubes.begin(); term != t0i->local_action.cubes.end(); term++) {
@@ -161,6 +162,7 @@ void gate_set::load(bool senseless) {
 				term_implicant.minimize();
 
 				gates[*var].implicant[val] |= term_implicant;
+				gates[*var].assume[val] |= assume;
 				gates[*var].tids[val].push_back(t0);
 			}
 		}
@@ -208,7 +210,7 @@ void gate_set::build_reset() {
 	int _reset = vars->define(_resetDecl);
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
-		if (gate->reset != 2 && gate->is_combinational()) {
+		if (gate->reset != 2 and gate->is_combinational() and gate->assume[0].is_tautology() and gate->assume[1].is_tautology()) {
 			// TODO not sure if this is actually correct
 			gate->reset = 2;
 		}
@@ -284,6 +286,7 @@ void gate_set::save(prs::production_rule_set *out) {
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
 				out->rules.push_back(prs::production_rule());
+				out->rules.back().assume = gate->assume[val];
 				out->rules.back().guard = gate->implicant[val];
 				out->rules.back().local_action = boolean::cube(var, val);
 			}

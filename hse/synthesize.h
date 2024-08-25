@@ -45,6 +45,10 @@ struct gate
 	// a high value.
 	boolean::cover holding[2];
 
+	// Assume this state holds stable for this
+	// production rule.
+	boolean::cover assume[2];
+
 	bool is_combinational();
 	
 	void weaken_espresso();
