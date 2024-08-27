@@ -7,6 +7,8 @@
 #include <petri/graph.h>
 #include <ucs/variable.h>
 
+#include <bit>
+
 namespace hse
 {
 
@@ -174,3 +176,19 @@ bool operator!=(state s1, state s2);
 
 }
 
+namespace std {
+
+template<> struct hash<hse::state> {
+	std::size_t operator()(const hse::state& s) const noexcept {
+		static std::hash<int> h;
+		size_t result = 0;
+		for (int i = 0; i < (int)s.tokens.size(); i++) {
+			size_t value = h(s.tokens[i].index);
+			int r = i%32;
+			result = result ^ ((value << r) | (value >> (32-r)));
+		}
+		return result;
+	}
+};
+
+}

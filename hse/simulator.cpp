@@ -617,6 +617,7 @@ enabled_transition simulator::fire(int index)
 
 	// Check for interfering transitions. Interfering transitions are the active
 	// transitions that have fired since this active transition was enabled.
+	// TODO(edward.bingham) timing assumptions seem to be preventing the simulator from identifying interference.
 	for (int j = 0; j < (int)t.history.size(); j++) {
 		if (boolean::are_mutex(base->transitions[t.index].remote_action[term], base->transitions[t.history[j].index].local_action[t.history[j].term]))
 		{

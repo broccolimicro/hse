@@ -10,6 +10,12 @@
 #include <common/standard.h>
 #include <interpret_boolean/export.h>
 
+#include <unordered_set>
+#include <set>
+#include <deque>
+
+using namespace std;
+
 namespace hse
 {
 
@@ -23,7 +29,7 @@ namespace hse
 // go as far as possible around that cycle and every successive simulation will
 // branch off and recombine. This also keeps the amount of memory required as
 // low as possible as it fully explores branches before finding new ones.
-void elaborate(graph &g, const ucs::variable_set &variables, bool report_progress)
+void elaborate(graph &g, const ucs::variable_set &variables, bool record_predicates, bool report_progress)
 {
 	// Initialize all predicates and effective predicates to false.
 	for (int i = 0; i < (int)g.places.size(); i++)
@@ -32,12 +38,19 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		g.places[i].effective = boolean::cover();
 	}
 
+	// TODO(edward.bingham) we run out of memory and the computer crashes at
+	// around 2 mil states or a simulation stack of 1 mil. This should be tested
+	// on other deployments, then we may need to implement active disc caching.
+	// Another thing we could try is to occationally review the set of pending
+	// simulations, and remove any that are covered by already recorded states.
+	// This sacrifices computation speed for memory footprint. While the set
+	// insert operations are not the bottleneck, it will also speed those up.
+	
 	// used to trim the simulation tree by identifying revisited simulation states.
-	hashtable<state, 10000> states;
+	unordered_set<state> states;
 
 	// the set of currently running simulations
-	vector<simulator> simulations;
-	simulations.reserve(2000);
+	deque<simulator> simulations;
 
 	// all error states found are stored here.
 	vector<deadlock> deadlocks;
@@ -50,7 +63,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			simulator sim(&g, &variables, g.reset[i]);
 			sim.enabled();
 
-			if (states.insert(sim.get_state()))
+			if (states.insert(sim.get_state()).second)
 				simulations.push_back(sim);
 		}
 	}
@@ -63,7 +76,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			simulator sim(&g, &variables, g.source[i]);
 			sim.enabled();
 
-			if (states.insert(sim.get_state()))
+			if (states.insert(sim.get_state()).second)
 				simulations.push_back(sim);
 		}
 	}
@@ -78,12 +91,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 		//simulations.back().merge_errors(sim);
 
 		if (report_progress)
-			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
+			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.load_factor()) + "/" + ::to_string(states.size()) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
 
 		// Create a new simulation for each enabled transition in the current
 		// simulation and push it to the end of the stack as long as we haven't
 		// seen that state before
-		simulations.reserve(simulations.size() + sim.ready.size());
 		for (int i = 0; i < (int)sim.ready.size(); i++)
 		{
 			simulations.push_back(sim);
@@ -94,7 +106,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 			// compute the new enabled transitions
 			simulations.back().enabled();
 
-			if (!states.insert(simulations.back().get_state()))
+			if (!states.insert(simulations.back().get_state()).second)
 				simulations.pop_back();
 		}
 
@@ -108,6 +120,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 				error("", d.to_string(variables), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
+		}
+
+		if (not record_predicates) {
+			count++;
+			continue;
 		}
 
 		// The effective predicate represents the state encodings that don't have
@@ -179,6 +196,10 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool report_progres
 
 	if (report_progress)
 		done_progress();
+
+	if (not record_predicates) {
+		return;
+	}
 
 	// Clean up the recorded state with Espresso. This will help when rendering
 	// the state information to the user and when synthesizing production rules
