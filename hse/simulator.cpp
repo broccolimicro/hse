@@ -11,6 +11,7 @@
 #include <common/message.h>
 #include <ucs/variable.h>
 #include <interpret_boolean/export.h>
+#include <common/math.h>
 
 namespace hse
 {
@@ -133,11 +134,13 @@ simulator::simulator()
 {
 	base = NULL;
 	variables = NULL;
+	now = 0;
 }
 
 simulator::simulator(graph *base, const ucs::variable_set *variables, state initial) {
 	this->base = base;
 	this->variables = variables;
+	this->now = 0;
 	if (base != NULL) {
 		encoding = initial.encodings;
 		global = initial.encodings;
@@ -371,8 +374,12 @@ int simulator::enabled(bool sorted) {
 			for (int j = 0; j < (int)loaded.size() && !previously_enabled; j++) {
 				if (loaded[j].index == preload[i].index and not loaded[j].vacuous) {
 					preload[i].history = loaded[j].history;
+					preload[i].fire_at = loaded[j].fire_at;
 					previously_enabled = true;
 				}
+			}
+			if (!previously_enabled) {
+				preload[i].fire_at = now + pareto(10000, 5.0);
 			}
 
 			// Now we check to see if the current state passes the guard
@@ -491,6 +498,9 @@ enabled_transition simulator::fire(int index)
 	int term = ready[index].second;
 	boolean::cube local_action = base->transitions[t.index].local_action[term];
 	boolean::cube remote_action = base->transitions[t.index].remote_action[term];
+	if (t.fire_at > now) {
+		now = t.fire_at;
+	}
 
 	// We need to go through the potential list of transitions and flatten their input and output tokens.
 	// Since we know that no transition can use the same token twice, we can simply mush them all

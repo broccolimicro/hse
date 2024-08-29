@@ -93,6 +93,7 @@ enabled_transition::enabled_transition()
 	guard = 1;
 	depend = 1;
 	sequence = 1;
+	fire_at = 0;
 }
 
 enabled_transition::enabled_transition(int index)
@@ -103,6 +104,7 @@ enabled_transition::enabled_transition(int index)
 	guard = 1;
 	depend = 1;
 	sequence = 1;
+	fire_at = 0;
 }
 
 enabled_transition::enabled_transition(int index, int term)
@@ -113,6 +115,7 @@ enabled_transition::enabled_transition(int index, int term)
 	guard = 1;
 	depend = 1;
 	sequence = 1;
+	fire_at = 0;
 }
 
 enabled_transition::~enabled_transition()
