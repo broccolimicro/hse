@@ -281,15 +281,25 @@ void gate_set::build_shared_gates() {
 }
 
 void gate_set::save(prs::production_rule_set *out) {
+	int gnd = vars->find(ucs::variable("GND"));
+	if (gnd < 0) {
+		gnd = vars->define(ucs::variable("GND"));
+	}
+	int vdd = vars->find(ucs::variable("Vdd"));
+	if (vdd < 0) {
+		vdd = vars->define(ucs::variable("Vdd"));
+	}
+	out->init(*vars);
+
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
 
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
-				out->rules.push_back(prs::production_rule());
-				out->rules.back().assume = gate->assume[val];
-				out->rules.back().guard = gate->implicant[val];
-				out->rules.back().local_action = boolean::cube(var, val);
+				int source = val == 1 ? vdd : gnd;
+				out->connect(out->add_hfactor(gate->implicant[val], var, val), source);
+
+				//out->rules.back().assume = gate->assume[val];
 			}
 		}
 	}
