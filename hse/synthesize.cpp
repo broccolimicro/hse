@@ -302,6 +302,8 @@ void gate_set::save(prs::production_rule_set *out) {
 				//out->rules.back().assume = gate->assume[val];
 			}
 		}
+
+		out->at(var).keep = true;
 	}
 }
 
