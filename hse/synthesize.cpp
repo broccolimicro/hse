@@ -297,9 +297,7 @@ void gate_set::save(prs::production_rule_set *out) {
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
 				int source = val == 1 ? vdd : gnd;
-				out->connect(out->add_hfactor(gate->implicant[val], var, val), source);
-
-				//out->rules.back().assume = gate->assume[val];
+				out->connect(out->add_hfactor(gate->implicant[val], var, val, gate->assume[val]), source);
 			}
 		}
 
