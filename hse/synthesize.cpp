@@ -290,6 +290,7 @@ void gate_set::save(prs::production_rule_set *out) {
 		vdd = vars->define(ucs::variable("Vdd"));
 	}
 	out->init(*vars);
+	out->set_power(vdd, gnd);
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
