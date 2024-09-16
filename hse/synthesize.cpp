@@ -302,7 +302,7 @@ void gate_set::save(prs::production_rule_set *out) {
 			}
 		}
 
-		out->at(var).keep = true;
+		out->at(var).keep = not gate->is_combinational();
 	}
 }
 
