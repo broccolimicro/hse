@@ -292,6 +292,10 @@ void gate_set::save(prs::production_rule_set *out) {
 	out->init(*vars);
 	out->set_power(vdd, gnd);
 
+	out->require_driven = true;
+	out->require_stable = true;
+	out->require_noninterfering = true;
+
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
 
