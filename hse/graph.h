@@ -122,6 +122,8 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	graph();
 	~graph();
 
+	string name;
+
 	// inherited from petri::graph
 	// vector<int> node_distances;
 	// bool node_distances_ready;

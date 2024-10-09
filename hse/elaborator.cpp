@@ -14,6 +14,14 @@
 #include <set>
 #include <deque>
 
+#include <chrono>
+#define KNRM  "\x1B[0m"
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KYEL  "\x1B[33m"
+#define KBLU  "\x1B[34m"
+using namespace std::chrono;
+
 using namespace std;
 
 namespace hse
@@ -31,6 +39,12 @@ namespace hse
 // low as possible as it fully explores branches before finding new ones.
 void elaborate(graph &g, const ucs::variable_set &variables, bool record_predicates, bool report_progress)
 {
+	if (report_progress) {
+		printf("  %s...", g.name.c_str());
+		fflush(stdout);
+	}
+	steady_clock::time_point start = steady_clock::now();
+
 	// Initialize all predicates and effective predicates to false.
 	for (int i = 0; i < (int)g.places.size(); i++)
 	{
@@ -89,9 +103,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 		simulator sim = simulations.back();
 		simulations.pop_back();
 		//simulations.back().merge_errors(sim);
-
-		if (report_progress)
-			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.load_factor()) + "/" + ::to_string(states.size()) + " " + ::to_string(sim.ready.size()), __FILE__, __LINE__);
 
 		// Create a new simulation for each enabled transition in the current
 		// simulation and push it to the end of the stack as long as we haven't
@@ -194,9 +205,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 		count++;
 	}
 
-	if (report_progress)
-		done_progress();
-
 	if (not record_predicates) {
 		return;
 	}
@@ -206,16 +214,15 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 	// for the final circuit.
 	for (int i = 0; i < (int)g.places.size(); i++)
 	{
-		if (report_progress)
-			progress("", "Espresso " + ::to_string(i) + "/" + ::to_string(g.places.size()), __FILE__, __LINE__);
-
 		g.places[i].effective.espresso();
 		sort(g.places[i].effective.cubes.begin(), g.places[i].effective.cubes.end());
 		g.places[i].predicate.espresso();
 	}
 
-	if (report_progress)
-		done_progress();
+	steady_clock::time_point finish = steady_clock::now();
+	if (report_progress) {
+		printf("[%sDONE%s]\t%gs\n", KGRN, KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
+	}
 }
 
 struct simulation
