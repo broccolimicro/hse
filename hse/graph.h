@@ -10,6 +10,8 @@
 namespace hse
 {
 
+const string ghost_prefix = "__b";
+
 using petri::iterator;
 using petri::parallel;
 using petri::choice;
@@ -52,6 +54,9 @@ struct place : petri::place
 	// with an arbiter or synchronizer depending on whether the guards are stable.
 	bool arbiter;
 	bool synchronizer;
+
+	// See graph::ghost_nets for documentation
+	vector<int> ghost_nets;
 
 	static place merge(int composition, const place &p0, const place &p1);
 };
@@ -102,7 +107,10 @@ struct transition : petri::transition
 	// disabled before this transition is allowed to be enabled.
 
 	// assumptions must propagate through vacuous transitions like guards.
-	boolean::cover assume;
+	boolean::cover assume; 
+
+	// See graph::ghost_nets for documentation
+	boolean::cover ghost;
 
 	transition subdivide(int term) const;
 
@@ -135,6 +143,15 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	// vector<state> source, sink;
 	// vector<state> reset;
 
+	// In order to efficiently update the state space after inserting a state
+	// variable transition, we need to know how state propagates out of selection
+	// statements. To do this, a variable will be defined for each branch of each
+	// conditional split and an assignment will be added to the first transition
+	// on that branch. However, these variables should not be used to determine
+	// state conflicts, so we need to be able to hide them before we synthesize.
+	// So, we record the set of variables added.
+	vector<int> ghost_nets;
+
 	hse::transition &at(term_index idx);
 	boolean::cube &term(term_index idx);
 
@@ -149,9 +166,11 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	void update_masks();
 
-	void post_process(const ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
+	void post_process(ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
 	void check_variables(const ucs::variable_set &variables);
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
+
+	void annotate_conditional_branches(ucs::variable_set &variables);
 };
 
 }

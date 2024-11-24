@@ -9,6 +9,7 @@
 #include "simulator.h"
 #include <common/message.h>
 #include <common/text.h>
+#include <common/math.h>
 #include <interpret_boolean/export.h>
 #include <petri/simulator.h>
 #include <petri/state.h>
@@ -65,6 +66,7 @@ transition::transition(boolean::cover assume, boolean::cover guard, boolean::cov
 	this->guard = guard;
 	this->local_action = local_action;
 	this->remote_action = remote_action;
+	this->ghost = 1;
 }
 
 transition::~transition()
@@ -164,6 +166,7 @@ boolean::cover graph::predicate(vector<petri::iterator> pos) const {
 			}
 		}
 	}
+	result.hide(ghost_nets);
 	
 	return result;
 }
@@ -184,6 +187,7 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 		}
 	}
 	pred &= ~transitions[i.index].guard & ~transitions[i.index].local_action;
+	pred.hide(ghost_nets);
 	return pred;
 }
 
@@ -201,6 +205,7 @@ boolean::cover graph::implicant(vector<petri::iterator> pos) const {
 			result &= transitions[i->index].guard;
 		}
 	}
+	result.hide(ghost_nets);
 	
 	return result;
 }
@@ -224,6 +229,7 @@ boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
 			result &= transitions[i->index].guard & ~transitions[i->index].local_action;
 		}
 	}
+	result.hide(ghost_nets);
 	return result;
 }
 
@@ -359,14 +365,14 @@ void graph::update_masks() {
 	{
 		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
 			if (is_reachable(j, i)) {
-				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].assume.mask()).combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask());
+				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].assume.mask()).combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask()).combine_mask(transitions[j.index].ghost.mask());
 			}
 		}
 		places[i.index].mask = places[i.index].mask.flip();
 	}
 }
 
-void graph::post_process(const ucs::variable_set &variables, bool proper_nesting, bool aggressive)
+void graph::post_process(ucs::variable_set &variables, bool proper_nesting, bool aggressive)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
 		transitions[i].remote_action = transitions[i].local_action.remote(variables.get_groups());
@@ -577,6 +583,8 @@ void graph::post_process(const ucs::variable_set &variables, bool proper_nesting
 			continue;
 	}
 
+	annotate_conditional_branches(variables);
+
 	// Determine the actual starting location of the tokens given the state information
 	update_masks();
 	if (reset.size() == 0)
@@ -609,7 +617,7 @@ void graph::check_variables(const ucs::variable_set &variables)
 
 		if (written.size() == 0 && read.size() > 0)
 			warning("", variables.nodes[i].to_string() + " never assigned", __FILE__, __LINE__);
-		else if (written.size() == 0 && read.size() == 0)
+		else if (written.size() == 0 && read.size() == 0 and variables.nodes[i].to_string().rfind(ghost_prefix, 0) == string::npos)
 			warning("", "unused variable " + variables.nodes[i].to_string(), __FILE__, __LINE__);
 	}
 }
@@ -673,6 +681,46 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 	}
 
 	return result;
+}
+
+void graph::annotate_conditional_branches(ucs::variable_set &variables) {
+	if (not ghost_nets.empty()) {
+		for (petri::iterator i = begin(petri::transition::type); i != end(petri::transition::type); i++) {
+			transitions[i.index].ghost = 1;
+		}
+		ghost_nets.clear();
+	}
+
+	for (petri::iterator i = begin(petri::place::type); i != end(petri::place::type); i++) {
+		places[i.index].ghost_nets.clear();
+
+		vector<petri::iterator> n = next(i);
+		if ((int)n.size() > 1) {
+			int count = log2i((int)n.size());
+			count += ((int)n.size() > (1<<count));
+			for (int j = 0; j < count; j++) {
+				string name = ghost_prefix + to_string(i.index) + "_" + to_string(places[i.index].ghost_nets.size());
+				int uid = variables.define(name);
+				if (uid < 0) {
+					// If this branch was previously annotated, reuse the name
+					uid = variables.find(name);
+				}
+				ghost_nets.push_back(uid);
+				places[i.index].ghost_nets.push_back(uid);
+			}
+
+			boolean::cover total;
+			for (int j = 0; j < (int)n.size(); j++) {
+				if (j == (int)n.size()-1) {
+					transitions[n[j].index].ghost &= ~total;
+				} else {
+					boolean::cover ghost = boolean::encode_binary(j, places[i.index].ghost_nets);
+					transitions[n[j].index].ghost &= ghost;
+					total |= ghost;
+				}
+			}
+		}
+	}
 }
 
 }

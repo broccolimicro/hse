@@ -37,7 +37,7 @@ namespace hse
 // go as far as possible around that cycle and every successive simulation will
 // branch off and recombine. This also keeps the amount of memory required as
 // low as possible as it fully explores branches before finding new ones.
-void elaborate(graph &g, const ucs::variable_set &variables, bool record_predicates, bool report_progress)
+void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghosts, bool record_predicates, bool report_progress)
 {
 	if (report_progress) {
 		printf("  %s...", g.name.c_str());
@@ -74,7 +74,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 	{
 		for (int i = 0; i < (int)g.reset.size(); i++)
 		{
-			simulator sim(&g, &variables, g.reset[i]);
+			simulator sim(&g, &variables, g.reset[i], annotate_ghosts);
 			sim.enabled();
 
 			if (states.insert(sim.get_state()).second)
@@ -87,7 +87,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
 		{
-			simulator sim(&g, &variables, g.source[i]);
+			simulator sim(&g, &variables, g.source[i], annotate_ghosts);
 			sim.enabled();
 
 			if (states.insert(sim.get_state()).second)
@@ -196,9 +196,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 				// 1. Ignore unstable signals - xoutnulls()
 				// 2. Mask out variables that this process has no visibility for - flipped_mask()
 				// 3. OR this into the predicate for that place
-				g.places[sim.tokens[i].index].predicate |= (sim.encoding.xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
-				// Same thing as above, but we exclude any state encoding that passes an outgoing guard - & dis
-				g.places[sim.tokens[i].index].effective |= (sim.encoding.xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
+				for (auto c = sim.encoding.cubes.begin(); c != sim.encoding.cubes.end(); c++) {
+					g.places[sim.tokens[i].index].predicate |= (c->xoutnulls()).flipped_mask(g.places[sim.tokens[i].index].mask);
+					// Same thing as above, but we exclude any state encoding that passes an outgoing guard - & dis
+					g.places[sim.tokens[i].index].effective |= (c->xoutnulls() & dis).flipped_mask(g.places[sim.tokens[i].index].mask);
+				}
 			}
 		}
 
@@ -212,8 +214,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool record_predica
 	// Clean up the recorded state with Espresso. This will help when rendering
 	// the state information to the user and when synthesizing production rules
 	// for the final circuit.
-	for (int i = 0; i < (int)g.places.size(); i++)
-	{
+	for (int i = 0; i < (int)g.places.size(); i++) {
 		g.places[i].effective.espresso();
 		sort(g.places[i].effective.cubes.begin(), g.places[i].effective.cubes.end());
 		g.places[i].predicate.espresso();

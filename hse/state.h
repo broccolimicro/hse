@@ -147,8 +147,8 @@ struct token : petri::token
 struct state : petri::state<petri::token>
 {
 	state();
-	state(vector<petri::token> tokens, boolean::cube encodings);
-	state(vector<hse::token> tokens, boolean::cube encodings);
+	state(vector<petri::token> tokens, boolean::cover encodings);
+	state(vector<hse::token> tokens, boolean::cover encodings);
 	~state();
 
 	// The tokens marking our location in the HSE
@@ -156,7 +156,7 @@ struct state : petri::state<petri::token>
 	// vector<token> tokens;
 
 	// The current value assiged to each variable.
-	boolean::cube encodings;
+	boolean::cover encodings;
 
 	void hash(hasher &hash) const;
 
@@ -169,10 +169,6 @@ struct state : petri::state<petri::token>
 
 ostream &operator<<(ostream &os, state s);
 
-bool operator<(state s1, state s2);
-bool operator>(state s1, state s2);
-bool operator<=(state s1, state s2);
-bool operator>=(state s1, state s2);
 bool operator==(state s1, state s2);
 bool operator!=(state s1, state s2);
 

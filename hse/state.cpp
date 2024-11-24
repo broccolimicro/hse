@@ -204,13 +204,13 @@ state::state()
 	encodings = 1;
 }
 
-state::state(vector<petri::token> tokens, boolean::cube encodings)
+state::state(vector<petri::token> tokens, boolean::cover encodings)
 {
 	this->tokens = tokens;
 	this->encodings = encodings;
 }
 
-state::state(vector<hse::token> tokens, boolean::cube encodings)
+state::state(vector<hse::token> tokens, boolean::cover encodings)
 {
 	for (int i = 0; i < (int)tokens.size(); i++)
 		this->tokens.push_back(tokens[i]);
@@ -298,30 +298,6 @@ ostream &operator<<(ostream &os, state s)
 	}
 	os << "} " << s.encodings;
 	return os;
-}
-
-bool operator<(state s1, state s2)
-{
-	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.encodings < s2.encodings);
-}
-
-bool operator>(state s1, state s2)
-{
-	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.encodings > s2.encodings);
-}
-
-bool operator<=(state s1, state s2)
-{
-	return (s1.tokens < s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.encodings <= s2.encodings);
-}
-
-bool operator>=(state s1, state s2)
-{
-	return (s1.tokens > s2.tokens) ||
-		   (s1.tokens == s2.tokens && s1.encodings >= s2.encodings);
 }
 
 bool operator==(state s1, state s2)

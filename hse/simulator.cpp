@@ -130,20 +130,22 @@ string deadlock::to_string(const ucs::variable_set &v)
 	return "deadlock detected at state " + state::to_string(v);
 }
 
-simulator::simulator()
+simulator::simulator(bool annotate_ghosts)
 {
 	base = NULL;
 	variables = NULL;
 	now = 0;
+	this->annotate_ghosts = annotate_ghosts;
 }
 
-simulator::simulator(graph *base, const ucs::variable_set *variables, state initial) {
+simulator::simulator(graph *base, const ucs::variable_set *variables, state initial, bool annotate_ghosts) {
 	this->base = base;
 	this->variables = variables;
 	this->now = 0;
+	this->annotate_ghosts = annotate_ghosts;
 	if (base != NULL) {
-		encoding = initial.encodings;
-		global = initial.encodings;
+		encoding = initial.encodings.minimize();
+		global = stripped_encoding();
 		for (int k = 0; k < (int)initial.tokens.size(); k++) {
 			tokens.push_back(hse::token(initial.tokens[k].index));
 		}
@@ -384,7 +386,7 @@ int simulator::enabled(bool sorted) {
 
 			// Now we check to see if the current state passes the guard
 			// TODO(edward.bingham) assume should be built into passes_guard
-			int isReady = boolean::passes_guard(encoding, global, preload[i].assume, guard, &preload[i].guard_action);
+			int isReady = boolean::passes_guard(stripped_encoding(), global, preload[i].assume, guard, &preload[i].guard_action);
 			if (isReady < 0 && previously_enabled) {
 				isReady = 0;
 			}
@@ -645,8 +647,13 @@ enabled_transition simulator::fire(int index)
 	}
 
 	// Update the state
+	boolean::cover annotated_action = local_action;
+	if (annotate_ghosts) {
+		annotated_action &= base->transitions[t.index].ghost;
+	}
+
 	global = local_assign(global, remote_action, t.stable);
-	encoding = remote_assign(local_assign(encoding, local_action, t.stable), global, true);
+	encoding = remote_assign(local_assign(encoding, annotated_action, t.stable), global, true);
 
 	for (int i = (int)loaded.size()-1; i >= 0; i--) {
 		if (are_mutex(loaded[i].assume, global)
@@ -713,6 +720,10 @@ void simulator::merge_errors(const simulator &sim)
 	}
 	else
 		mutex_errors = sim.mutex_errors;
+}
+
+boolean::cube simulator::stripped_encoding() {
+	return encoding.without(base->ghost_nets).minimize().cubes[0];
 }
 
 state simulator::get_state()

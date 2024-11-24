@@ -130,8 +130,8 @@ void gate_set::load(bool senseless) {
 	gates.resize(vars->nodes.size());
 
 	for (int i = 0; i < (int)gates.size(); i++) {
-		if (base->reset.size() > 0) {
-			gates[i].reset = base->reset[0].encodings.get(i);
+		if (not base->reset.empty() and not base->reset[0].encodings.cubes.empty()) {
+			gates[i].reset = base->reset[0].encodings.cubes[0].get(i);
 		}
 	}
 
@@ -150,6 +150,9 @@ void gate_set::load(bool senseless) {
 		for (auto term = t0i->local_action.cubes.begin(); term != t0i->local_action.cubes.end(); term++) {
 			vector<int> term_vars = term->vars();
 			for (auto var = term_vars.begin(); var != term_vars.end(); var++) {
+				if (find(base->ghost_nets.begin(), base->ghost_nets.end(), *var) != base->ghost_nets.end()) {
+					continue;
+				}
 				int val = term->get(*var);
 
 				// we cannot use the variables affected by the transitions in their rules because that would
@@ -170,7 +173,10 @@ void gate_set::load(bool senseless) {
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
-		
+		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {
+			continue;
+		}
+	
 		for (int val = 0; val < 2; val++) {
 			// We're going to check this transition against all of the places in the system
 			vector<petri::iterator> relevant = base->relevant_nodes(gate->tids[val]);
@@ -211,6 +217,11 @@ void gate_set::build_reset() {
 
 	// TODO(edward.bingham) There a more complete algorithm for minimal resets on production rules.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
+		int var = gate - gates.begin();
+		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {
+			continue;
+		}
+
 		if (gate->reset != 2 and gate->is_combinational() and gate->assume[0].is_tautology() and gate->assume[1].is_tautology()) {
 			// TODO not sure if this is actually correct
 			gate->reset = 2;
@@ -298,6 +309,9 @@ void gate_set::save(prs::production_rule_set *out) {
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
+		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {
+			continue;
+		}
 
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {

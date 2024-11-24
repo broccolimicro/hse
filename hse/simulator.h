@@ -74,9 +74,11 @@ struct simulator
 	// This is used by hse::graph to roll up the reset transitions.
 	typedef petri::simulator<hse::place, hse::transition, petri::token, hse::state> super;
 
-	simulator();
-	simulator(graph *base, const ucs::variable_set *variables, state initial);
+	simulator(bool annotate_ghosts = false);
+	simulator(graph *base, const ucs::variable_set *variables, state initial, bool annotate_ghosts = false);
 	~simulator();
+
+	bool annotate_ghosts;
 
 	// This simulator is also used for elaboration, so a lot of the errors we
 	// encounter may be encountered multiple times as the elaborator visits
@@ -143,7 +145,7 @@ struct simulator
 	
 	// See haystack/lib/boolean/boolean/{cube.h, cube.cpp} for more
 	// details about the minterm representation.
-	boolean::cube encoding;
+	boolean::cover encoding;
 	boolean::cube global;
 
 	// These are the tokens that mark the current state. Effectively, these are
@@ -172,6 +174,8 @@ struct simulator
 
 	int enabled(bool sorted = false);
 	enabled_transition fire(int index);
+
+	boolean::cube stripped_encoding();
 
 	void merge_errors(const simulator &sim);
 	state get_state();
