@@ -749,27 +749,45 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 		return;
 	}
 
-	// This will group state variable transitions by their insertion location.
-	// When multiple state variables are inserted at the same location, we have
-	// to be careful about the composition of those transitions. Given a
-	// downgoing output transition a&~b->x-, we need to insert state variables
-	// like so: [a]; (v0-,v1-); [~b]; (v2+,v3+); x-. For upgoing a&~b->x+, its
-	// inverted: [~b]; (v2+,v3+); [a]; (v0-,v1-); x+. If the guard has multiple
-	// terms with different senses, then this becomes problematic. For example,
-	// a&~b|~a&b->x-.
+	// Assumptions:
+	//   1. "from" and "to" must be in parallel or sequence, they cannot be only
+	//   composed conditionally.
 
-	// I need to determine two more things: I need to group the input and
-	// output transitions based upon sense so that I can organize the state
-	// variable insertion to preserve cmos implementability, and I need to
-	// group the input and output transitions based on conditional
-	// splits/merges so that I can respect shared conditional/parallel
-	// compositions.
+	// if (not (is(parallel, from, to) or not is(choice, from, to))) {
+	// 	return;
+	// }
+
+	//   2. Nodes in "from" must be composed in parallel to eachother and nodes
+	//   in "to" must be composed in parallel to eachother.
+	
+
+	// TODO(edward.bingham) Insert assignments in parallel composition to nodes between from -> to
+	// On the inputs:
+	// 1. conditional cliques of parallel nodes
+	// 2. conditional support of degenerative cliques
+	// 3. replication of conditional structures
+	// On the outputs:
+	// 1. conditional support of mismatched branches
+	// 2. replication of conditional structures
+	// For inserted transitions
+	// 1. add reset marking for from -> to that reverses index priority
+	// 2. parallel / sequential structure to respect cmos implementability
+	// How do I handle:
+	// 1. guards?
+	// 2. ghosts?
+	// 3. State update for inserted places?
 
 	// Step 1: back out all places to their associated transitions
 	// Step 2: break that cut into conditional groups of parallel transitions
 	// Step 3: complete the dangling parallel groups using the conditional splits that differentiate the two groups
 	from = normalize_cut(transition::type, 0, from);
-	vector<vector<petri::iterator> > p = complete(parallel, group(parallel, select(parallel, from, true, true), true));
+	vector<vector<petri::iterator> > p = group(parallel, select(parallel, from, true, true), true);
+	
+	
+
+
+
+	vector<vector<petri::iterator> > p = complete(parallel, p);
 
 	// Step 4: add places after each transition and map to groups
 	map<petri::iterator, petri::iterator> places;
@@ -819,6 +837,15 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 		*n = pos.first->second;
 	}
 	int sense = (up >= dn);
+
+	// This will group state variable transitions by their insertion location.
+	// When multiple state variables are inserted at the same location, we have
+	// to be careful about the composition of those transitions. Given a
+	// downgoing output transition a&~b->x-, we need to insert state variables
+	// like so: [a]; (v0-,v1-); [~b]; (v2+,v3+); x-. For upgoing a&~b->x+, its
+	// inverted: [~b]; (v2+,v3+); [a]; (v0-,v1-); x+. If the guard has multiple
+	// terms with different senses, then this becomes problematic. For example,
+	// a&~b|~a&b->x-.
 
 	// Step 5: insert single transitions into each of the locations
 	// Step 6: break inserted transition apart based on cmos implementability
