@@ -337,19 +337,21 @@ int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, co
 // Asynchronous Circuits and Systems. IEEE, 1996.
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
-void encoder::insert_state_variables() {
-	// Trace all conflicts
-	for (auto i = base->places.begin(); i != base->places.end(); i++) {
-		cout << "p" << (i-base->places.begin()) << ":" << endl;
-		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
-			cout << "\t" << j->to_string() << endl;
+void encoder::insert_state_variables(bool debug) {
+	if (debug) {
+		// Trace all conflicts
+		for (auto i = base->places.begin(); i != base->places.end(); i++) {
+			cout << "p" << (i-base->places.begin()) << ":" << endl;
+			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+				cout << "\t" << j->to_string() << endl;
+			}
 		}
-	}
 
-	for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
-		cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
-			cout << "\t" << j->to_string() << endl;
+		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
+			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
+			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+				cout << "\t" << j->to_string() << endl;
+			}
 		}
 	}
 
@@ -402,11 +404,13 @@ void encoder::insert_state_variables() {
 		problems.back().traces[conflicts[i].sense].repair();
 	}
 
-	cout << "Before Clustering" << endl;
-	for (int i = 0; i < (int)problems.size(); i++) {
-		cout << to_string(problems[i].term.vars()) << endl;
-		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
-		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+	if (debug) {
+		cout << "Before Clustering" << endl;
+		for (int i = 0; i < (int)problems.size(); i++) {
+			cout << to_string(problems[i].term.vars()) << endl;
+			cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+			cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+		}
 	}
 
 	// TODO(edward.bingham) State variable insertion ended up being far more
@@ -497,14 +501,18 @@ void encoder::insert_state_variables() {
 	//printf("looking for a solution in 1/%d clusters\n", (int)problems.size());
 
 	int uid = -1;
-	cout << "After Clustering " << problems.size() << endl;
+	if (debug) {
+		cout << "After Clustering " << problems.size() << endl;
+	}
 	// Figure out where to insert state variable transitions, create state
 	// variables, and determine their reset state.
 	// TODO(edward.bingham) This is a simple hack to try inserting only one state variable at a time
-	for (int i = 0; i < (int)problems.size() and i < 1; i++) {  
-		cout << to_string(problems[i].term.vars()) << endl;
-		cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
-		cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+	for (int i = 0; i < (int)problems.size() and i < 1; i++) { 
+		if (debug) {
+			cout << to_string(problems[i].term.vars()) << endl;
+			cout << "v" << i << "-\t" << problems[i].traces[0] << endl;
+			cout << "v" << i << "+\t" << problems[i].traces[1] << endl;
+		}
 
 		// Create the state variable
 		int vid = -1;
@@ -512,15 +520,19 @@ void encoder::insert_state_variables() {
 			vid = variables->define("v" + ::to_string(++uid));
 		}
 
-		printf("enumerating options\n");
+		if (debug) {
+			printf("enumerating options\n");
+		}
 		array<vector<vector<petri::iterator> >, 2> options;
 		options[0] = problems[i].traces[0].enumerate();
 		options[1] = problems[i].traces[1].enumerate();
-		printf("found (%d %d)\n", (int)options[0].size(), (int)options[1].size());
-		for (int i = 0; i < (int)options[1].size(); i++) {
-			cout << to_string(options[1][i]) << " ";
+		if (debug) {
+			printf("found (%d %d)\n", (int)options[0].size(), (int)options[1].size());
+			for (int i = 0; i < (int)options[1].size(); i++) {
+				cout << to_string(options[1][i]) << " ";
+			}
+			cout << endl;
 		}
-		cout << endl;
 
 		array<vector<vector<petri::iterator> >, 2> best;
 		array<petri::path_set, 2> colorings({
@@ -529,10 +541,12 @@ void encoder::insert_state_variables() {
 		});
 		int min_cost = -1;
 
-		cout << "options[0] = " << to_string(options[0]) << endl;
-		cout << "options[1] = " << to_string(options[1]) << endl;
+		if (debug) {
+			cout << "options[0] = " << to_string(options[0]) << endl;
+			cout << "options[1] = " << to_string(options[1]) << endl;
 
-		printf("Looking at %d pairings\n", (int)(options[0].size()*options[1].size()));
+			printf("Looking at %d pairings\n", (int)(options[0].size()*options[1].size()));
+		}
 		// Figure out where to put the state variable transitions
 		for (auto j = options[0].begin(); j != options[0].end(); j++) {
 			for (auto k = options[1].begin(); k != options[1].end(); k++) {
@@ -545,14 +559,17 @@ void encoder::insert_state_variables() {
 				for (auto it = insertions.begin(); it != insertions.end(); it++) {
 					petri::path_set v0 = petri::trace(*base, (*it)[0], base->deselect((*it)[1]), true);
 					petri::path_set v1 = petri::trace(*base, (*it)[1], base->deselect((*it)[0]), true);
-					cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
-
+					if (debug) {
+						cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
+					}
 					// check each transition against suspects and generate a score
 					// find the pair with the best score.
 					array<vector<vector<petri::iterator> >, 2> curr;
 					int upcost = find_insertions(1, (*it)[1], v1, &curr[1]);
 					int dncost = find_insertions(0, (*it)[0], v0, &curr[0]);
-					cout << "final cost is " << upcost << "+" << dncost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+					if (debug) {
+						cout << "final cost is " << upcost << "+" << dncost << "/" << min_cost << " for options up:" << to_string(curr[1]) << " down:" << to_string(curr[0]) << endl;
+					}
 					if (upcost >= 0 and dncost >= 0 and (min_cost < 0 or upcost+dncost < min_cost)) {
 						min_cost = upcost+dncost;
 						best = curr;
@@ -567,7 +584,9 @@ void encoder::insert_state_variables() {
 			cout << "error: failed to find solution" << endl;
 		}
 
-		printf("handling reset\n");
+		if (debug) {
+			printf("handling reset\n");
+		}
 		for (int j = 0; j < 2; j++) {
 			for (auto k = best[j].begin(); k != best[j].end(); k++) {
 				// TODO(edward.bingham) this ends up adding places to the insertion
@@ -588,13 +607,15 @@ void encoder::insert_state_variables() {
 			}
 		}
 		
-		cout << "inserting v" << uid << "+ at " << to_string(best[1]) << endl;
-		cout << "inserting v" << uid << "- at " << to_string(best[0]) << endl;
-
+		if (debug) {
+			cout << "inserting v" << uid << "+ at " << to_string(best[1]) << endl;
+			cout << "inserting v" << uid << "- at " << to_string(best[0]) << endl;
+		
+			cout << "Looking for Reset for v" << uid << endl;
+			cout << "v" << i << "-; v" << uid << "+ " << colorings[0] << endl;
+			cout << "v" << i << "+; v" << uid << "- " << colorings[1] << endl;
+		}
 		// Figure out the reset states
-		cout << "Looking for Reset for v" << uid << endl;
-		cout << "v" << i << "-; v" << uid << "+ " << colorings[0] << endl;
-		cout << "v" << i << "+; v" << uid << "- " << colorings[1] << endl;
 		for (auto s = base->reset.begin(); s != base->reset.end(); s++) {
 			int reset = 2;
 			for (auto t = s->tokens.begin(); t != s->tokens.end(); t++) {
@@ -634,8 +655,9 @@ void encoder::insert_state_variables() {
 	// a&~b|~a&b->x-.
 
 	// TODO(edward.bingham) handle conflicting multiterm guards.
-
-	printf("inserting %d transitions\n", (int)groups.size());
+	if (debug) {
+		printf("inserting %d transitions\n", (int)groups.size());
+	}
 	// Insert the transitions into the graph
 	for (auto group = groups.begin(); group != groups.end(); group++) {
 		if (group->second[0].empty() and group->second[1].empty()) {
@@ -730,22 +752,23 @@ void encoder::insert_state_variables() {
 		}
 	}
 
-	for (auto i = base->places.begin(); i != base->places.end(); i++) {
-		cout << "p" << (i-base->places.begin()) << ":" << endl;
-		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
-			cout << "\t" << j->to_string() << endl;
+	if (debug) {
+		for (auto i = base->places.begin(); i != base->places.end(); i++) {
+			cout << "p" << (i-base->places.begin()) << ":" << endl;
+			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+				cout << "\t" << j->to_string() << endl;
+			}
 		}
-	}
 
-	for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
-		cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-		for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
-			cout << "\t" << j->to_string() << endl;
+		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
+			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
+			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+				cout << "\t" << j->to_string() << endl;
+			}
 		}
+
+		printf("done insert state variables\n");
 	}
-
-
-	printf("done insert state variables\n");
 	// TODO(edward.bingham) There seems to be a bug in identifying redundant
 	// states, but I can't seem to pin it down.
 	base->erase_redundant();
@@ -808,7 +831,9 @@ void encoder::insert_state_variables() {
 	//    each place in the handshake that is in sequence with the insertion, we
 	//    determine if it is sequenced before or after the insertion. Then we
 	//    identify all partial states that cross that insertion.
-	printf("done\n");
+	if (debug) {
+		printf("done\n");
+	}
 }
 
 }

@@ -86,7 +86,7 @@ struct encoder
 	int find_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
 	int find_insertions(int sense, vector<vector<petri::iterator> > pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result);
 
-	void insert_state_variables();
+	void insert_state_variables(bool debug);
 };
 
 }
