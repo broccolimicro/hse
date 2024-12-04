@@ -723,4 +723,136 @@ void graph::annotate_conditional_branches(ucs::variable_set &variables) {
 	}
 }
 
+vector<petri::iterator> graph::normalize_cut(vector<petri::iterator> cut, int type, int forward) {
+	// Step 1: back out all places to their associated transitions
+	vector<petri::iterator> p;
+	for (int i = cut.size()-1; i >= 0; i--) {
+		if (cut[i].type != type) {
+			p.push_back(cut[i]);
+			cut.erase(cut.begin()+i);
+		}
+	}
+	p = forward == 0 ? prev(p) : next(p);
+	cut.insert(cut.end(), p.begin(), p.end());
+	sort(cut.begin(), cut.end());
+	cut.erase(unique(cut.begin(), cut.end()), cut.end());
+	return cut;	
+}
+
+// insert a collection of tranistions connecting "from" to "to"
+// enforce parallel composition, then remove redundant places/transitions/arcs
+// 
+void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> to, boolean::cube assign) {
+	if (assign.is_tautology()) {
+		// This should never happen
+		cout << "error: both sides of transition group are empty" << endl;
+		return;
+	}
+
+	// This will group state variable transitions by their insertion location.
+	// When multiple state variables are inserted at the same location, we have
+	// to be careful about the composition of those transitions. Given a
+	// downgoing output transition a&~b->x-, we need to insert state variables
+	// like so: [a]; (v0-,v1-); [~b]; (v2+,v3+); x-. For upgoing a&~b->x+, its
+	// inverted: [~b]; (v2+,v3+); [a]; (v0-,v1-); x+. If the guard has multiple
+	// terms with different senses, then this becomes problematic. For example,
+	// a&~b|~a&b->x-.
+
+	// I need to determine two more things: I need to group the input and
+	// output transitions based upon sense so that I can organize the state
+	// variable insertion to preserve cmos implementability, and I need to
+	// group the input and output transitions based on conditional
+	// splits/merges so that I can respect shared conditional/parallel
+	// compositions.
+
+	// Step 1: back out all places to their associated transitions
+	// Step 2: break that cut into conditional groups of parallel transitions
+	// Step 3: complete the dangling parallel groups using the conditional splits that differentiate the two groups
+	from = normalize_cut(transition::type, 0, from);
+	vector<vector<petri::iterator> > p = complete(parallel, group(parallel, select(parallel, from, true, true), true));
+
+	// Step 4: add places after each transition and map to groups
+	map<petri::iterator, petri::iterator> places;
+	int up = 0;
+	int dn = 0; 
+	for (auto g = p.begin(); g != p.end(); g++) {
+		for (auto n = g->begin(); n != g->end(); n++) {
+			// If an input transition is downgoing, then the next one should be
+			// upgoing and visa versa
+			// Down -> Up; Down -> Up
+			dn += transitions[n->index].local_action.count(1);
+			up += transitions[n->index].local_action.count(0);
+
+			auto pos = places.insert({*n, petri::iterator()});
+			if (pos.second) {
+				pos.first->second = connect(*n, create(place::type));
+			}
+			*n = pos.first->second;
+		}
+	}
+	places.clear();
+
+	// Grab the guards from the outgoing transitions
+	boolean::cover guard = 1;
+	for (auto i = to.begin(); i != to.end(); i++) {
+		if (i->type == transition::type) {
+			guard &= transitions[i->index].guard;
+			transitions[i->index].guard = 1;
+		}
+	}
+	int guardsense = (guard.count(1) >= guard.count(0));
+
+	// TODO(edward.bingham) how possible is it to factor this guard G into two
+	// expressions P and N such that G=P&N and the number of negative literals in
+	// P and the number of positive literals in N are minimized?
+
+	to = normalize_cut(transition::type, 1, to);
+	for (auto n = to.begin(); n != to.end(); n++) {
+		// Down -> Up; Down -> Up
+		up += transitions[n->index].local_action.count(1);
+		dn += transitions[n->index].local_action.count(0);
+
+		auto pos = places.insert({*n, petri::iterator()});
+		if (pos.second) {
+			pos.first->second = connect(create(place::type), *n);
+		}
+		*n = pos.first->second;
+	}
+	int sense = (up >= dn);
+
+	// Step 5: insert single transitions into each of the locations
+	// Step 6: break inserted transition apart based on cmos implementability
+	for (int i = 0; i < (int)p.size(); i++) {
+		bool guardHandled = false;
+		if (assign.has(sense)) {
+			vector<int> v = assign.mask(sense).vars();
+			p[i] = connect(p[i], create(transition(), (int)v.size()));
+			for (int j = 0; j < (int)p[i].size(); j++) {
+				if (guardsense == 1-sense) {
+					transitions[p[i][j].index].guard = guard;
+				}
+				transitions[p[i][j].index].local_action = boolean::cube(v[j], sense);
+				transitions[p[i][j].index].remote_action = transitions[p[i][j].index].local_action;
+			}
+			guardHandled = (guardsense == 1-sense);
+		}
+
+		if (assign.has(1-sense)) {
+			vector<int> v = assign.mask(1-sense).vars();
+			p[i] = connect(p[i], create(transition(), (int)v.size()));
+			for (int j = 0; j < (int)p[i].size(); j++) {
+				if (not guardHandled) {
+					transitions[p[i][j].index].guard = guard;
+				}
+				transitions[p[i][j].index].local_action = boolean::cube(v[j], 1-sense);
+				transitions[p[i][j].index].remote_action = transitions[p[i][j].index].local_action;
+			}
+		}
+
+		connect(p[i], to);
+	}
+
+	update_masks();
+}
+
 }
