@@ -171,6 +171,9 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 
 	void annotate_conditional_branches(ucs::variable_set &variables);
+
+	// assign[location of transition][direction of assignment] = {variable uids}
+	void insert_assign(vector<petri::iterator> from, vector<petri::iterator> to, boolean::cube assign);
 };
 
 }

@@ -658,99 +658,13 @@ void encoder::insert_state_variables(bool debug) {
 	if (debug) {
 		printf("inserting %d transitions\n", (int)groups.size());
 	}
-	// Insert the transitions into the graph
-	for (auto group = groups.begin(); group != groups.end(); group++) {
-		if (group->second[0].empty() and group->second[1].empty()) {
-			// This should never happen
-			cout << "error: both sides of state transition group are empty" << endl;
-			continue;
-		}
-		// This is the set of output transitions (n) and input places (p) for this state variable insertion.
-		vector<petri::iterator> n;
-		for (auto i = group->first.begin(); i != group->first.end(); i++) {
-			if (i->type == transition::type) {
-				n.push_back(*i);
-			} else {
-				vector<petri::iterator> nn = base->next(*i);
-				n.insert(n.end(), nn.begin(), nn.end());
-			}
-		}
-		sort(n.begin(), n.end());
-		n.erase(unique(n.begin(), n.end()), n.end());
-
-		// Figure out the output sense of all of the transitions.
-		int sense = 2;
-		for (auto i = n.begin(); i != n.end() and sense >= 0; i++) {
-			if (base->transitions[i->index].local_action.has(1)) {
-				if (sense == 2 or sense == 1) {
-					sense = 1;
-				} else {
-					sense = -1;
-				}
-			}
-			if (base->transitions[i->index].local_action.has(0)) {
-				if (sense == 2 or sense == 0) {
-					sense = 0;
-				} else {
-					sense = -1;
-				}
-			}
-		}
-
-		// extract the guard from the transition in the graph if we're inserting at
-		// a transition.
-		boolean::cover guard = 1;
-		for (auto i = group->first.begin(); i != group->first.end(); i++) {
-			if (i->type == transition::type) {
-				guard &= base->transitions[i->index].guard;
-				base->transitions[i->index].guard = 1;
-			}
-		}
-		int guardsense = 2;
-		if (guard.has(1)) {
-			guardsense = 1;
-		}
-		if (guard.has(0)) {
-			if (guardsense == 2 or guardsense == 0) {
-				guardsense = 0;
-			} else {
-				guardsense = -1;
-			}
-		}
-
-		// If the output transitions don't agree on a sense, then ordering the
-		// state variable transitions won't help. So we should just put all of the
-		// transitions in parallel with eachother.
-		if (sense != 0 and sense != 1) {
-			sense = 0;
-		}
-
-		// Otherwise, we want to insert the matched sense transitions first, then
-		// insert the unmatched sense transitions. v0+; v1-; x+
-
-		// Insert matched sense transitions
-		for (int x = 0; x < 2; x++) {
-			if (not group->second[1-sense].empty()) {
-				// Handle the first one, then insert the others in parallel to the first one.
-				vector<petri::iterator> pos = base->duplicate(
-						petri::parallel, 
-						base->insert_at(
-							group->first, //base->add_redundant(group->first),
-							transition(1, guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
-						),
-						group->second[1-sense].size(),
-						false);
-
-				auto i = group->second[1-sense].begin();
-				auto j = pos.begin();
-				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {
-					base->transitions[j->index].local_action = boolean::cover(*i, 1-sense);
-					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(variables->get_groups());
-				}
-			}
-			sense = 1-sense;
-		}
+	
+	for (auto group = assign.begin(); group != assign.end(); group++) {
+		base->insert_many(base->prev(group->first), group->first, group->second);
 	}
+
+	erase_redundant();
+	source = reset;
 
 	if (debug) {
 		for (auto i = base->places.begin(); i != base->places.end(); i++) {
@@ -771,9 +685,6 @@ void encoder::insert_state_variables(bool debug) {
 	}
 	// TODO(edward.bingham) There seems to be a bug in identifying redundant
 	// states, but I can't seem to pin it down.
-	base->erase_redundant();
-	base->update_masks();
-	base->source = base->reset;
 
 	// TODO(edward.bingham) Update the predicate space and conflicts without
 	// re-elaborating the whole state space. This is not required, it is an
