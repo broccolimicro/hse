@@ -763,7 +763,7 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 
 	// TODO(edward.bingham) Insert assignments in parallel composition to nodes between from -> to
 	// On the inputs:
-	// 1. conditional cliques of parallel nodes
+	// 1. conditional cliques of parallel nodes [DONE]
 	// 2. conditional support of degenerative cliques
 	// 3. replication of conditional structures
 	// On the outputs:
@@ -781,13 +781,21 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 	// Step 2: break that cut into conditional groups of parallel transitions
 	// Step 3: complete the dangling parallel groups using the conditional splits that differentiate the two groups
 	from = normalize_cut(transition::type, 0, from);
-	vector<vector<petri::iterator> > p = group(parallel, select(parallel, from, true, true), true);
-	
-	
+	// separate nodes into conditional groups (sometimes conditional)
+	vector<vector<petri::iterator> > p = select(parallel, from, false, true);
+	// group subgroups that are sometimes in parallel while keeping subgroups in
+	// place for the sometimes conditional
+	p = group(parallel, p, false, false);
+	// deconflict subgroups from overlapping groups
+	p = complete(parallel, p);	
 
 
 
-	vector<vector<petri::iterator> > p = complete(parallel, p);
+
+
+
+
+
 
 	// Step 4: add places after each transition and map to groups
 	map<petri::iterator, petri::iterator> places;
