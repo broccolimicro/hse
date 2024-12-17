@@ -103,16 +103,16 @@ void encoder::check(bool senseless, bool report_progress)
 	/*cout << "Parallel Groups" << endl;
 	for (int i = 0; i < (int)base->places.size(); i++) {
 		cout << "p" << i << " {" << endl;
-		for (int j = 0; j < (int)base->places[i].groups[parallel].size(); j++) {
-			cout << "\t" << base->places[i].groups[parallel][j].to_string() << endl;
+		for (int j = 0; j < (int)base->places[i].splits[parallel].size(); j++) {
+			cout << "\t" << base->places[i].splits[parallel][j].to_string() << endl;
 		}
 		cout << "}" << endl;
 	}
 
 	for (int i = 0; i < (int)base->transitions.size(); i++) {
 		cout << "t" << i << " {" << endl;
-		for (int j = 0; j < (int)base->transitions[i].groups[parallel].size(); j++) {
-			cout << "\t" << base->transitions[i].groups[parallel][j].to_string() << endl;
+		for (int j = 0; j < (int)base->transitions[i].splits[parallel].size(); j++) {
+			cout << "\t" << base->transitions[i].splits[parallel][j].to_string() << endl;
 		}
 		cout << "}" << endl;
 	}*/
@@ -342,14 +342,14 @@ void encoder::insert_state_variables(bool debug) {
 		// Trace all conflicts
 		for (auto i = base->places.begin(); i != base->places.end(); i++) {
 			cout << "p" << (i-base->places.begin()) << ":" << endl;
-			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
 		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
 			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
@@ -755,14 +755,14 @@ void encoder::insert_state_variables(bool debug) {
 	if (debug) {
 		for (auto i = base->places.begin(); i != base->places.end(); i++) {
 			cout << "p" << (i-base->places.begin()) << ":" << endl;
-			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
 		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
 			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-			for (auto j = i->groups[parallel].begin(); j != i->groups[parallel].end(); j++) {
+			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
