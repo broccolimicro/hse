@@ -780,7 +780,7 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 	// Step 1: back out all places to their associated transitions
 	// Step 2: break that cut into conditional groups of parallel transitions
 	// Step 3: complete the dangling parallel groups using the conditional splits that differentiate the two groups
-	from = normalize_cut(transition::type, 0, from);
+	from = normalize_cut(from, transition::type, 0);
 	// separate nodes into conditional groups (sometimes conditional)
 	vector<vector<petri::iterator> > p = select(parallel, from, false, true);
 	// group subgroups that are sometimes in parallel while keeping subgroups in
@@ -832,7 +832,7 @@ void graph::insert_assign(vector<petri::iterator> from, vector<petri::iterator> 
 	// expressions P and N such that G=P&N and the number of negative literals in
 	// P and the number of positive literals in N are minimized?
 
-	to = normalize_cut(transition::type, 1, to);
+	to = normalize_cut(to, transition::type, 1);
 	for (auto n = to.begin(); n != to.end(); n++) {
 		// Down -> Up; Down -> Up
 		up += transitions[n->index].local_action.count(1);

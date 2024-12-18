@@ -7,15 +7,19 @@ GTEST        := ../../googletest
 GTEST_I      := -I$(GTEST)/googletest/include -I.
 GTEST_L      := -L$(GTEST)/build/lib -L.
 
+INCLUDE_PATHS = $(DEPEND:%=-I../%) -I.
+LIBRARY_PATHS = $(DEPEND:%=-L../%) -L.
+LIBRARIES     = $(DEPEND:%=-l%)
+LIBFILES      = $(foreach dep,$(DEPEND),../$(dep)/lib$(dep).a)
 CXXFLAGS      = -std=c++17 -O2 -g -Wall -fmessage-length=0 $(DEPEND:%=-I../%) -I.
 LDFLAGS	      =  
 
 SOURCES	     := $(shell mkdir -p $(SRCDIR); find $(SRCDIR) -name '*.cpp')
 OBJECTS	     := $(SOURCES:%.cpp=build/%.o)
 DEPS         := $(shell mkdir -p build/$(SRCDIR); find build/$(SRCDIR) -name '*.d')
-TARGET	      = lib$(NAME).a
+TARGET        = lib$(NAME).a
 
-TESTS        := $(shell mkdir -p tests; find $(TESTDIR) -name '*.cpp')
+TESTS        := $(shell mkdir -p $(TESTDIR); find $(TESTDIR) -name '*.cpp')
 TEST_OBJECTS := $(TESTS:%.cpp=build/%.o) build/$(TESTDIR)/gtest_main.o
 TEST_DEPS    := $(shell mkdir -p build/$(TESTDIR); find build/$(TESTDIR) -name '*.d')
 TEST_TARGET   = test
@@ -52,6 +56,7 @@ else
     endif
 endif
 
+
 all: lib
 
 lib: $(TARGET)
@@ -66,8 +71,8 @@ build/$(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 	@$(CXX) $(CXXFLAGS) $(LDFLAGS) -MM -MF $(patsubst %.o,%.d,$@) -MT $@ -c $<
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -c -o $@ $<
 
-$(TEST_TARGET): $(TEST_OBJECTS)
-	$(CXX) $(CXXFLAGS) $(GTEST_L) $^ -pthread -l$(NAME) -lgtest -o $(TEST_TARGET)
+$(TEST_TARGET): $(TEST_OBJECTS) $(TARGET) $(LIBFILES)
+	$(CXX) $(LIBRARY_PATHS) $(GTEST_L) $(CXXFLAGS) $(LDFLAGS) $(TEST_OBJECTS) -o $(TEST_TARGET) -pthread -l$(NAME) -lgtest $(LIBRARIES)
 
 build/$(TESTDIR)/%.o: $(TESTDIR)/%.cpp
 	@mkdir -p $(dir $@)

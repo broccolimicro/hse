@@ -659,12 +659,12 @@ void encoder::insert_state_variables(bool debug) {
 		printf("inserting %d transitions\n", (int)groups.size());
 	}
 	
-	for (auto group = assign.begin(); group != assign.end(); group++) {
+	/*for (auto group = assign.begin(); group != assign.end(); group++) {
 		base->insert_many(base->prev(group->first), group->first, group->second);
 	}
 
 	erase_redundant();
-	source = reset;
+	source = reset;*/
 
 	if (debug) {
 		for (auto i = base->places.begin(); i != base->places.end(); i++) {
