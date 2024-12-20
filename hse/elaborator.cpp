@@ -222,7 +222,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 
 	steady_clock::time_point finish = steady_clock::now();
 	if (report_progress) {
-		printf("[%sDONE%s]\t%gs\n", KGRN, KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
+		printf("[%sEXPLORED %lu MARKINGS%s]\t%gs\n", KGRN, states.size(), KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
 	}
 }
 

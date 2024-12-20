@@ -260,7 +260,7 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 	vector<petri::iterator> para;
 	for (int type = 0; type < 2; type++) {
 		for (auto p = base->begin(type); p != base->end(type); p++) {
-			if ((base->is_reachable(pos, vector<petri::iterator>(1, p)) or base->is_reachable(vector<petri::iterator>(1, p), pos)) and base->is(parallel, pos, vector<petri::iterator>(1, p))) {
+			if ((base->is_reachable(pos, vector<petri::iterator>(1, p)) or base->is_reachable(vector<petri::iterator>(1, p), pos)) and base->is(parallel, pos, vector<petri::iterator>(1, p), true, true)) {
 				para.push_back(p);
 			}
 		}
@@ -289,7 +289,7 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 
 		if (stepcost >= 0 and (bestcost < 0 or stepcost < bestcost)) {
 			for (int i = (int)para.size()-1; i >= 0; i--) {
-				if (not base->is(parallel, n, para[i])) {
+				if (not base->is(parallel, n, para[i], true, true)) {
 					para.erase(para.begin() + i);
 				}
 			}
