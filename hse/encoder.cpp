@@ -99,7 +99,7 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 void encoder::check(bool senseless, bool report_progress)
 {
 	//cout << "Computing Parallel Groups" << endl;
-	base->compute_split_groups(parallel);
+	base->compute_split_groups();
 	/*cout << "Parallel Groups" << endl;
 	for (int i = 0; i < (int)base->places.size(); i++) {
 		cout << "p" << i << " {" << endl;
@@ -135,8 +135,8 @@ void encoder::check(bool senseless, bool report_progress)
 		if (t0i->local_action.is_tautology())
 			continue;
 
-		boolean::cover implicant = base->implicant(vector<petri::iterator>(1, t0));
-		vector<petri::iterator> relevant = base->relevant_nodes(vector<petri::iterator>(1, t0));
+		boolean::cover implicant = base->implicant({t0});
+		vector<petri::iterator> relevant = base->relevant_nodes({t0});
 
 		for (int term = 0; term < (int)t0i->local_action.cubes.size(); term++) {
 			boolean::cube action = t0i->local_action.cubes[term];

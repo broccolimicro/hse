@@ -171,6 +171,8 @@ void gate_set::load(bool senseless) {
 		}
 	}
 
+	// TODO(edward.bingham) vacuous transitions and interfering transitions, see
+	// filter_vacuous() in conflict identification.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
 		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {

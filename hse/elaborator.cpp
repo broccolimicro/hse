@@ -99,6 +99,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 	int count = 0;
 	while (simulations.size() > 0)
 	{
+		count++;
 		// grab the simulation at the top of the stack
 		simulator sim = simulations.back();
 		simulations.pop_back();
@@ -134,7 +135,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 		}
 
 		if (not record_predicates) {
-			count++;
 			continue;
 		}
 
@@ -203,8 +203,6 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 				}
 			}
 		}
-
-		count++;
 	}
 
 	if (not record_predicates) {
@@ -222,7 +220,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 
 	steady_clock::time_point finish = steady_clock::now();
 	if (report_progress) {
-		printf("[%sEXPLORED %lu MARKINGS%s]\t%gs\n", KGRN, states.size(), KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
+		printf("[%sEXPLORED %lu MARKINGS AND %d STATES%s]\t%gs\n", KGRN, states.size(), count, KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
 	}
 }
 

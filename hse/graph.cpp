@@ -640,7 +640,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
 		}
 
-		relevant = relevant and not is(parallel, vector<petri::iterator>(1, j), curr);
+		relevant = relevant and not is(parallel, curr, vector<petri::iterator>(1, j));
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[transition::type].size() and curr[i].type == transition::type and relevant; k++) {
@@ -667,7 +667,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
 		}
 		
-		relevant = relevant and not is(parallel, vector<petri::iterator>(1, j), curr);
+		relevant = relevant and not is(parallel, curr, vector<petri::iterator>(1, j));
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[place::type].size() and curr[i].type == place::type and relevant; k++) {
