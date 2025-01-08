@@ -47,7 +47,7 @@ string term_index::to_string(const graph &g, const ucs::variable_set &v)
 	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_expression_xfactor(g.transitions[index].guard[term], v).to_string() + " -> " + export_composition(g.transitions[index].local_action[term], v).to_string();
 }
 
-petri::iterator term_index::iter() {
+petri::iterator term_index::iter() const {
 	return petri::iterator(transition::type, index);
 }
 

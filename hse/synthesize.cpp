@@ -1,5 +1,7 @@
 #include "synthesize.h"
 
+#include <common/timer.h>
+
 namespace hse
 {
 
@@ -294,6 +296,8 @@ void gate_set::build_shared_gates() {
 }
 
 void gate_set::save(prs::production_rule_set *out) {
+	out->name = base->name;
+
 	int gnd = vars->find(ucs::variable("GND"));
 	if (gnd < 0) {
 		gnd = vars->define(ucs::variable("GND"));
@@ -324,6 +328,37 @@ void gate_set::save(prs::production_rule_set *out) {
 		}
 
 		out->at(var).keep = not gate->is_combinational();
+	}
+}
+
+void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress) {
+	if (report_progress) {
+		printf("  %s...", base->name.c_str());
+		fflush(stdout);
+	}
+
+	Timer tmr;
+	gate_set gates(base, vars);
+	gates.load(senseless);
+	gates.weaken();
+	gates.build_reset();
+	gates.save(out);
+
+	if (report_progress) {
+		float synthDelay = tmr.since();
+		int combCount = 0;
+		int gateCount = 0;
+
+		for (auto g = gates.gates.begin(); g != gates.gates.end(); g++) {
+			if (not g->tids[0].empty() or not g->tids[1].empty()) {
+				gateCount++;
+				if (g->is_combinational()) {
+					combCount++;
+				}
+			}
+		}
+
+		printf("[%s%d COMBINATIONAL AND %d STATE HOLDING GATES%s]\t%gs\n", KGRN, combCount, gateCount-combCount, KNRM, synthDelay);
 	}
 }
 

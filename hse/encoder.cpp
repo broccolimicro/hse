@@ -7,7 +7,9 @@
 
 #include "encoder.h"
 #include "graph.h"
+#include "elaborator.h"
 
+#include <common/timer.h>
 #include <petri/path.h>
 #include <interpret_boolean/export.h>
 #include <limits>
@@ -98,6 +100,11 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 
 void encoder::check(bool senseless, bool report_progress)
 {
+	Timer tmr;
+	if (report_progress) {
+		printf("  %s...", base->name.c_str());
+		fflush(stdout);
+	}
 	//cout << "Computing Parallel Groups" << endl;
 	base->compute_split_groups();
 	/*cout << "Parallel Groups" << endl;
@@ -128,8 +135,8 @@ void encoder::check(bool senseless, bool report_progress)
 	for (auto t0i = base->transitions.begin(); t0i != base->transitions.end(); t0i++) {
 		petri::iterator t0(petri::transition::type, t0i - base->transitions.begin());
 
-		if (report_progress)
-			progress("", "T" + ::to_string(t0.index) + "/" + ::to_string(base->transitions.size()), __FILE__, __LINE__);
+		//if (report_progress)
+		//	progress("", "T" + ::to_string(t0.index) + "/" + ::to_string(base->transitions.size()), __FILE__, __LINE__);
 
 		// The transition actively affects the state of the system
 		if (t0i->local_action.is_tautology())
@@ -183,8 +190,14 @@ void encoder::check(bool senseless, bool report_progress)
 		}
 	}
 
-	if (report_progress)
-		done_progress();
+	if (report_progress) {
+		if (conflicts.empty()) {
+			printf("[%sCLEAN%s]\t%gs\n", KGRN, KNRM, tmr.since());
+		} else {
+			printf("[%s%lu CONFLICTS%s]\t%gs\n", KYEL, conflicts.size(), KNRM, tmr.since());
+		}
+		//done_progress();
+	}
 }
 
 int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare) {
@@ -337,7 +350,7 @@ int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, co
 // Asynchronous Circuits and Systems. IEEE, 1996.
 //
 // Lecture 16 of github.com/broccolimicro/course-self-timed-circuits/tree/summer-2023
-void encoder::insert_state_variables(bool debug) {
+void encoder::insert_state_variable(bool debug) {
 	if (debug) {
 		// Trace all conflicts
 		for (auto i = base->places.begin(); i != base->places.end(); i++) {
@@ -831,9 +844,69 @@ void encoder::insert_state_variables(bool debug) {
 	//    each place in the handshake that is in sequence with the insertion, we
 	//    determine if it is sequenced before or after the insertion. Then we
 	//    identify all partial states that cross that insertion.
+
 	if (debug) {
 		printf("done\n");
 	}
+}
+
+bool encoder::insert_state_variables(int max_count, bool senseless, bool report_progress, bool debug) {
+	Timer tmr;
+	if (conflicts.empty()) {
+		check(senseless, false);
+	}
+	if (report_progress) {
+		if (conflicts.empty()) {
+			printf("  %s...[%sCLEAN%s]\t%gs\n", base->name.c_str(), KGRN, KNRM, tmr.since());
+		} else {
+			printf("  %s...[%s%lu CONFLICTS%s]\t%gs\n", base->name.c_str(), KYEL, conflicts.size(), KNRM, tmr.since());
+		}
+	}
+
+	int count = 0;
+	for (int i = 0; i < max_count and not conflicts.empty(); i++) {
+		Timer tmri;
+		if (report_progress) {
+			printf("    inserting v%d...", i);
+			fflush(stdout);
+		}
+		insert_state_variable(debug);
+
+		float insertDelay = tmri.since();
+		tmri.reset();
+		elaborate(*base, *variables, true, true, false);
+
+		float elabDelay = tmri.since();
+
+		if (not is_clean()) {
+			return false;
+		}
+
+		tmri.reset();
+		check(senseless, false);
+
+		float checkDelay = tmri.since();
+
+		if (report_progress) {
+			if (conflicts.empty()) {
+				printf("[%sCLEAN%s]\t(%gs %gs %gs)\n", KGRN, KNRM, insertDelay, elabDelay, checkDelay);
+			} else {
+				printf("[%s%lu CONFLICTS%s]\t(%gs %gs %gs)\n", KYEL, conflicts.size(), KNRM, insertDelay, elabDelay, checkDelay);
+			}
+			//done_progress();
+		}
+		count++;
+	}
+	
+	if (report_progress) {
+		if (conflicts.empty()) {
+			printf("  %s...[%s%d STATE VARIABLES ADDED%s]\t%gs\n", base->name.c_str(), KGRN, count, KNRM, tmr.since());
+		} else {
+			printf("  %s...[%s%d STATE VARIABLES ADDED %lu CONFLICTS REMAINING%s]\t%gs\n", base->name.c_str(), KYEL, count, conflicts.size(), KNRM, tmr.since());
+		}
+	}
+
+	return true;
 }
 
 }

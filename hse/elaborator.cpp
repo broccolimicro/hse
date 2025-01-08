@@ -8,19 +8,12 @@
 #include "elaborator.h"
 #include <common/text.h>
 #include <common/standard.h>
+#include <common/timer.h>
 #include <interpret_boolean/export.h>
 
 #include <unordered_set>
 #include <set>
 #include <deque>
-
-#include <chrono>
-#define KNRM  "\x1B[0m"
-#define KRED  "\x1B[31m"
-#define KGRN  "\x1B[32m"
-#define KYEL  "\x1B[33m"
-#define KBLU  "\x1B[34m"
-using namespace std::chrono;
 
 using namespace std;
 
@@ -43,7 +36,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 		printf("  %s...", g.name.c_str());
 		fflush(stdout);
 	}
-	steady_clock::time_point start = steady_clock::now();
+	Timer tmr;
 
 	// Initialize all predicates and effective predicates to false.
 	for (int i = 0; i < (int)g.places.size(); i++)
@@ -218,9 +211,8 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 		g.places[i].predicate.espresso();
 	}
 
-	steady_clock::time_point finish = steady_clock::now();
 	if (report_progress) {
-		printf("[%sEXPLORED %lu MARKINGS AND %d STATES%s]\t%gs\n", KGRN, states.size(), count, KNRM, ((float)duration_cast<milliseconds>(finish - start).count())/1000.0);
+		printf("[%sEXPLORED %lu MARKINGS%s]\t%gs\n", KGRN, states.size(), KNRM, tmr.since());
 	}
 }
 

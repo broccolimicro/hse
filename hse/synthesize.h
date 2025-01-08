@@ -74,6 +74,9 @@ struct gate_set
 	void harden_state();
 	void build_shared_gates();
 	void save(prs::production_rule_set *out);
+
 };
+
+void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress = false);
 
 }
