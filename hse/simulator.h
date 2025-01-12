@@ -151,9 +151,35 @@ struct simulator
 	// These are the tokens that mark the current state. Effectively, these are
 	// the program counters. While Petri Nets technically allow more than one
 	// token on a single place, our constrained adaptation of Petri Nets as a
-	// representation of HSE does not.
+	// representation of HSE does not. Vacuous transitions will extend tokens
+	// onto their output places. If there are multiple vacuous transitions that
+	// progress through a conditional merge, then this can put multiple tokens on
+	// the conditional merge place (each with it's own cause).
 	// See haystack/lib/hse/hse/state.h for the definition of token.
 	vector<token> tokens;
+
+	// TODO(edward.bingham) Suppose that a set of vacuous transitions propagate
+	// through two different conditional branches and come back to the merge.
+	// This puts "tokens" on a set of places that enables a set of transitions
+	// that wouldn't be enabled by traversing through just one of those
+	// conditional branches, breaking the simulation. This can only happen for
+	// non-properly nested nets. Properly handling this requires splitting up the
+	// tokens array into multiple, one for each potential conditional path. This
+	// is likely to suffer a form of state space explosion. Or, we could keep
+	// track of the conditional branches traversed by each token? Do we allow or
+	// not allow multiple tokens then?
+
+	// IDEA(edward.bingham) One could represent each place as a variable, and
+	// each token as that variable being equal to 1. Then, one could represent
+	// transitions in the graph as production rules. One could then use Rete's
+	// algorithm to walk the simulation. Then state variable insertion becomes a
+	// version of weakening, deleting variables for states. Also someone one
+	// would have to make sure the encoding is QDI which means only one variable
+	// can change at a time. One also wonders how vacuous assignments might be
+	// handled.
+	// One could then use this: Carmona, Josep, Jordi Cortadella, and Enric
+	// Pastor. "A structural encoding technique for the synthesis of asynchronous
+	// circuits." Fundamenta Informaticae 50.2 (2002): 135-154.
 
 	// These transitions could be selected to fire next. An enabled transition is
 	// one in which all of the gates on the pull up or pull down network are

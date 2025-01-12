@@ -135,6 +135,10 @@ struct token : petri::token
 	// state through a vacuous transition, which
 	// preloaded transition caused that extension?
 	// index into simulator::enabled::preload
+
+	// TODO(edward.bingham) tokens could be caused by
+	// multiple transitions as a result of a conditional
+	// merge.
 	int cause;
 	
 	string to_string();

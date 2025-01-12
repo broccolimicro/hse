@@ -723,7 +723,7 @@ void simulator::merge_errors(const simulator &sim)
 }
 
 boolean::cube simulator::stripped_encoding() {
-	return encoding.without(base->ghost_nets).minimize().cubes[0];
+	return encoding.without(base->ghost_nets).minimize().supercube();
 }
 
 state simulator::get_state()

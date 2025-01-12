@@ -132,12 +132,30 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 		}
 
 		// The effective predicate represents the state encodings that don't have
-		// duplicates in later states. I have to loop through all of the enabled
-		// transitions, and then loop through all orderings of their dependent
-		// guards, saving the state
+		// duplicates in later states. For each non-vacuous transition that is
+		// enabled, we need to record the current state into the predicate of the
+		// places that would be the marking to fire that non-vacuous transition.
+		// Any token that belongs to at least one such marking should record the
+		// current state.
+		//
+		// How do we determine that for each token?
+		// 
+		// First attempt:
+		// A token saves the state to the predicate of its place if (it is not an
+		// input to a vacuous transition, not an output of a non-vacuous
+		// transition, and there is an enabled non-vacuous transition that does not
+		// prevent the sequence of vacuous transitions that lead to this token) or
+		// it's an input to a non-vacuous transition.
+
 		//vector<set<int> > en_in(sim.tokens.size(), set<int>());
+		
+		// record whether this is an output of a non-vacuous 
 		vector<bool> en_in(sim.tokens.size(), false);
 		vector<set<int> > en_out(sim.tokens.size(), set<int>());
+
+		// record whether there is an enabled non-vacuous that does not prevent the
+		// sequence of vacuous transitions that lead to this token.
+		//vector<bool> is_live(sim.tokens.size(), false);
 
 		/*bool change = true;
 		while (change) {
@@ -169,6 +187,11 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 		for (int i = 0; i < (int)sim.tokens.size(); i++) {
 			bool isOutput = en_out[i].empty() and en_in[i];
 
+			// TODO(edward.bingham) This is not properly saving the state when there is
+			// another vacuous transition that skips around a non-vacuous transition
+			// through a choice. For vacuous transitions out of a conditional split
+			// on which we are firing a transition down another branch, we need to
+			// undo all of the other tokens.
 			bool isVacuous = false;
 			for (set<int>::iterator j = en_out[i].begin(); j != en_out[i].end() and not isVacuous; j++) {
 				isVacuous = sim.loaded[*j].vacuous;

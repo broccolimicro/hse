@@ -114,6 +114,22 @@ void gate::weaken_brute_force()
 	}
 }
 
+void gate::print(const ucs::variable_set &v, int uid) {
+	cout << v.nodes[uid].to_string() << "-" << endl;
+	cout << "\t" << ::to_string(tids[0]) << endl;
+	cout << "\timplicant: " << export_expression(implicant[0], v).to_string() << endl; 
+	cout << "\texclusion: " << export_expression(exclusion[0], v).to_string() << endl; 
+	cout << "\tholding: " << export_expression(holding[0], v).to_string() << endl; 
+	cout << "\tassume: " << export_expression(assume[0], v).to_string() << endl;
+
+ 	cout << v.nodes[uid].to_string() << "+" << endl;
+	cout << "\t" << ::to_string(tids[1]) << endl;
+	cout << "\timplicant: " << export_expression(implicant[1], v).to_string() << endl; 
+	cout << "\texclusion: " << export_expression(exclusion[1], v).to_string() << endl; 
+	cout << "\tholding: " << export_expression(holding[1], v).to_string() << endl; 
+	cout << "\tassume: " << export_expression(assume[1], v).to_string() << endl;
+}
+
 gate_set::gate_set() {
 	base = nullptr;
 	vars = nullptr;
@@ -207,6 +223,10 @@ void gate_set::load(bool senseless) {
 }
 
 void gate_set::weaken() {
+	// TODO(edward.bingham) weaken the guard for one variable in such a way that
+	// it makes it possible to weaken the guard for another variable more
+	// optimally. Effectively you're shoring up one expression to block the
+	// possibility of a failure in another expression.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		gate->weaken_brute_force();
 	}
@@ -340,6 +360,9 @@ void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_
 	Timer tmr;
 	gate_set gates(base, vars);
 	gates.load(senseless);
+
+	gates.print();
+
 	gates.weaken();
 	gates.build_reset();
 	gates.save(out);
@@ -359,6 +382,13 @@ void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_
 		}
 
 		printf("[%s%d COMBINATIONAL AND %d STATE HOLDING GATES%s]\t%gs\n", KGRN, combCount, gateCount-combCount, KNRM, synthDelay);
+	}
+}
+
+void gate_set::print() {
+	for (int uid = 0; uid < (int)gates.size(); uid++) {
+		gates[uid].print(*vars, uid);
+		cout << endl;
 	}
 }
 
