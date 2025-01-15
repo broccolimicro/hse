@@ -80,6 +80,6 @@ struct gate_set
 	void print();
 };
 
-void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress = false);
+void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress = false, bool debug = false);
 
 }

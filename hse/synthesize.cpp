@@ -351,7 +351,7 @@ void gate_set::save(prs::production_rule_set *out) {
 	}
 }
 
-void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress) {
+void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress, bool debug) {
 	if (report_progress) {
 		printf("  %s...", base->name.c_str());
 		fflush(stdout);
@@ -361,7 +361,9 @@ void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_
 	gate_set gates(base, vars);
 	gates.load(senseless);
 
-	gates.print();
+	if (debug) {
+		gates.print();
+	}
 
 	gates.weaken();
 	gates.build_reset();
