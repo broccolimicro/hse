@@ -62,11 +62,10 @@ struct conflict
 struct encoder
 {
 	encoder();
-	encoder(graph *base, ucs::variable_set *variables);
+	encoder(graph *base);
 	~encoder();
 
 	graph *base;
-	ucs::variable_set *variables;
 
 	// conflict_regions is like conflict::region except that it includes all of
 	// the neighboring nodes so that we can check for intersection to make

@@ -42,9 +42,9 @@ void term_index::hash(hasher &hash) const
 	hash.put(&term);
 }
 
-string term_index::to_string(const graph &g, const ucs::variable_set &v)
+string term_index::to_string(const graph &g)
 {
-	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_expression_xfactor(g.transitions[index].guard[term], v).to_string() + " -> " + export_composition(g.transitions[index].local_action[term], v).to_string();
+	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_expression_xfactor(g.transitions[index].guard[term], g).to_string() + " -> " + export_composition(g.transitions[index].local_action[term], g).to_string();
 }
 
 petri::iterator term_index::iter() const {
@@ -123,9 +123,9 @@ enabled_transition::~enabled_transition()
 
 }
 
-string enabled_transition::to_string(const graph &g, const ucs::variable_set &v)
+string enabled_transition::to_string(const graph &g)
 {
-	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].guard, v).to_string() + " -> " + export_composition(g.transitions[index].local_action, v).to_string();
+	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].guard, g).to_string() + " -> " + export_composition(g.transitions[index].local_action, g).to_string();
 }
 
 bool operator<(enabled_transition i, enabled_transition j)
@@ -274,7 +274,7 @@ bool state::is_subset_of(const state &s)
 	return (tokens == s.tokens && encodings.is_subset_of(s.encodings));
 }
 
-string state::to_string(const ucs::variable_set &variables)
+string state::to_string(const graph &g)
 {
 	string result = "{";
 	for (int i = 0; i < (int)tokens.size(); i++)
@@ -283,7 +283,7 @@ string state::to_string(const ucs::variable_set &variables)
 			result += " ";
 		result += ::to_string(tokens[i].index);
 	}
-	result += "} " + export_expression_hfactor(encodings, variables).to_string();
+	result += "} " + export_expression_hfactor(encodings, g).to_string();
 	return result;
 }
 

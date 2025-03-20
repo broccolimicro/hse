@@ -2,7 +2,6 @@
 
 #include <common/standard.h>
 #include <boolean/cover.h>
-#include <ucs/variable.h>
 #include <petri/graph.h>
 
 #include "state.h"
@@ -17,7 +16,7 @@ using petri::parallel;
 using petri::choice;
 using petri::sequence;
 
-// In Haystack, Handshaking Expansions (HSE) are represented by a collection of
+// Handshaking Expansions (HSE) are represented by a collection of
 // petri nets in which the transitions are augmented with guards. Before a
 // transition may fire, the tokens at the input places must collectively have a
 // state encoding that statisfies the condition encoded in the guard.
@@ -121,6 +120,18 @@ struct transition : petri::transition
 	bool is_vacuous() const;
 };
 
+struct net {
+	net();
+	net(string name, int region, bool is_ghost=false);
+	~net();
+
+	string name;
+	int region;
+
+	vector<int> remote;
+	bool is_ghost;
+};
+
 // A graph represents a Handshaking Expansion as a Petri Net.
 struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::state>
 {
@@ -151,6 +162,18 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	// state conflicts, so we need to be able to hide them before we synthesize.
 	// So, we record the set of variables added.
 	vector<int> ghost_nets;
+	vector<net> nets;
+
+	int netIndex(string name, int region=0) const;
+	int netIndex(string name, int region=0, bool define=false);
+	pair<string, int> netAt(int uid) const;
+
+	using super::create;
+	int create(net n = net());
+
+	void connect_remote(int from, int to);
+	vector<vector<int> > remote_groups();
+	string getNetName(int uid) const;
 
 	hse::transition &at(term_index idx);
 	boolean::cube &term(term_index idx);
@@ -166,11 +189,11 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	void update_masks();
 
-	void post_process(ucs::variable_set &variables, bool proper_nesting = false, bool aggressive = false);
-	void check_variables(const ucs::variable_set &variables);
+	void post_process(bool proper_nesting = false, bool aggressive = false);
+	void check_variables();
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 
-	void annotate_conditional_branches(ucs::variable_set &variables);
+	void annotate_conditional_branches();
 };
 
 }

@@ -54,17 +54,16 @@ struct gate
 	void weaken_espresso();
 	void weaken_brute_force();
 
-	void print(const ucs::variable_set &v, int uid);
+	void print(int uid, graph *base);
 };
 
 struct gate_set
 {
 	gate_set();
-	gate_set(graph *base, ucs::variable_set *vars);
+	gate_set(graph *base);
 	~gate_set();
 
 	graph *base;
-	ucs::variable_set *vars;
 	
 	vector<gate> gates;
 
@@ -80,6 +79,6 @@ struct gate_set
 	void print();
 };
 
-void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress = false, bool debug = false);
+void synthesize_rules(prs::production_rule_set *out, graph *base, bool senseless, bool report_progress = false, bool debug = false);
 
 }

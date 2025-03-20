@@ -30,7 +30,7 @@ namespace hse
 // go as far as possible around that cycle and every successive simulation will
 // branch off and recombine. This also keeps the amount of memory required as
 // low as possible as it fully explores branches before finding new ones.
-void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghosts, bool record_predicates, bool report_progress)
+void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool report_progress)
 {
 	if (report_progress) {
 		printf("  %s...", g.name.c_str());
@@ -67,7 +67,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 	{
 		for (int i = 0; i < (int)g.reset.size(); i++)
 		{
-			simulator sim(&g, &variables, g.reset[i], annotate_ghosts);
+			simulator sim(&g, g.reset[i], annotate_ghosts);
 			sim.enabled();
 
 			if (states.insert(sim.get_state()).second)
@@ -80,7 +80,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
 		{
-			simulator sim(&g, &variables, g.source[i], annotate_ghosts);
+			simulator sim(&g, g.source[i], annotate_ghosts);
 			sim.enabled();
 
 			if (states.insert(sim.get_state()).second)
@@ -122,7 +122,7 @@ void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghost
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
 			if (dloc == deadlocks.end() || *dloc != d)
 			{
-				error("", d.to_string(variables), __FILE__, __LINE__);
+				error("", d.to_string(g), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
 		}
@@ -255,7 +255,7 @@ struct simulation
 
 // This converts a given graph to the fully expanded state space through simulation. It systematically
 // simulates all possible transition orderings and determines all of the resulting state information.
-graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_progress)
+graph to_state_graph(graph &g, bool report_progress)
 {
 	graph result;
 	hashmap<state, petri::iterator, 10000> states;
@@ -266,7 +266,7 @@ graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_p
 	{
 		for (int i = 0; i < (int)g.reset.size(); i++)
 		{
-			simulator sim(&g, &variables, g.reset[i]);
+			simulator sim(&g, g.reset[i]);
 			sim.enabled();
 
 			map<state, petri::iterator>::iterator loc;
@@ -286,7 +286,7 @@ graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_p
 	{
 		for (int i = 0; i < (int)g.source.size(); i++)
 		{
-			simulator sim(&g, &variables, g.source[i]);
+			simulator sim(&g, g.source[i]);
 			sim.enabled();
 
 			map<state, petri::iterator>::iterator loc;
@@ -349,7 +349,7 @@ graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_p
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
 			if (dloc == deadlocks.end() || *dloc != d)
 			{
-				error("", d.to_string(variables), __FILE__, __LINE__);
+				error("", d.to_string(g), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
 
@@ -361,7 +361,7 @@ graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_p
 
 	for (int i = 0; i < (int)g.source.size(); i++)
 	{
-		simulator sim(&g, &variables, g.source[i]);
+		simulator sim(&g, g.source[i]);
 		sim.enabled();
 
 		map<state, petri::iterator>::iterator loc;
@@ -431,7 +431,7 @@ struct frame
 	frame(simulator sim)
 	{
 		this->sim = sim;
-		indices.resize(sim.variables->nodes.size(), 0);
+		indices.resize(sim.base->nets.size(), 0);
 	}
 	~frame() {}
 
@@ -443,7 +443,7 @@ struct frame
 cycle get_cycle(graph &g, simulator &sim)
 {
 	cycle result;
-	vector<int> indices(sim.variables->nodes.size(), 0);
+	vector<int> indices(sim.base->nets.size(), 0);
 
 	bool done = false;
 	while (!done)
@@ -482,17 +482,17 @@ cycle get_cycle(graph &g, simulator &sim)
 	return result;
 }
 
-vector<cycle> get_cycles(graph &g, const ucs::variable_set &variables, bool report_progress)
+vector<cycle> get_cycles(graph &g, bool report_progress)
 {
 	vector<cycle> result;
 	list<frame> frames;
 	//hashtable<state, 200> states;
 	if (g.reset.size() > 0)
 		for (int i = 0; i < (int)g.reset.size(); i++)
-			frames.push_back(frame(simulator(&g, &variables, g.reset[i])));
+			frames.push_back(frame(simulator(&g, g.reset[i])));
 	else
 		for (int i = 0; i < (int)g.source.size(); i++)
-			frames.push_back(frame(simulator(&g, &variables, g.source[i])));
+			frames.push_back(frame(simulator(&g, g.source[i])));
 
 	int iteration = -1;
 	while (frames.size() > 0)
@@ -652,9 +652,10 @@ struct pnode
 
 	int v, i, d;
 
-	string to_string(const ucs::variable_set &variables) const
+	string to_string(const hse::graph &g) const
 	{
-		return variables.nodes[v].to_string() + (d == 0 ? "-" : "+") + ":" + ::to_string(i);
+		pair<string, int> n = g.netAt(v);
+		return n.first + (n.second != 0 ? "'" + ::to_string(n.second) : "") + (d == 0 ? "-" : "+") + ":" + ::to_string(i);
 	}
 };
 
@@ -679,9 +680,9 @@ struct parc
 	pnode n0;
 	pnode n1;
 
-	string to_string(const ucs::variable_set &variables) const
+	string to_string(const hse::graph &g) const
 	{
-		return n0.to_string(variables) + " -> " + n1.to_string(variables);
+		return n0.to_string(g) + " -> " + n1.to_string(g);
 	}
 };
 
@@ -699,11 +700,11 @@ bool operator==(parc a, parc b)
 
 
 // Converts the HSE into a petri net using index-priority simulation.
-graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_progress)
+graph to_petri_net(graph &g, bool report_progress)
 {
 	graph result;
 
-	vector<cycle> cycles = get_cycles(g, variables, report_progress);
+	vector<cycle> cycles = get_cycles(g, report_progress);
 	/*
 	for (int i = 0; i < (int)cycles.size(); i++)
 		for (int j = 0; j < (int)cycles[i].firings.size(); j++)
@@ -716,7 +717,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 		cout << "Cycle " << i << endl;
 		for (int j = 0; j < (int)cycles[i].firings.size(); j++)
 		{
-			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << export_expression(cycles[i].firings[j].guard, variables).to_string() << " -> " << export_composition(g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term], variables).to_string() << "\t{";
+			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << export_expression(cycles[i].firings[j].guard, g).to_string() << " -> " << export_composition(g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term], g).to_string() << "\t{";
 			for (int k = 0; k < (int)cycles[i].firings[j].loc.tokens.size(); k++)
 			{
 				if (k != 0)
@@ -890,7 +891,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 	{
 		cout << "Cycle " << i << endl;
 		for (int j = 0; j < (int)arcs[i].size(); j++)
-			cout << "Arc " << j << ": " << arcs[i][j].to_string(variables) << endl;
+			cout << "Arc " << j << ": " << arcs[i][j].to_string(g) << endl;
 	}
 
 	vector<vector<parc> > choices;
@@ -919,7 +920,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 
 			if (loc != groups[0].end())
 			{
-				cout << loc->first.to_string(variables) << endl;
+				cout << loc->first.to_string(g) << endl;
 				selected.push_back(loc->first);
 				missing = vector_difference(missing, loc->second);
 				covered.insert(covered.end(), loc->second.begin(), loc->second.end());
@@ -933,7 +934,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 		{
 			if (j != groups[0].begin())
 				cout << " ";
-			cout << "(" << j->first.to_string(variables) << " " << to_string(j->second) << ")";
+			cout << "(" << j->first.to_string(g) << " " << to_string(j->second) << ")";
 		}
 		cout << "}" << endl;
 
@@ -942,7 +943,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 		{
 			if (j != 0)
 				cout << ", ";
-			cout << "(" << selected[j].to_string(variables) << ")";
+			cout << "(" << selected[j].to_string(g) << ")";
 		}
 		cout << "}" << endl;
 
@@ -1028,7 +1029,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 
 			if (j != 0)
 				cout << ", ";
-			cout << "(" << choices[i][j].to_string(variables) << ")";
+			cout << "(" << choices[i][j].to_string(g) << ")";
 		}
 		cout << "}" << endl;
 	}
@@ -1102,7 +1103,7 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 			sort(joint.begin(), joint.end());
 			joint.resize(unique(joint.begin(), joint.end()) - joint.begin());
 			con.push_back(pair<vector<int>, int>(joint, i));
-			cout << "Found Loop " << export_composition(result.transitions[i].local_action, variables).to_string() << endl;
+			cout << "Found Loop " << export_composition(result.transitions[i].local_action, g).to_string() << endl;
 		}
 	}
 
@@ -1115,9 +1116,9 @@ graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_pro
 		{
 			if (j != 0)
 				cout << " ";
-			cout << export_composition(result.transitions[con[i].first[j]].local_action, variables).to_string();
+			cout << export_composition(result.transitions[con[i].first[j]].local_action, g).to_string();
 		}
-		cout << "} => " << export_composition(result.transitions[con[i].second].local_action, variables).to_string() << endl;
+		cout << "} => " << export_composition(result.transitions[con[i].second].local_action, g).to_string() << endl;
 		int p = (int)result.places.size();
 		result.places.push_back(place());
 		for (int j = 0; j < (int)con[i].first.size(); j++)

@@ -13,9 +13,9 @@
 
 namespace hse
 {
-	void elaborate(graph &g, const ucs::variable_set &variables, bool annotate_ghosts = false, bool record_predicates = true, bool report_progress = false);
-	graph to_state_graph(graph &g, const ucs::variable_set &variables, bool report_progress = false);
-	graph to_petri_net(graph &g, const ucs::variable_set &variables, bool report_progress = false);
+	void elaborate(graph &g, bool annotate_ghosts = false, bool record_predicates = true, bool report_progress = false);
+	graph to_state_graph(graph &g, bool report_progress = false);
+	graph to_petri_net(graph &g, bool report_progress = false);
 }
 
 #endif

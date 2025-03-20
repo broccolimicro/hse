@@ -1,8 +1,8 @@
 /*
- * graph.cpp
- *
- *  Created on: Feb 2, 2015
- *      Author: nbingham
+ * This file implements the core data structures for representing and manipulating
+ * Handshaking Expansion (HSE) graphs. HSE graphs are a type of Petri Net used to
+ * model asynchronous circuits, where transitions are augmented with guards and
+ * actions that model the behavior of the circuit.
  */
 
 #include "graph.h"
@@ -36,12 +36,19 @@ place::~place()
 
 }
 
-// Merge two places and combine the predicate and effective predicate.
-// composition can be one of:
-// 1. petri::parallel
-// 2. petri::choice
-// 3. petri::sequence
-// See haystack/lib/petri/petri/graph.h for their definitions.
+/**
+ * @brief Merge two places and combine their properties
+ * 
+ * Creates a new place by merging two existing places according to the specified composition rule:
+ * - For parallel or sequence compositions: Predicates and effective predicates are combined with AND
+ * - For choice compositions: Predicates and effective predicates are combined with OR
+ * Arbiter and synchronizer flags are combined with OR in all cases.
+ * 
+ * @param composition Type of composition (parallel, choice, or sequence)
+ * @param p0 First place to merge
+ * @param p1 Second place to merge
+ * @return A new place that represents the composition of p0 and p1
+ */
 place place::merge(int composition, const place &p0, const place &p1)
 {
 	place result;
@@ -60,6 +67,14 @@ place place::merge(int composition, const place &p0, const place &p1)
 	return result;
 }
 
+/**
+ * @brief Constructor for a transition with specified characteristics
+ * 
+ * @param assume Assumption that is made about the state after the transition is fired
+ * @param guard Condition that must be satisfied for the transition to fire
+ * @param local_action Effect of the transition on the local state
+ * @param remote_action Effect of the transition on the remote state (variables in another isochronic region)
+ */
 transition::transition(boolean::cover assume, boolean::cover guard, boolean::cover local_action, boolean::cover remote_action)
 {
 	this->assume = assume;
@@ -74,6 +89,15 @@ transition::~transition()
 
 }
 
+/**
+ * @brief Subdivide a transition into a simpler transition containing a single term
+ * 
+ * Creates a new transition containing only a specific term from the local and remote actions
+ * of the original transition. This is useful for breaking down complex transitions.
+ * 
+ * @param term Index of the term to extract
+ * @return A new transition containing only the specified term
+ */
 transition transition::subdivide(int term) const
 {
 	if (term < (int)local_action.cubes.size() && term < (int)remote_action.cubes.size())
@@ -84,6 +108,18 @@ transition transition::subdivide(int term) const
 		return transition(assume, guard);
 }
 
+/**
+ * @brief Merge two transitions according to a composition rule
+ * 
+ * Creates a new transition by merging the attributes of two existing transitions:
+ * - For parallel or sequence: Attributes are combined with AND
+ * - For choice: Attributes are combined with OR
+ * 
+ * @param composition Type of composition (parallel, choice, or sequence)
+ * @param t0 First transition to merge
+ * @param t1 Second transition to merge
+ * @return A new transition representing the composition
+ */
 transition transition::merge(int composition, const transition &t0, const transition &t1)
 {
 	transition result;
@@ -104,6 +140,18 @@ transition transition::merge(int composition, const transition &t0, const transi
 	return result;
 }
 
+/**
+ * @brief Determine if two transitions can be merged
+ * 
+ * Transitions are mergeable under specific conditions depending on the composition type:
+ * - For sequence: t0's local action must be a tautology
+ * - For choice/parallel: Either guards and assumptions must be equal, or local actions must be equal
+ * 
+ * @param composition Type of composition (parallel, choice, or sequence)
+ * @param t0 First transition to check
+ * @param t1 Second transition to check
+ * @return True if transitions can be merged, false otherwise
+ */
 bool transition::mergeable(int composition, const transition &t0, const transition &t1)
 {
 	if (composition == petri::sequence) {
@@ -115,25 +163,46 @@ bool transition::mergeable(int composition, const transition &t0, const transiti
 				 (t0.local_action == t1.local_action);
 }
 
-// Is this transition actually ever able to fire? If not, then it is
-// infeasible. This function is conservative. Like the is_vacuous() function,
-// this only answers either TRUE or MAYBE.
+/**
+ * @brief Check if a transition is infeasible (can never fire)
+ * 
+ * A transition is infeasible if its guard is null or its local action is null.
+ * This is a conservative check that returns true only when definitely infeasible.
+ * 
+ * @return True if the transition is definitely infeasible, false if it might be feasible
+ */
 bool transition::is_infeasible() const
 {
 	return guard.is_null() or local_action.is_null();
 }
 
-// Vacuous transitions are transitions that do not have any effect on the state
-// of the circuit or on knowledge about the state of the circuit. This function
-// does not actually answer that question correctly, because you need to know
-// the current state of the circuit to properly answer that question. Instead,
-// this function is conservative. We know that this transition is definitely
-// vacuous if both the guard and action are 1 because, by definition, they will
-// not have any effect on the state or our knowledge of it. So this function
-// really returns either TRUE or MAYBE.
+/**
+ * @brief Check if a transition is vacuous (has no effect)
+ * 
+ * A transition is vacuous if its assume, guard, and local_action are all tautologies,
+ * meaning it will always be enabled and have no effect on the state of the system.
+ * This is a conservative check that returns true only when definitely vacuous.
+ * 
+ * @return True if the transition is definitely vacuous, false if it might have an effect
+ */
 bool transition::is_vacuous() const
 {
 	return assume.is_tautology() and guard.is_tautology() and local_action.is_tautology();
+}
+
+net::net() {
+	name = "";
+	region = 0;
+	is_ghost = false;
+}
+
+net::net(string name, int region, bool is_ghost) {
+	this->name = name;
+	this->region = region;
+	this->is_ghost = is_ghost;
+}
+
+net::~net() {
 }
 
 graph::graph()
@@ -145,14 +214,160 @@ graph::~graph()
 
 }
 
+/**
+ * @brief Find the index of a net with the given name and region
+ * 
+ * Searches for a net by exact name and region match.
+ * 
+ * @param name The name of the net to find
+ * @param region The region to search in
+ * @return The index of the net if found, -1 otherwise
+ */
+int graph::netIndex(string name, int region) const {
+	for (int i = 0; i < (int)nets.size(); i++) {
+		if (nets[i].name == name and nets[i].region == region) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/**
+ * @brief Find or create a net with the given name and region
+ * 
+ * First tries to find an exact match for the net. If not found and define is true
+ * or nets with the same name exist in other regions, creates a new net and connects
+ * it to other nets with the same name.
+ * 
+ * @param name The name of the net to find or create
+ * @param region The region for the net
+ * @param define Whether to create the net if not found
+ * @return The index of the found or created net, or -1 if not found and not created
+ */
+int graph::netIndex(string name, int region, bool define) {
+	vector<int> remote;
+	// First try to find the exact net
+	for (int i = 0; i < (int)nets.size(); i++) {
+		if (nets[i].name == name) {
+			remote.push_back(i);
+			if (nets[i].region == region) {
+				return i;
+			}
+		}
+	}
+
+	// If not found but define is true or we found nets with the same
+	// name, create a new net and connect it to the other nets with the
+	// same name
+	if (define or not remote.empty()) {
+		int uid = create(net(name, region));
+		for (int i = 0; i < (int)remote.size(); i++) {
+			connect_remote(uid, remote[i]);
+		}
+		return uid;
+	}
+	return -1;
+}
+
+/**
+ * @brief Get the name and region of a net by index
+ * 
+ * @param uid The index of the net
+ * @return A pair containing the name and region of the net
+ */
+pair<string, int> graph::netAt(int uid) const {
+	return pair<string, int>(nets[uid].name, nets[uid].region);
+}
+
+/**
+ * @brief Create a new net in the graph
+ * 
+ * Adds a new net to the graph and initializes its remote connections.
+ * If the net is a ghost net, adds it to the ghost_nets list.
+ * 
+ * @param n The net to create
+ * @return The index of the newly created net
+ */
+int graph::create(net n) {
+	int uid = nets.size();
+	nets.push_back(n);
+	nets.back().remote.push_back(uid);
+	if (nets.back().is_ghost) {
+		ghost_nets.push_back(uid);
+	}
+	return uid;
+}
+
+/**
+ * @brief Connect two nets as remote counterparts
+ * 
+ * Establishes a remote connection between two nets, making them share
+ * the same remote list. This is used to connect nets with the same name
+ * across different regions.
+ * 
+ * @param from Index of the first net
+ * @param to Index of the second net
+ */
+void graph::connect_remote(int from, int to) {
+	nets[from].remote.insert(nets[from].remote.end(), nets[to].remote.begin(), nets[to].remote.end());
+	sort(nets[from].remote.begin(), nets[from].remote.end());
+	nets[from].remote.erase(unique(nets[from].remote.begin(), nets[from].remote.end()), nets[from].remote.end());
+	nets[to].remote = nets[from].remote;
+}
+
+/**
+ * @brief Get all remote net groups
+ * 
+ * A remote group collects all of the isochronic regions of a net. It is a set of nets that are connected
+ * to each other via remote connections. This function identifies all distinct remote groups in the graph.
+ * 
+ * @return A vector of vectors, where each inner vector contains the indices of nets in one remote group
+ */
+vector<vector<int> > graph::remote_groups() {
+	vector<vector<int> > groups;
+
+	for (int i = 0; i < (int)nets.size(); i++) {
+		bool found = false;
+		for (int j = 0; j < (int)groups.size() and not found; j++) {
+			found = (find(groups[j].begin(), groups[j].end(), i) != groups[j].end());
+		}
+		if (not found) {
+			groups.push_back(nets[i].remote);
+		}
+	}
+
+	return groups;
+}
+
+/**
+ * @brief Get a reference to a transition by term index
+ * 
+ * @param idx A term_index identifying a specific transition
+ * @return Reference to the transition
+ */
 hse::transition &graph::at(term_index idx) {
 	return transitions[idx.index];
 }
 
+/**
+ * @brief Get a reference to a specific term in a transition's local action
+ * 
+ * @param idx A term_index identifying a specific term in a transition
+ * @return Reference to the term (boolean cube)
+ */
 boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
 }
 
+/**
+ * @brief Calculate the combined predicate of multiple places
+ * 
+ * Computes the boolean cover representing the conjunction of all predicates
+ * from the given places and input places from the given transitions.
+ * 
+ * @param pos Vector of iterators pointing to places
+ * @return The combined predicate as a boolean cover
+ */
 boolean::cover graph::predicate(vector<petri::iterator> pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
@@ -171,8 +386,19 @@ boolean::cover graph::predicate(vector<petri::iterator> pos) const {
 	return result;
 }
 
-boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev) const
-{
+/**
+ * @brief Calculate the effective predicate for a place
+ * 
+ * The effective predicate of a place excludes state encodings that enable any
+ * outgoing transition's guard. The effective predicate of a transition is the
+ * conjunction of the effective predicates of its input places excluding the
+ * guard and action. This helps in synthesizing production rules.
+ * 
+ * @param i Iterator pointing to a place
+ * @param prev Optional pointer to store the preceding places
+ * @return The effective predicate as a boolean cover
+ */
+boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev) const {
 	if (i.type == petri::place::type) {
 		return places[i.index].effective;
 	}
@@ -191,6 +417,17 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
 	return pred;
 }
 
+/**
+ * @brief Calculate the state encoding for a set of nodes
+ * 
+ * The implicant of a node is the state of the system when a token is at that node.
+ * For a place, it is the predicate. For a transition, it is the combined predicate
+ * of the input places which pass the guard. The implicant of multiple nodes is the
+ * conjunction of the implicants of the nodes.
+ * 
+ * @param pos Vector of iterators pointing to places
+ * @return The implicant as a boolean cover
+ */
 boolean::cover graph::implicant(vector<petri::iterator> pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
@@ -210,6 +447,15 @@ boolean::cover graph::implicant(vector<petri::iterator> pos) const {
 	return result;
 }
 
+/**
+ * @brief Calculate the effective implicant for a set of nodes
+ * 
+ * The effective implicant excludes state encodings that pass the guards
+ * of any outgoing transitions or in which the transition is vacuous.
+ * 
+ * @param pos Vector of iterators pointing to places
+ * @return The effective implicant as a boolean cover
+ */
 boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
@@ -233,6 +479,14 @@ boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
 	return result;
 }
 
+/**
+ * @brief Filter out states from the current encoding that are not affected by the transition.
+ * 
+ * @param i Iterator pointing to a transition
+ * @param encoding The current state encoding to filter
+ * @param action The action to verify
+ * @return The filtered encoding as a boolean cover
+ */
 boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const
 {
 	// I need to select encodings that are either affected by a transition that
@@ -272,6 +526,15 @@ boolean::cover graph::filter_vacuous(petri::iterator i, boolean::cover encoding,
 	return result;
 }
 
+/**
+ * @brief Calculate the minimal guard needed to exclude other conditional branches
+ * 
+ * This computes the most minimal guard needed to exclude other conditional branches
+ * from the execution of the current transition
+ * 
+ * @param index Index of the transition
+ * @return The minimal guard as a boolean cover
+ */
 boolean::cover graph::exclusion(int index) const {
 	boolean::cover result;
 	vector<int> p = prev(transition::type, index);
@@ -309,7 +572,15 @@ boolean::cover graph::arbitration(int index) const {
 }
 
 
-// assumes all vector<int> inputs are sorted
+/**
+ * @brief Check if two transitions share a common arbiter
+ * 
+ * Determine if the two transitions share an arbitered input place.
+ * 
+ * @param a Iterator pointing to the first transition
+ * @param b Iterator pointing to the second transition
+ * @return True if they share a common arbiter, false otherwise
+ */
 bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 {
 	vector<petri::iterator> left, right;
@@ -356,6 +627,12 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
 	return vector_intersection_size(left, right) > 0;
 }
 
+/**
+ * @brief Update masks for all places in the graph
+ * 
+ * Masks limit the predicate to only variables observable in the process.
+ * This function ensures all masks are properly set for all places.
+ */
 void graph::update_masks() {
 	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++) {
 		places[i.index].mask = 1;
@@ -372,10 +649,23 @@ void graph::update_masks() {
 	}
 }
 
-void graph::post_process(ucs::variable_set &variables, bool proper_nesting, bool aggressive)
+/**
+ * @brief Post-process the graph to optimize and validate its structure
+ * 
+ * Performs various optimizations and validations on the graph:
+ * - Validates proper nesting of control structures (if requested)
+ * - Computes split groups for parallel and choice compositions
+ * - Merges redundant nodes
+ * - Removes infeasible transitions
+ * - Updates masks and state information
+ * 
+ * @param proper_nesting Whether to enforce proper nesting of control structures
+ * @param aggressive Whether to use aggressive optimization strategies
+ */
+void graph::post_process(bool proper_nesting, bool aggressive)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
-		transitions[i].remote_action = transitions[i].local_action.remote(variables.get_groups());
+		transitions[i].remote_action = transitions[i].local_action.remote(remote_groups());
 
 	// Handle Reset Behavior
 	bool change = true;
@@ -583,7 +873,7 @@ void graph::post_process(ucs::variable_set &variables, bool proper_nesting, bool
 			continue;
 	}
 
-	annotate_conditional_branches(variables);
+	annotate_conditional_branches();
 
 	// Determine the actual starting location of the tokens given the state information
 	update_masks();
@@ -591,10 +881,13 @@ void graph::post_process(ucs::variable_set &variables, bool proper_nesting, bool
 		reset = source;
 }
 
-void graph::check_variables(const ucs::variable_set &variables)
+/**
+ * @brief Verify that all variables are both assigned and read
+ */
+void graph::check_variables()
 {
 	vector<int> vars;
-	for (int i = 0; i < (int)variables.nodes.size(); i++) {
+	for (int i = 0; i < (int)nets.size(); i++) {
 		vector<int> written;
 		vector<int> read;
 
@@ -616,12 +909,21 @@ void graph::check_variables(const ucs::variable_set &variables)
 		}
 
 		if (written.size() == 0 && read.size() > 0)
-			warning("", variables.nodes[i].to_string() + " never assigned", __FILE__, __LINE__);
-		else if (written.size() == 0 && read.size() == 0 and variables.nodes[i].to_string().rfind(ghost_prefix, 0) == string::npos)
-			warning("", "unused variable " + variables.nodes[i].to_string(), __FILE__, __LINE__);
+			warning("", nets[i].name + " never assigned", __FILE__, __LINE__);
+		else if (written.size() == 0 && read.size() == 0 and not nets[i].is_ghost)
+			warning("", "unused net " + nets[i].name, __FILE__, __LINE__);
 	}
 }
 
+/**
+ * @brief Identify nodes that need to be checked for state conflicts.
+ *  
+ * A node is relevant if it is reachable from the current set of places and
+ * is not in parallel with the transition we're checking.
+ * 
+ * @param curr Vector of iterators pointing to places
+ * @return Vector of iterators pointing to all relevant nodes
+ */
 vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 {
 	vector<petri::iterator> result;
@@ -683,7 +985,15 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 	return result;
 }
 
-void graph::annotate_conditional_branches(ucs::variable_set &variables) {
+/**
+ * @brief Annotate conditional branches in the graph
+ * 
+ * Adds ghost nets to conditional branches to help with state propagation
+ * and synthesis. Ghost nets are used to separate the states of different
+ * branches of a conditional within the state space so that we can weave
+ * them together in different ways using state variables.
+ */
+void graph::annotate_conditional_branches() {
 	if (not ghost_nets.empty()) {
 		for (petri::iterator i = begin(petri::transition::type); i != end(petri::transition::type); i++) {
 			transitions[i.index].ghost = 1;
@@ -700,12 +1010,10 @@ void graph::annotate_conditional_branches(ucs::variable_set &variables) {
 			count += ((int)n.size() > (1<<count));
 			for (int j = 0; j < count; j++) {
 				string name = ghost_prefix + to_string(i.index) + "_" + to_string(places[i.index].ghost_nets.size());
-				int uid = variables.define(name);
+				int uid = netIndex(name);
 				if (uid < 0) {
-					// If this branch was previously annotated, reuse the name
-					uid = variables.find(name);
+					uid = create(net(name, 0, true));
 				}
-				ghost_nets.push_back(uid);
 				places[i.index].ghost_nets.push_back(uid);
 			}
 

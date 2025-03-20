@@ -40,10 +40,9 @@ encoder::encoder()
 	base = NULL;
 }
 
-encoder::encoder(graph *base, ucs::variable_set *variables)
+encoder::encoder(graph *base)
 {
 	this->base = base;
-	this->variables = variables;
 }
 
 encoder::~encoder()
@@ -528,10 +527,11 @@ void encoder::insert_state_variable(bool debug) {
 		}
 
 		// Create the state variable
-		int vid = -1;
-		while (vid < 0) {
-			vid = variables->define("v" + ::to_string(++uid));
+		string name = "v" + ::to_string(++uid);
+		while (base->netIndex(name) >= 0) {
+			name = "v" + ::to_string(++uid);
 		}
+		int vid = base->create(net(name, 0));
 
 		if (debug) {
 			printf("enumerating options\n");
@@ -758,7 +758,7 @@ void encoder::insert_state_variable(bool debug) {
 				auto j = pos.begin();
 				for (; i != group->second[1-sense].end() and j != pos.end(); i++, j++) {
 					base->transitions[j->index].local_action = boolean::cover(*i, 1-sense);
-					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(variables->get_groups());
+					base->transitions[j->index].remote_action = base->transitions[j->index].local_action.remote(base->remote_groups());
 				}
 			}
 			sense = 1-sense;
@@ -874,7 +874,7 @@ bool encoder::insert_state_variables(int max_count, bool senseless, bool report_
 
 		float insertDelay = tmri.since();
 		tmri.reset();
-		elaborate(*base, *variables, true, true, false);
+		elaborate(*base, true, true, false);
 
 		float elabDelay = tmri.since();
 

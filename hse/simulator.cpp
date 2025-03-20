@@ -9,7 +9,6 @@
 #include "graph.h"
 #include <common/text.h>
 #include <common/message.h>
-#include <ucs/variable.h>
 #include <interpret_boolean/export.h>
 #include <common/math.h>
 
@@ -29,10 +28,10 @@ instability::~instability()
 
 }
 
-string instability::to_string(const hse::graph &g, const ucs::variable_set &v)
+string instability::to_string(const hse::graph &g)
 {
 	string result;
-	result = "unstable rule " + enabled_transition::to_string(g, v);
+	result = "unstable rule " + enabled_transition::to_string(g);
 
 	result += " cause: {";
 
@@ -41,7 +40,7 @@ string instability::to_string(const hse::graph &g, const ucs::variable_set &v)
 		if (j != 0)
 			result += "; ";
 
-		result += history[j].to_string(g, v);
+		result += history[j].to_string(g);
 	}
 	result += "}";
 	return result;
@@ -71,9 +70,9 @@ interference::~interference()
 
 }
 
-string interference::to_string(const hse::graph &g, const ucs::variable_set &v)
+string interference::to_string(const hse::graph &g)
 {
-	return "interfering assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	return "interfering assignments " + first.to_string(g) + " and " + second.to_string(g);
 }
 
 mutex::mutex()
@@ -100,9 +99,9 @@ mutex::~mutex()
 
 }
 
-string mutex::to_string(const hse::graph &g, const ucs::variable_set &v)
+string mutex::to_string(const hse::graph &g)
 {
-	return "non-exclusive guards in deterministic selection for assignments " + first.to_string(g, v) + " and " + second.to_string(g, v);
+	return "non-exclusive guards in deterministic selection for assignments " + first.to_string(g) + " and " + second.to_string(g);
 }
 
 deadlock::deadlock()
@@ -125,22 +124,20 @@ deadlock::~deadlock()
 
 }
 
-string deadlock::to_string(const ucs::variable_set &v)
+string deadlock::to_string(const hse::graph &g)
 {
-	return "deadlock detected at state " + state::to_string(v);
+	return "deadlock detected at state " + state::to_string(g);
 }
 
 simulator::simulator(bool annotate_ghosts)
 {
 	base = NULL;
-	variables = NULL;
 	now = 0;
 	this->annotate_ghosts = annotate_ghosts;
 }
 
-simulator::simulator(graph *base, const ucs::variable_set *variables, state initial, bool annotate_ghosts) {
+simulator::simulator(graph *base, state initial, bool annotate_ghosts) {
 	this->base = base;
-	this->variables = variables;
 	this->now = 0;
 	this->annotate_ghosts = annotate_ghosts;
 	if (base != NULL) {
@@ -573,7 +570,7 @@ enabled_transition simulator::fire(int index)
 				if (loc == mutex_errors.end() || *loc != err)
 				{
 					mutex_errors.insert(loc, err);
-					error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+					error("", err.to_string(*base), __FILE__, __LINE__);
 				}
 			}
 
@@ -601,7 +598,7 @@ enabled_transition simulator::fire(int index)
 		vector<instability>::iterator loc = lower_bound(instability_errors.begin(), instability_errors.end(), err);
 		if (loc == instability_errors.end() || *loc != err) {
 			instability_errors.insert(loc, err);
-			error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+			error("", err.to_string(*base), __FILE__, __LINE__);
 		}
 	}
 
@@ -638,7 +635,7 @@ enabled_transition simulator::fire(int index)
 			if (loc == interference_errors.end() || *loc != err)
 			{
 				interference_errors.insert(loc, err);
-				error("", err.to_string(*base, *variables), __FILE__, __LINE__);
+				error("", err.to_string(*base), __FILE__, __LINE__);
 			}
 		}
 

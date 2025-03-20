@@ -114,30 +114,28 @@ void gate::weaken_brute_force()
 	}
 }
 
-void gate::print(const ucs::variable_set &v, int uid) {
-	cout << v.nodes[uid].to_string() << "-" << endl;
+void gate::print(int uid, graph *base) {
+	cout << base->nets[uid].name << "-" << endl;
 	cout << "\t" << ::to_string(tids[0]) << endl;
-	cout << "\timplicant: " << export_expression(implicant[0], v).to_string() << endl; 
-	cout << "\texclusion: " << export_expression(exclusion[0], v).to_string() << endl; 
-	cout << "\tholding: " << export_expression(holding[0], v).to_string() << endl; 
-	cout << "\tassume: " << export_expression(assume[0], v).to_string() << endl;
+	cout << "\timplicant: " << export_expression(implicant[0], *base).to_string() << endl; 
+	cout << "\texclusion: " << export_expression(exclusion[0], *base).to_string() << endl; 
+	cout << "\tholding: " << export_expression(holding[0], *base).to_string() << endl; 
+	cout << "\tassume: " << export_expression(assume[0], *base).to_string() << endl;
 
- 	cout << v.nodes[uid].to_string() << "+" << endl;
+ 	cout << base->nets[uid].name << "+" << endl;
 	cout << "\t" << ::to_string(tids[1]) << endl;
-	cout << "\timplicant: " << export_expression(implicant[1], v).to_string() << endl; 
-	cout << "\texclusion: " << export_expression(exclusion[1], v).to_string() << endl; 
-	cout << "\tholding: " << export_expression(holding[1], v).to_string() << endl; 
-	cout << "\tassume: " << export_expression(assume[1], v).to_string() << endl;
+	cout << "\timplicant: " << export_expression(implicant[1], *base).to_string() << endl; 
+	cout << "\texclusion: " << export_expression(exclusion[1], *base).to_string() << endl; 
+	cout << "\tholding: " << export_expression(holding[1], *base).to_string() << endl; 
+	cout << "\tassume: " << export_expression(assume[1], *base).to_string() << endl;
 }
 
 gate_set::gate_set() {
 	base = nullptr;
-	vars = nullptr;
 }
 
-gate_set::gate_set(graph *base, ucs::variable_set *vars) {
+gate_set::gate_set(graph *base) {
 	this->base = base;
-	this->vars = vars;
 }
 
 gate_set::~gate_set() {
@@ -145,7 +143,7 @@ gate_set::~gate_set() {
 
 void gate_set::load(bool senseless) {
 	gates.clear();
-	gates.resize(vars->nodes.size());
+	gates.resize(base->nets.size());
 
 	for (int i = 0; i < (int)gates.size(); i++) {
 		if (not base->reset.empty() and not base->reset[0].encodings.cubes.empty()) {
@@ -233,11 +231,8 @@ void gate_set::weaken() {
 }
 
 void gate_set::build_reset() {
-	ucs::variable resetDecl, _resetDecl;
-	resetDecl.name.push_back(ucs::instance("Reset", vector<int>()));
-	_resetDecl.name.push_back(ucs::instance("_Reset", vector<int>()));
-	int reset = vars->define(resetDecl);
-	int _reset = vars->define(_resetDecl);
+	int reset = base->netIndex("Reset", 0, true);
+	int _reset = base->netIndex("_Reset", 0, true);
 
 	// TODO(edward.bingham) There a more complete algorithm for minimal resets on production rules.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
@@ -318,15 +313,14 @@ void gate_set::build_shared_gates() {
 void gate_set::save(prs::production_rule_set *out) {
 	out->name = base->name;
 
-	int gnd = vars->find(ucs::variable("GND"));
-	if (gnd < 0) {
-		gnd = vars->define(ucs::variable("GND"));
+	int gnd = base->netIndex("GND", 0, true);
+	int vdd = base->netIndex("Vdd", 0, true);
+
+	for (int i = 0; i < (int)base->nets.size(); i++) {
+		if (not base->nets[i].is_ghost) {
+			out->create(prs::net(base->nets[i].name));
+		}
 	}
-	int vdd = vars->find(ucs::variable("Vdd"));
-	if (vdd < 0) {
-		vdd = vars->define(ucs::variable("Vdd"));
-	}
-	out->init(*vars);
 	out->set_power(vdd, gnd);
 
 	out->require_driven = true;
@@ -347,18 +341,18 @@ void gate_set::save(prs::production_rule_set *out) {
 			}
 		}
 
-		out->at(var).keep = not gate->is_combinational();
+		out->nets[var].keep = not gate->is_combinational();
 	}
 }
 
-void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_set *vars, bool senseless, bool report_progress, bool debug) {
+void synthesize_rules(prs::production_rule_set *out, graph *base, bool senseless, bool report_progress, bool debug) {
 	if (report_progress) {
 		printf("  %s...", base->name.c_str());
 		fflush(stdout);
 	}
 
 	Timer tmr;
-	gate_set gates(base, vars);
+	gate_set gates(base);
 	gates.load(senseless);
 
 	if (debug) {
@@ -389,7 +383,7 @@ void synthesize_rules(prs::production_rule_set *out, graph *base, ucs::variable_
 
 void gate_set::print() {
 	for (int uid = 0; uid < (int)gates.size(); uid++) {
-		gates[uid].print(*vars, uid);
+		gates[uid].print(uid, base);
 		cout << endl;
 	}
 }
