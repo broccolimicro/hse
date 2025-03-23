@@ -276,7 +276,14 @@ int graph::netIndex(string name, int region, bool define) {
  * @return A pair containing the name and region of the net
  */
 pair<string, int> graph::netAt(int uid) const {
+	if (uid >= (int)nets.size()) {
+		return pair<string, int>("", 0);
+	}
 	return pair<string, int>(nets[uid].name, nets[uid].region);
+}
+
+int graph::netCount() const {
+	return (int)nets.size();
 }
 
 /**
@@ -357,6 +364,22 @@ hse::transition &graph::at(term_index idx) {
  */
 boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
+}
+
+map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, const graph &g) {
+	printf("merging nets\n");
+	int count = (int)nets.size();
+	nets.insert(nets.end(), g.nets.begin(), g.nets.end());
+	for (int i = count; i < (int)nets.size(); i++) {
+		if (nets[i].is_ghost) {
+			ghost_nets.push_back(i);
+		}
+		for (int j = 0; j < (int)nets[i].remote.size(); j++) {
+			nets[i].remote[j] += count;
+		}
+	}
+
+	return super::merge(composition, g);
 }
 
 /**

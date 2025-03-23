@@ -1,6 +1,6 @@
 NAME          = hse
-DEPEND        = ucs petri boolean prs interpret_boolean interpret_ucs parse_expression parse_ucs parse common
-TEST_DEPEND   = hse petri boolean ucs prs interpret_boolean interpret_ucs parse_expression parse_ucs parse common
+DEPEND        = ucs petri boolean prs interpret_boolean parse_expression parse_ucs parse common
+TEST_DEPEND   = hse petri prs interpret_hse interpret_boolean boolean parse_chp parse_astg parse_dot parse_cog parse_expression parse_ucs parse common
 
 CXXFLAGS      = -std=c++17 -O2 -g -Wall -fmessage-length=0
 LDFLAGS	      =  

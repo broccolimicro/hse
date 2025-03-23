@@ -167,6 +167,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	int netIndex(string name, int region=0) const;
 	int netIndex(string name, int region=0, bool define=false);
 	pair<string, int> netAt(int uid) const;
+	int netCount() const;
 
 	using super::create;
 	int create(net n = net());
@@ -177,6 +178,8 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	hse::transition &at(term_index idx);
 	boolean::cube &term(term_index idx);
+
+	virtual map<petri::iterator, vector<petri::iterator> > merge(int composition, const graph &g);
 
 	boolean::cover predicate(vector<petri::iterator> pos) const;
 	boolean::cover effective(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
