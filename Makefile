@@ -1,9 +1,16 @@
 NAME          = hse
 DEPEND        = petri boolean prs interpret_boolean parse_expression parse_ucs parse common
-TEST_DEPEND   = hse petri prs interpret_hse interpret_boolean boolean parse_chp parse_astg parse_dot parse_cog parse_expression parse_ucs parse common
+TEST_DEPEND   = petri prs interpret_hse interpret_boolean boolean parse_chp parse_astg parse_dot parse_cog parse_expression parse_ucs parse common
 
-CXXFLAGS      = -std=c++17 -O2 -g -Wall -fmessage-length=0
-LDFLAGS	      =  
+COVERAGE ?= 0
+
+ifeq ($(COVERAGE),0)
+CXXFLAGS = -std=c++20 -g -Wall -fmessage-length=0 -O2
+LDFLAGS  =
+else
+CXXFLAGS = -std=c++20 -g -Wall -fmessage-length=0 -O0 --coverage -fprofile-arcs -ftest-coverage
+LDFLAGS  = --coverage -fprofile-arcs -ftest-coverage 
+endif
 
 SRCDIR        = $(NAME)
 INCLUDE_PATHS = $(DEPEND:%=-I../%) -I.
@@ -16,10 +23,14 @@ DEPS         := $(shell mkdir -p build/$(SRCDIR); find build/$(SRCDIR) -name '*.
 TARGET	      = lib$(NAME).a
 
 TESTDIR       = tests
-GTEST        := ../../googletest
+
+ifndef GTEST
+override GTEST=../../googletest
+endif
+
 TEST_INCLUDE_PATHS = -I$(GTEST)/googletest/include $(TEST_DEPEND:%=-I../%) -I.
 TEST_LIBRARY_PATHS = -L$(GTEST)/build/lib $(TEST_DEPEND:%=-L../%) -L.
-TEST_LIBRARIES = $(TEST_DEPEND:%=-l%) -pthread -lgtest
+TEST_LIBRARIES = -l$(NAME) $(TEST_DEPEND:%=-l%) -pthread -lgtest
 
 TESTS        := $(shell mkdir -p $(TESTDIR); find $(TESTDIR) -name '*.cpp')
 TEST_OBJECTS := $(TESTS:%.cpp=build/%.o) build/$(TESTDIR)/gtest_main.o
@@ -58,11 +69,19 @@ else
     endif
 endif
 
+
 all: lib
 
 lib: $(TARGET)
 
 tests: lib $(TEST_TARGET)
+
+coverage: clean
+	$(MAKE) COVERAGE=1 tests
+	./$(TEST_TARGET) || true  # Continue even if tests fail
+	lcov --capture --directory build/$(SRCDIR) --output-file coverage.info
+	lcov --ignore-errors unused --remove coverage.info '/usr/include/*' '*/googletest/*' '*/tests/*' --output-file coverage_filtered.info
+	genhtml coverage_filtered.info --output-directory coverage_report
 
 $(TARGET): $(OBJECTS)
 	ar rvs $(TARGET) $(OBJECTS)
@@ -73,7 +92,7 @@ build/$(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(INCLUDE_PATHS) -c -o $@ $<
 
 $(TEST_TARGET): $(TEST_OBJECTS) $(OBJECTS) $(TARGET)
-	$(CXX) $(CXXFLAGS) $(TEST_LIBRARY_PATHS) $(TEST_OBJECTS) $(TEST_LIBRARIES) -o $(TEST_TARGET)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(TEST_LIBRARY_PATHS) $(TEST_OBJECTS) $(TEST_LIBRARIES) -o $(TEST_TARGET)
 
 build/$(TESTDIR)/%.o: $(TESTDIR)/%.cpp
 	@mkdir -p $(dir $@)
@@ -87,7 +106,10 @@ build/$(TESTDIR)/gtest_main.o: $(GTEST)/googletest/src/gtest_main.cc
 include $(DEPS) $(TEST_DEPS)
 
 clean:
-	rm -rf build $(TARGET) $(TEST_TARGET)
+	rm -rf build $(TARGET) $(TEST_TARGET) coverage.info coverage_filtered.info coverage_report *.gcda *.gcno
 
-cleantest:
+clean-test:
 	rm -rf build/$(TESTDIR) $(TEST_TARGET)
+
+clean-coverage:
+	rm -rf coverage.info coverage_filtered.info coverage_report *.gcda *.gcno
