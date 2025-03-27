@@ -313,14 +313,15 @@ void gate_set::build_shared_gates() {
 void gate_set::save(prs::production_rule_set *out) {
 	out->name = base->name;
 
-	int gnd = base->netIndex("GND", 0, true);
-	int vdd = base->netIndex("Vdd", 0, true);
-
+	boolean::mapping m((int)base->nets.size());
 	for (int i = 0; i < (int)base->nets.size(); i++) {
 		if (not base->nets[i].is_ghost) {
-			out->create(prs::net(base->nets[i].name));
+			m.set(i, out->create(prs::net(base->nets[i].name)));
 		}
 	}
+
+	int gnd = out->netIndex("GND", 0, true);
+	int vdd = out->netIndex("Vdd", 0, true);
 	out->set_power(vdd, gnd);
 
 	out->require_driven = true;
@@ -329,19 +330,24 @@ void gate_set::save(prs::production_rule_set *out) {
 
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
+		int ovar = m.map(var);
 		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {
 			continue;
 		}
 
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
+				boolean::cover assume = gate->assume[val];
+				assume.apply(m);
+				boolean::cover implicant = gate->implicant[val];
+				implicant.apply(m);
 				prs::attributes attr;
-				attr.assume = gate->assume[val];
-				out->add(val == 1 ? vdd : gnd, gate->implicant[val], var, val, attr);
+				attr.assume = assume;
+				out->add(val == 1 ? vdd : gnd, implicant, ovar, val, attr);
 			}
 		}
 
-		out->nets[var].keep = not gate->is_combinational();
+		out->nets[ovar].keep = not gate->is_combinational();
 	}
 }
 

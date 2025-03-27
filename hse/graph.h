@@ -60,6 +60,8 @@ struct place : petri::place
 	static place merge(int composition, const place &p0, const place &p1);
 };
 
+ostream &operator<<(ostream &os, const place &p);
+
 // A transition represents a partial production rule (partial guard -> assignment),
 // driving a wire to VDD or GND if the guard is satisfied by the current state
 // of the circuit.
@@ -120,6 +122,8 @@ struct transition : petri::transition
 	bool is_vacuous() const;
 };
 
+ostream &operator<<(ostream &os, const transition &t);
+
 struct net {
 	net();
 	net(string name, int region, bool is_ghost=false);
@@ -179,7 +183,8 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	hse::transition &at(term_index idx);
 	boolean::cube &term(term_index idx);
 
-	virtual map<petri::iterator, vector<petri::iterator> > merge(int composition, const graph &g);
+	using super::merge;
+	virtual map<petri::iterator, vector<petri::iterator> > merge(int composition, graph g);
 
 	boolean::cover predicate(vector<petri::iterator> pos) const;
 	boolean::cover effective(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
@@ -192,7 +197,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	void update_masks();
 
-	void post_process(bool proper_nesting = false, bool aggressive = false);
+	void post_process(bool proper_nesting = false, bool aggressive = false, bool annotate=true);
 	void check_variables();
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 

@@ -14,6 +14,8 @@
 #include <petri/simulator.h>
 #include <petri/state.h>
 
+#include <boolean/mapping.h>
+
 namespace hse
 {
 
@@ -65,6 +67,11 @@ place place::merge(int composition, const place &p0, const place &p1)
 	result.arbiter = (p0.arbiter or p1.arbiter);
 	result.synchronizer = (p0.synchronizer or p1.synchronizer);
 	return result;
+}
+
+ostream &operator<<(ostream &os, const place &p) {
+	os << p.predicate;
+	return os;
 }
 
 /**
@@ -189,6 +196,12 @@ bool transition::is_vacuous() const
 {
 	return assume.is_tautology() and guard.is_tautology() and local_action.is_tautology();
 }
+
+ostream &operator<<(ostream &os, const transition &t) {
+	os << t.guard << "->" << t.local_action;
+	return os;
+}
+
 
 net::net() {
 	name = "";
@@ -366,19 +379,54 @@ boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
 }
 
-map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, const graph &g) {
-	printf("merging nets\n");
+map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, graph g) {
+	boolean::mapping netMap((int)g.nets.size());
+
+	// Add all of the nets and look for duplicates
 	int count = (int)nets.size();
-	nets.insert(nets.end(), g.nets.begin(), g.nets.end());
-	for (int i = count; i < (int)nets.size(); i++) {
-		if (nets[i].is_ghost) {
-			ghost_nets.push_back(i);
+	for (int i = 0; i < (int)g.nets.size(); i++) {
+		netMap.nets[i] = (int)nets.size();
+		vector<int> remote;
+		for (int j = 0; j < count; j++) {
+			if (nets[j].name == g.nets[i].name) {
+				if (nets[j].region == g.nets[i].region) {
+					netMap.nets[i] = j;
+				}
+				remote.push_back(j);
+			}
 		}
-		for (int j = 0; j < (int)nets[i].remote.size(); j++) {
-			nets[i].remote[j] += count;
+
+		if (netMap.nets[i] >= (int)nets.size()) {
+			nets.push_back(g.nets[i]);
+			nets.back().remote = remote;
+			if (nets.back().is_ghost) {
+				ghost_nets.push_back(i);
+			}
 		}
 	}
 
+	// Fill in the remote nets
+	for (int i = 0; i < (int)netMap.nets.size(); i++) {
+		int k = netMap.nets[i];
+		for (int j = 0; j < (int)g.nets[i].remote.size(); j++) {
+			nets[k].remote.push_back(netMap.map(g.nets[i].remote[j]));
+		}
+		sort(nets[k].remote.begin(), nets[k].remote.end());
+		nets[k].remote.erase(unique(nets[k].remote.begin(), nets[k].remote.end()), nets[k].remote.end());
+	}
+
+	for (int i = 0; i < (int)g.transitions.size(); i++) {
+		g.transitions[i].local_action.apply(netMap);
+		g.transitions[i].remote_action.apply(netMap);
+		g.transitions[i].guard.apply(netMap);
+	}
+
+	for (int i = 0; i < (int)g.places.size(); i++) {
+		g.places[i].predicate.apply(netMap);
+		g.places[i].effective.apply(netMap);
+	}
+
+	// Remap all expressions to new variables
 	return super::merge(composition, g);
 }
 
@@ -685,7 +733,7 @@ void graph::update_masks() {
  * @param proper_nesting Whether to enforce proper nesting of control structures
  * @param aggressive Whether to use aggressive optimization strategies
  */
-void graph::post_process(bool proper_nesting, bool aggressive)
+void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 {
 	for (int i = 0; i < (int)transitions.size(); i++)
 		transitions[i].remote_action = transitions[i].local_action.remote(remote_groups());
@@ -896,7 +944,9 @@ void graph::post_process(bool proper_nesting, bool aggressive)
 			continue;
 	}
 
-	annotate_conditional_branches();
+	if (annotate) {
+		annotate_conditional_branches();
+	}
 
 	// Determine the actual starting location of the tokens given the state information
 	update_masks();

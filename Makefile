@@ -1,5 +1,5 @@
 NAME          = hse
-DEPEND        = ucs petri boolean prs interpret_boolean parse_expression parse_ucs parse common
+DEPEND        = petri boolean prs interpret_boolean parse_expression parse_ucs parse common
 TEST_DEPEND   = hse petri prs interpret_hse interpret_boolean boolean parse_chp parse_astg parse_dot parse_cog parse_expression parse_ucs parse common
 
 CXXFLAGS      = -std=c++17 -O2 -g -Wall -fmessage-length=0
@@ -21,7 +21,7 @@ TEST_INCLUDE_PATHS = -I$(GTEST)/googletest/include $(TEST_DEPEND:%=-I../%) -I.
 TEST_LIBRARY_PATHS = -L$(GTEST)/build/lib $(TEST_DEPEND:%=-L../%) -L.
 TEST_LIBRARIES = $(TEST_DEPEND:%=-l%) -pthread -lgtest
 
-TESTS        := $(shell mkdir -p tests; find $(TESTDIR) -name '*.cpp')
+TESTS        := $(shell mkdir -p $(TESTDIR); find $(TESTDIR) -name '*.cpp')
 TEST_OBJECTS := $(TESTS:%.cpp=build/%.o) build/$(TESTDIR)/gtest_main.o
 TEST_DEPS    := $(shell mkdir -p build/$(TESTDIR); find build/$(TESTDIR) -name '*.d')
 TEST_TARGET   = test
