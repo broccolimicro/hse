@@ -14,7 +14,7 @@
 #include <petri/simulator.h>
 #include <petri/state.h>
 
-#include <boolean/mapping.h>
+#include <common/mapping.h>
 
 namespace hse
 {
@@ -380,7 +380,7 @@ boolean::cube &graph::term(term_index idx) {
 }
 
 map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, graph g) {
-	boolean::mapping netMap((int)g.nets.size());
+	mapping netMap((int)g.nets.size());
 
 	// Add all of the nets and look for duplicates
 	int count = (int)nets.size();

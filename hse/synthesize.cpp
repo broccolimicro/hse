@@ -1,6 +1,7 @@
 #include "synthesize.h"
 
 #include <common/timer.h>
+#include <common/mapping.h>
 
 namespace hse
 {
@@ -313,7 +314,7 @@ void gate_set::build_shared_gates() {
 void gate_set::save(prs::production_rule_set *out) {
 	out->name = base->name;
 
-	boolean::mapping m((int)base->nets.size());
+	mapping m((int)base->nets.size());
 	for (int i = 0; i < (int)base->nets.size(); i++) {
 		if (not base->nets[i].is_ghost) {
 			m.set(i, out->create(prs::net(base->nets[i].name)));
@@ -338,9 +339,9 @@ void gate_set::save(prs::production_rule_set *out) {
 		for (int val = 0; val < 2; val++) {
 			if (gate->tids[val].size() > 0) {
 				boolean::cover assume = gate->assume[val];
-				assume.apply(m);
+				assume.apply(m.nets);
 				boolean::cover implicant = gate->implicant[val];
-				implicant.apply(m);
+				implicant.apply(m.nets);
 				prs::attributes attr;
 				attr.assume = assume;
 				out->add(val == 1 ? vdd : gnd, implicant, ovar, val, attr);
