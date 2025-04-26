@@ -19,7 +19,7 @@ TEST(Simulator, SimpleLoop) {
   
 	int x = g.netIndex("x");
 	EXPECT_EQ(x, 0);
-	EXPECT_EQ(g.netAt(x), (pair<string, int>("x", 0)));
+	EXPECT_EQ(g.netAt(x), ucs::Net("x"));
 
 	// Create simulator
 	simulator sim(&g, g.reset[0]);

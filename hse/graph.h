@@ -1,6 +1,7 @@
 #pragma once
 
 #include <common/standard.h>
+#include <common/net.h>
 #include <boolean/cover.h>
 #include <petri/graph.h>
 
@@ -126,11 +127,10 @@ ostream &operator<<(ostream &os, const transition &t);
 
 struct net {
 	net();
-	net(string name, int region, bool is_ghost=false);
+	net(ucs::Net name, bool is_ghost=false);
 	~net();
 
-	string name;
-	int region;
+	ucs::Net name;
 
 	vector<int> remote;
 	bool is_ghost;
@@ -168,9 +168,9 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	vector<int> ghost_nets;
 	vector<net> nets;
 
-	int netIndex(string name, int region=0) const;
-	int netIndex(string name, int region=0, bool define=false);
-	pair<string, int> netAt(int uid) const;
+	int netIndex(ucs::Net name) const;
+	int netIndex(ucs::Net name, bool define=false);
+	ucs::Net netAt(int uid) const;
 	int netCount() const;
 
 	using super::create;

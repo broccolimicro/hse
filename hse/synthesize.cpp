@@ -232,8 +232,8 @@ void gate_set::weaken() {
 }
 
 void gate_set::build_reset() {
-	int reset = base->netIndex("Reset", 0, true);
-	int _reset = base->netIndex("_Reset", 0, true);
+	int reset = base->netIndex(ucs::Net("Reset"), true);
+	int _reset = base->netIndex(ucs::Net("_Reset"), true);
 
 	// TODO(edward.bingham) There a more complete algorithm for minimal resets on production rules.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
@@ -321,8 +321,8 @@ void gate_set::save(prs::production_rule_set *out) {
 		}
 	}
 
-	int gnd = out->netIndex("GND", 0, true);
-	int vdd = out->netIndex("Vdd", 0, true);
+	int gnd = out->netIndex(ucs::Net("GND"), true);
+	int vdd = out->netIndex(ucs::Net("Vdd"), true);
 	out->set_power(vdd, gnd);
 
 	out->require_driven = true;
