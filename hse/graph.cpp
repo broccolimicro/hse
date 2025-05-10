@@ -205,14 +205,20 @@ ostream &operator<<(ostream &os, const transition &t) {
 
 net::net() {
 	is_ghost = false;
+	region = 0;
 }
 
-net::net(ucs::Net name, bool is_ghost) {
+net::net(string name, int region, bool is_ghost) {
 	this->name = name;
+	this->region = region;
 	this->is_ghost = is_ghost;
 }
 
 net::~net() {
+}
+
+string net::to_string() const {
+	return name + (region != 0 ? "'" + ::to_string(region) : "");
 }
 
 graph::graph()
@@ -230,12 +236,18 @@ graph::~graph()
  * Searches for a net by exact name and region match.
  * 
  * @param name The name of the net to find
- * @param region The region to search in
  * @return The index of the net if found, -1 otherwise
  */
-int graph::netIndex(ucs::Net name) const {
+int graph::netIndex(string name) const {
+	int region = 0;
+	size_t tic = name.rfind('\'');
+	if (tic != string::npos) {
+		region = std::stoi(name.substr(tic+1));
+		name = name.substr(0, tic);
+	}
+
 	for (int i = 0; i < (int)nets.size(); i++) {
-		if (nets[i].name == name) {
+		if (nets[i].name == name and nets[i].region == region) {
 			return i;
 		}
 	}
@@ -254,13 +266,20 @@ int graph::netIndex(ucs::Net name) const {
  * @param define Whether to create the net if not found
  * @return The index of the found or created net, or -1 if not found and not created
  */
-int graph::netIndex(ucs::Net name, bool define) {
+int graph::netIndex(string name, bool define) {
+	int region = 0;
+	size_t tic = name.rfind('\'');
+	if (tic != string::npos) {
+		region = std::stoi(name.substr(tic+1));
+		name = name.substr(0, tic);
+	}
+
 	vector<int> remote;
 	// First try to find the exact net
 	for (int i = 0; i < (int)nets.size(); i++) {
-		if (nets[i].name.fields == name.fields) {
+		if (nets[i].name == name) {
 			remote.push_back(i);
-			if (nets[i].name.region == name.region) {
+			if (nets[i].region == region) {
 				return i;
 			}
 		}
@@ -270,7 +289,7 @@ int graph::netIndex(ucs::Net name, bool define) {
 	// name, create a new net and connect it to the other nets with the
 	// same name
 	if (define or not remote.empty()) {
-		int uid = create(net(name));
+		int uid = create(net(name, region));
 		for (int i = 0; i < (int)remote.size(); i++) {
 			connect_remote(uid, remote[i]);
 		}
@@ -285,11 +304,12 @@ int graph::netIndex(ucs::Net name, bool define) {
  * @param uid The index of the net
  * @return A pair containing the name and region of the net
  */
-ucs::Net graph::netAt(int uid) const {
+string graph::netAt(int uid) const {
 	if (uid >= (int)nets.size()) {
-		return ucs::Net();
+		return "";
 	}
-	return nets[uid].name;
+	return nets[uid].name + (nets[uid].region != 0 ?
+		"'" + ::to_string(nets[uid].region) : "");
 }
 
 int graph::netCount() const {
@@ -385,8 +405,8 @@ map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, gra
 		netMap.nets[i] = (int)nets.size();
 		vector<int> remote;
 		for (int j = 0; j < count; j++) {
-			if (nets[j].name.fields == g.nets[i].name.fields) {
-				if (nets[j].name.region == g.nets[i].name.region) {
+			if (nets[j].name == g.nets[i].name) {
+				if (nets[j].region == g.nets[i].region) {
 					netMap.nets[i] = j;
 				}
 				remote.push_back(j);
@@ -979,9 +999,9 @@ void graph::check_variables()
 		}
 
 		if (written.size() == 0 && read.size() > 0)
-			warning("", nets[i].name.to_string() + " never assigned", __FILE__, __LINE__);
+			warning("", nets[i].to_string() + " never assigned", __FILE__, __LINE__);
 		else if (written.size() == 0 && read.size() == 0 and not nets[i].is_ghost)
-			warning("", "unused net " + nets[i].name.to_string(), __FILE__, __LINE__);
+			warning("", "unused net " + nets[i].to_string(), __FILE__, __LINE__);
 	}
 }
 
@@ -1082,7 +1102,7 @@ void graph::annotate_conditional_branches() {
 				string name = ghost_prefix + to_string(i.index) + "_" + to_string(places[i.index].ghost_nets.size());
 				int uid = netIndex(name);
 				if (uid < 0) {
-					uid = create(net(ucs::Net(name), true));
+					uid = create(net(name, 0, true));
 				}
 				places[i.index].ghost_nets.push_back(uid);
 			}

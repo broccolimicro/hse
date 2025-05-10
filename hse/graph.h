@@ -127,13 +127,16 @@ ostream &operator<<(ostream &os, const transition &t);
 
 struct net {
 	net();
-	net(ucs::Net name, bool is_ghost=false);
+	net(string name, int region, bool is_ghost=false);
 	~net();
 
-	ucs::Net name;
+	string name;
+	int region;
 
 	vector<int> remote;
 	bool is_ghost;
+
+	string to_string() const;
 };
 
 // A graph represents a Handshaking Expansion as a Petri Net.
@@ -168,9 +171,9 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	vector<int> ghost_nets;
 	vector<net> nets;
 
-	int netIndex(ucs::Net name) const;
-	int netIndex(ucs::Net name, bool define=false);
-	ucs::Net netAt(int uid) const;
+	int netIndex(string name, bool define=false);
+	int netIndex(string name) const;
+	string netAt(int uid) const;
 	int netCount() const;
 
 	using super::create;

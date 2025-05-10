@@ -116,14 +116,14 @@ void gate::weaken_brute_force()
 }
 
 void gate::print(int uid, graph *base) {
-	cout << base->nets[uid].name << "-" << endl;
+	cout << base->nets[uid].to_string() << "-" << endl;
 	cout << "\t" << ::to_string(tids[0]) << endl;
 	cout << "\timplicant: " << export_expression(implicant[0], *base).to_string() << endl; 
 	cout << "\texclusion: " << export_expression(exclusion[0], *base).to_string() << endl; 
 	cout << "\tholding: " << export_expression(holding[0], *base).to_string() << endl; 
 	cout << "\tassume: " << export_expression(assume[0], *base).to_string() << endl;
 
- 	cout << base->nets[uid].name << "+" << endl;
+ 	cout << base->nets[uid].to_string() << "+" << endl;
 	cout << "\t" << ::to_string(tids[1]) << endl;
 	cout << "\timplicant: " << export_expression(implicant[1], *base).to_string() << endl; 
 	cout << "\texclusion: " << export_expression(exclusion[1], *base).to_string() << endl; 
@@ -232,8 +232,8 @@ void gate_set::weaken() {
 }
 
 void gate_set::build_reset() {
-	int reset = base->netIndex(ucs::Net("Reset"), true);
-	int _reset = base->netIndex(ucs::Net("_Reset"), true);
+	int reset = base->netIndex("Reset", true);
+	int _reset = base->netIndex("_Reset", true);
 
 	// TODO(edward.bingham) There a more complete algorithm for minimal resets on production rules.
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
@@ -317,12 +317,12 @@ void gate_set::save(prs::production_rule_set *out) {
 	mapping m((int)base->nets.size());
 	for (int i = 0; i < (int)base->nets.size(); i++) {
 		if (not base->nets[i].is_ghost) {
-			m.set(i, out->create(prs::net(base->nets[i].name)));
+			m.set(i, out->create(prs::net(base->nets[i].name, base->nets[i].region)));
 		}
 	}
 
-	int gnd = out->netIndex(ucs::Net("GND"), true);
-	int vdd = out->netIndex(ucs::Net("Vdd"), true);
+	int gnd = out->netIndex("GND", true);
+	int vdd = out->netIndex("Vdd", true);
 	out->set_power(vdd, gnd);
 
 	out->require_driven = true;

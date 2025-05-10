@@ -653,7 +653,7 @@ struct pnode
 	int v, i, d;
 
 	string to_string(const hse::graph &g) const {
-		return g.netAt(v).to_string() + (d == 0 ? "-" : "+") + ":" + ::to_string(i);
+		return g.nets[v].to_string() + (d == 0 ? "-" : "+") + ":" + ::to_string(i);
 	}
 };
 
