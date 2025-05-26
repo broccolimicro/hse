@@ -159,7 +159,7 @@ void gate_set::load(bool senseless) {
 		// The state encodings for the implicant set of states of the transition.
 		// these are the state encodings for which there is no vacuous transition that would
 		// take a token off of any of the places.
-		boolean::cover predicate = base->predicate(vector<petri::iterator>(1, t0));
+		boolean::cover predicate = base->predicate({t0});
 		boolean::cover implicant = predicate & t0i->guard;
 		boolean::cover assume = base->arbitration(t0.index) & t0i->assume;
 
@@ -208,7 +208,7 @@ void gate_set::load(bool senseless) {
 					//cout << export_expression(base->effective(*n), v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
 					gate->exclusion[val] |= base->effective(*n) & boolean::cube(var, 1-val);
 				} else {
-					boolean::cover predicate = base->predicate(vector<petri::iterator>(1, *n));
+					boolean::cover predicate = base->predicate({*n});
 					//gate->exclusion[val] |= predicate & ~base->transitions[n->index].guard & boolean::cube(var, 1-val);
 					if (find(gate->tids[1-val].begin(), gate->tids[1-val].end(), *n) != gate->tids[1-val].end()) {
 						gate->exclusion[val] |= predicate & base->transitions[n->index].guard;

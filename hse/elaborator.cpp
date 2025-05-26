@@ -63,29 +63,13 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	vector<deadlock> deadlocks;
 
 	// initialize the list of current simulations with reset
-	if (g.reset.size() > 0)
+	for (int i = 0; i < (int)g.reset.size(); i++)
 	{
-		for (int i = 0; i < (int)g.reset.size(); i++)
-		{
-			simulator sim(&g, g.reset[i], annotate_ghosts);
-			sim.enabled();
+		simulator sim(&g, g.reset[i], annotate_ghosts);
+		sim.enabled();
 
-			if (states.insert(sim.get_state()).second)
-				simulations.push_back(sim);
-		}
-	}
-	// if there isn't a reset state, look for places with only outgoing arcs.
-	// TODO(edward.bingham) This probably won't work because most processes are cycles.
-	else
-	{
-		for (int i = 0; i < (int)g.source.size(); i++)
-		{
-			simulator sim(&g, g.source[i], annotate_ghosts);
-			sim.enabled();
-
-			if (states.insert(sim.get_state()).second)
-				simulations.push_back(sim);
-		}
+		if (states.insert(sim.get_state()).second)
+			simulations.push_back(sim);
 	}
 
 	// this is a depth-first search of all states reachable from reset.
@@ -262,44 +246,21 @@ graph to_state_graph(graph &g, bool report_progress)
 	vector<simulation> simulations;
 	vector<deadlock> deadlocks;
 
-	if (g.reset.size() > 0)
+	for (int i = 0; i < (int)g.reset.size(); i++)
 	{
-		for (int i = 0; i < (int)g.reset.size(); i++)
+		simulator sim(&g, g.reset[i]);
+		sim.enabled();
+
+		map<state, petri::iterator>::iterator loc;
+		if (states.insert(sim.get_key(), petri::iterator(), &loc))
 		{
-			simulator sim(&g, g.reset[i]);
-			sim.enabled();
+			loc->second = result.create(place(loc->first.encodings));
 
-			map<state, petri::iterator>::iterator loc;
-			if (states.insert(sim.get_key(), petri::iterator(), &loc))
-			{
-				loc->second = result.create(place(loc->first.encodings));
+			// Set up the initial state which is determined by the reset behavior
+			result.reset.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.reset[i].encodings));
 
-				// Set up the initial state which is determined by the reset behavior
-				result.reset.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.reset[i].encodings));
-
-				// Set up the first simulation that starts at the reset state
-				simulations.push_back(simulation(sim, loc->second));
-			}
-		}
-	}
-	else
-	{
-		for (int i = 0; i < (int)g.source.size(); i++)
-		{
-			simulator sim(&g, g.source[i]);
-			sim.enabled();
-
-			map<state, petri::iterator>::iterator loc;
-			if (states.insert(sim.get_key(), petri::iterator(), &loc))
-			{
-				loc->second = result.create(place(loc->first.encodings));
-
-				// Set up the initial state which is determined by the reset behavior
-				result.reset.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.source[i].encodings));
-
-				// Set up the first simulation that starts at the reset state
-				simulations.push_back(simulation(sim, loc->second));
-			}
+			// Set up the first simulation that starts at the reset state
+			simulations.push_back(simulation(sim, loc->second));
 		}
 	}
 
@@ -345,7 +306,6 @@ graph to_state_graph(graph &g, bool report_progress)
 		if (sim.exec.ready.size() == 0)
 		{
 			deadlock d = sim.exec.get_state();
-			result.sink.push_back(state(vector<petri::token>(1, petri::token(sim.node.index)), d.encodings));
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
 			if (dloc == deadlocks.end() || *dloc != d)
 			{
@@ -357,19 +317,6 @@ graph to_state_graph(graph &g, bool report_progress)
 		}
 
 		count++;
-	}
-
-	for (int i = 0; i < (int)g.source.size(); i++)
-	{
-		simulator sim(&g, g.source[i]);
-		sim.enabled();
-
-		map<state, petri::iterator>::iterator loc;
-		if (states.insert(sim.get_key(), petri::iterator(), &loc))
-			loc->second = result.create(place(loc->first.encodings));
-
-		// Set up the initial state which is determined by the reset behavior
-		result.source.push_back(state(vector<petri::token>(1, petri::token(loc->second.index)), g.source[i].encodings));
 	}
 
 	if (report_progress)
@@ -487,12 +434,9 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 	vector<cycle> result;
 	list<frame> frames;
 	//hashtable<state, 200> states;
-	if (g.reset.size() > 0)
-		for (int i = 0; i < (int)g.reset.size(); i++)
-			frames.push_back(frame(simulator(&g, g.reset[i])));
-	else
-		for (int i = 0; i < (int)g.source.size(); i++)
-			frames.push_back(frame(simulator(&g, g.source[i])));
+	for (int i = 0; i < (int)g.reset.size(); i++) {
+		frames.push_back(frame(simulator(&g, g.reset[i])));
+	}
 
 	int iteration = -1;
 	while (frames.size() > 0)

@@ -187,12 +187,12 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	boolean::cube &term(term_index idx);
 
 	using super::merge;
-	virtual map<petri::iterator, vector<petri::iterator> > merge(int composition, graph g);
+	virtual petri::mapping merge(graph g);
 
-	boolean::cover predicate(vector<petri::iterator> pos) const;
+	boolean::cover predicate(petri::region pos) const;
 	boolean::cover effective(petri::iterator i, vector<petri::iterator> *prev = nullptr) const;
-	boolean::cover implicant(vector<petri::iterator> pos) const;
-	boolean::cover effective_implicant(vector<petri::iterator> pos) const;
+	boolean::cover implicant(petri::region pos) const;
+	boolean::cover effective_implicant(petri::region pos) const;
 	boolean::cover filter_vacuous(petri::iterator i, boolean::cover encoding, boolean::cube action) const;
 	boolean::cover exclusion(int index) const;
 	boolean::cover arbitration(int index) const;

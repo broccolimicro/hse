@@ -396,7 +396,7 @@ boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
 }
 
-map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, graph g) {
+petri::mapping graph::merge(graph g) {
 	mapping netMap((int)g.nets.size());
 
 	// Add all of the nets and look for duplicates
@@ -444,7 +444,7 @@ map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, gra
 	}
 
 	// Remap all expressions to new variables
-	return super::merge(composition, g);
+	return super::merge(g);
 }
 
 /**
@@ -456,7 +456,7 @@ map<petri::iterator, vector<petri::iterator> > graph::merge(int composition, gra
  * @param pos Vector of iterators pointing to places
  * @return The combined predicate as a boolean cover
  */
-boolean::cover graph::predicate(vector<petri::iterator> pos) const {
+boolean::cover graph::predicate(petri::region pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
 		if (i->type == petri::place::type) {
@@ -516,7 +516,7 @@ boolean::cover graph::effective(petri::iterator i, vector<petri::iterator> *prev
  * @param pos Vector of iterators pointing to places
  * @return The implicant as a boolean cover
  */
-boolean::cover graph::implicant(vector<petri::iterator> pos) const {
+boolean::cover graph::implicant(petri::region pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
 		if (i->type == petri::place::type) {
@@ -544,7 +544,7 @@ boolean::cover graph::implicant(vector<petri::iterator> pos) const {
  * @param pos Vector of iterators pointing to places
  * @return The effective implicant as a boolean cover
  */
-boolean::cover graph::effective_implicant(vector<petri::iterator> pos) const {
+boolean::cover graph::effective_implicant(petri::region pos) const {
 	boolean::cover result = 1;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
 		if (i->type == petri::place::type) {
@@ -761,47 +761,6 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 	{
 		super::reduce(proper_nesting, aggressive);
 
-		for (int i = 0; i < (int)source.size(); i++)
-		{
-			simulator::super sim(this, source[i]);
-			sim.enabled();
-
-			change = false;
-			for (int j = 0; j < (int)sim.ready.size() && !change; j++)
-			{
-				bool firable = transitions[sim.ready[j].index].local_action.cubes.size() <= 1;
-				for (int k = 0; k < (int)sim.ready[j].tokens.size() && firable; k++)
-				{
-					for (int l = 0; l < (int)arcs[petri::transition::type].size() && firable; l++)
-						if (arcs[petri::transition::type][l].to.index == sim.tokens[sim.ready[j].tokens[k]].index)
-							firable = false;
-					for (int l = 0; l < (int)arcs[petri::place::type].size() && firable; l++)
-						if (arcs[petri::place::type][l].from.index == sim.tokens[sim.ready[j].tokens[k]].index && arcs[petri::place::type][l].to.index != sim.ready[j].index)
-							firable = false;
-				}
-
-				if (firable) {
-					petri::enabled_transition t = sim.fire(j);
-					source[i].tokens = sim.tokens;
-					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--) {
-						for (int l = (int)transitions[t.index].guard.size()-1; l >= 0; l--) {
-							int idx = i;
-							if (k > 0 || l > 0) {
-								idx = source.size();
-								source.push_back(source[i]);
-							}
-
-							source[idx].encodings &= transitions[t.index].guard.cubes[l];
-							source[idx].encodings = local_assign(source[idx].encodings, transitions[t.index].local_action.cubes[k], true);
-							source[idx].encodings = remote_assign(source[idx].encodings, transitions[t.index].remote_action.cubes[k], true);
-						}
-					}
-
-					change = true;
-				}
-			}
-		}
-
 		for (int i = 0; i < (int)reset.size(); i++)
 		{
 			simulator::super sim(this, reset[i]);
@@ -862,7 +821,7 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 
 					for (int k = (int)arcs[petri::transition::type].size()-1; k >= 0; k--) {
 						if (arcs[petri::transition::type][k].from == i) {
-							disconnect(petri::iterator(petri::transition::type, k));
+							erase_arc(petri::iterator(petri::transition::type, k));
 						}
 					}
 
@@ -923,7 +882,7 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 					// Disconnect this transition
 					for (int l = (int)arcs[petri::transition::type].size()-1; l >= 0; l--) {
 						if (arcs[petri::transition::type][l].from == passive[k]) {
-							disconnect(petri::iterator(petri::transition::type, l));
+							erase_arc(petri::iterator(petri::transition::type, l));
 						}
 					}
 
@@ -967,8 +926,6 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 
 	// Determine the actual starting location of the tokens given the state information
 	update_masks();
-	if (reset.size() == 0)
-		reset = source;
 }
 
 /**
@@ -1029,10 +986,8 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		}
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
-			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not is(parallel, curr[i], j));
 		}
-
-		relevant = relevant and not is(parallel, curr, vector<petri::iterator>(1, j));
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[transition::type].size() and curr[i].type == transition::type and relevant; k++) {
@@ -1056,11 +1011,9 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		}
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
-			relevant = (j != curr[i] and not common_arbiter(curr[i], j));
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not is(parallel, curr[i], j));
 		}
 		
-		relevant = relevant and not is(parallel, curr, vector<petri::iterator>(1, j));
-
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
 			for (int k = 0; k < (int)arcs[place::type].size() and curr[i].type == place::type and relevant; k++) {
 				relevant = (arcs[place::type][k].from.index != curr[i].index or arcs[place::type][k].to.index != j.index);

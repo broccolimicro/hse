@@ -164,7 +164,7 @@ void encoder::check(bool senseless, bool report_progress)
 				for (auto i = relevant.begin(); i != relevant.end(); i++) {
 					// Get only the state encodings for the place for which the transition is invacuous and
 					// there is no other vacuous transition that would take a token off the place.
-					boolean::cover encoding = base->effective_implicant(vector<petri::iterator>(1, *i));
+					boolean::cover encoding = base->effective_implicant({*i});
 					//cout << "\t against " << *i << " " << export_expression(encoding, *variables).to_string() << endl;
 
 					// The implicant states for any actions that would have the same
@@ -199,7 +199,7 @@ void encoder::check(bool senseless, bool report_progress)
 	}
 }
 
-int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare) {
+int encoder::score_insertion(int sense, petri::region pos, const petri::path_set &dontcare) {
 	sort(pos.begin(), pos.end());
 
 	//cout << "score_insertion(sense=" << sense << ", " << to_string(pos) << ")" << endl;
@@ -214,12 +214,12 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 	// fire in the other place and that might create a conflict.
 
 	boolean::cover implicant = base->implicant(pos).mask(1-sense);
-	if (implicant.is_null() or base->crosses_reset(pos)) {
+	if (implicant.is_null() or base->crosses_reset(pos.flat())) {
 		//cout << "null implicant or crosses reset" << endl;
 		return -1;
 	}
 
-	vector<petri::iterator> relevant = base->relevant_nodes(pos);
+	vector<petri::iterator> relevant = base->relevant_nodes(pos.flat());
 	int cost = 0;
 	//cout << "\treviewing relevant nodes " << to_string(relevant) << endl;
 	for (auto i = relevant.begin(); i != relevant.end(); i++) {
@@ -228,7 +228,7 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 		// more certain first.
 
 		//cout << "\t\tlooking at " << *i << " for " << export_expression(implicant, *variables).to_string() << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
-		int conflict = not dontcare.covers(*i) and not are_mutex(implicant, base->effective_implicant(vector<petri::iterator>(1, *i)));
+		int conflict = not dontcare.covers(*i) and not are_mutex(implicant, base->effective_implicant({*i}));
 		if (conflict != 0) {
 			//cout << "\t\tfound conflict" ;
 		}
@@ -260,7 +260,7 @@ int encoder::score_insertion(int sense, vector<petri::iterator> pos, const petri
 	return cost;
 }
 
-int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
+int encoder::find_insertion(int sense, petri::region pos, const petri::path_set &dontcare, petri::bound *result) {
 	// Search all partial states from this insertion for the one that minimizes
 	// the number of new conflicts. I actually know that answer ahead of time
 	// based on the overlap in the set of suspects of the two parallel places and
@@ -272,13 +272,13 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 	vector<petri::iterator> para;
 	for (int type = 0; type < 2; type++) {
 		for (auto p = base->begin(type); p != base->end(type); p++) {
-			if ((base->is_reachable(pos, vector<petri::iterator>(1, p)) or base->is_reachable(vector<petri::iterator>(1, p), pos)) and base->is(parallel, pos, vector<petri::iterator>(1, p), true, true)) {
+			if ((base->is_reachable(pos.flat(), {p}) or base->is_reachable({p}, pos.flat())) and base->is(parallel, pos, {p}, true, true)) {
 				para.push_back(p);
 			}
 		}
 	}
 
-	vector<petri::iterator> best = pos;
+	petri::region best = pos;
 	int bestcost = score_insertion(sense, best, dontcare);
 	//cout << "starting find_insertion(sense=" << sense << ", pos=" << to_string(pos) << ") at " << bestcost << " for " << to_string(best) << endl;
 	while (not para.empty() and bestcost > 0) {
@@ -321,7 +321,7 @@ int encoder::find_insertion(int sense, vector<petri::iterator> pos, const petri:
 	return bestcost;
 }
 
-int encoder::find_insertions(int sense, vector<vector<petri::iterator> > pos, const petri::path_set &dontcare, vector<vector<petri::iterator> > *result) {
+int encoder::find_insertions(int sense, petri::bound pos, const petri::path_set &dontcare, petri::bound *result) {
 	int total = 0;
 	for (auto i = pos.begin(); i != pos.end(); i++) {
 		int cost = find_insertion(sense, *i, dontcare, result);
@@ -508,7 +508,7 @@ void encoder::insert_state_variable(bool debug) {
 	// rule out those insertions as a possibility.
 
 	// assign[location of state variable insertion][direction of assignment] = {variable uids}
-	map<vector<petri::iterator>, array<vector<int>, 2> > groups;
+	map<petri::region, array<vector<int>, 2> > groups;
 
 	//printf("looking for a solution in 1/%d clusters\n", (int)problems.size());
 
@@ -547,7 +547,7 @@ void encoder::insert_state_variable(bool debug) {
 			cout << endl;
 		}
 
-		array<vector<vector<petri::iterator> >, 2> best;
+		array<petri::bound, 2> best;
 		array<petri::path_set, 2> colorings({
 			petri::path_set(base->places.size(), base->transitions.size()),
 			petri::path_set(base->places.size(), base->transitions.size())
@@ -570,14 +570,14 @@ void encoder::insert_state_variable(bool debug) {
 				// to check them together.
 				auto insertions = base->deinterfere_choice(*j, *k);
 				for (auto it = insertions.begin(); it != insertions.end(); it++) {
-					petri::path_set v0 = petri::trace(*base, (*it)[0], base->deselect((*it)[1]), true);
-					petri::path_set v1 = petri::trace(*base, (*it)[1], base->deselect((*it)[0]), true);
+					petri::path_set v0 = petri::trace(*base, (*it)[0], (*it)[1].flat(), true);
+					petri::path_set v1 = petri::trace(*base, (*it)[1], (*it)[0].flat(), true);
 					if (debug) {
 						cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
 					}
 					// check each transition against suspects and generate a score
 					// find the pair with the best score.
-					array<vector<vector<petri::iterator> >, 2> curr;
+					array<petri::bound, 2> curr;
 					int upcost = find_insertions(1, (*it)[1], v1, &curr[1]);
 					int dncost = find_insertions(0, (*it)[0], v0, &curr[0]);
 					if (debug) {
@@ -615,7 +615,7 @@ void encoder::insert_state_variable(bool debug) {
 				// cross reset.
 				//*k = base->add_redundant(*k);
 				//cout << "Adding (" << to_string(*k) << endl;
-				auto iter = groups.insert(pair<vector<petri::iterator>, array<vector<int>, 2> >(*k, array<vector<int>, 2>()));
+				auto iter = groups.insert({*k, array<vector<int>, 2>()});
 				iter.first->second[j].push_back(vid);
 			}
 		}
@@ -786,7 +786,6 @@ void encoder::insert_state_variable(bool debug) {
 	// states, but I can't seem to pin it down.
 	base->erase_redundant();
 	base->update_masks();
-	base->source = base->reset;
 
 	// TODO(edward.bingham) Update the predicate space and conflicts without
 	// re-elaborating the whole state space. This is not required, it is an
