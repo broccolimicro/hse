@@ -5,7 +5,7 @@
 #include <parse/default/block_comment.h>
 #include <parse/default/line_comment.h>
 #include <parse/default/new_line.h>
-#include <parse_chp/composition.h>
+#include <parse_chp/factory.h>
 #include <interpret_hse/import.h>
 #include <string>
 
@@ -23,7 +23,7 @@ graph parse_hse_string(const std::string &hse_str) {
   tokenizer tokens;
   tokens.register_token<parse::block_comment>(false);
   tokens.register_token<parse::line_comment>(false);
-  parse_chp::composition::register_syntax(tokens);
+  parse_chp::register_syntax(tokens);
   
   // Insert the string into the tokenizer
   tokens.insert("string_input", hse_str, nullptr);
@@ -33,7 +33,7 @@ graph parse_hse_string(const std::string &hse_str) {
   tokens.expect<parse_chp::composition>();
   if (tokens.decrement(__FILE__, __LINE__)) {
     parse_chp::composition syntax(tokens);
-    hg.merge(hse::parallel, hse::import_hse(syntax, 0, &tokens, true));
+    hse::import_hse(hg, syntax, &tokens, true);
   }
 
 	hg.post_process(true, false, false);
@@ -55,5 +55,7 @@ void print_enabled(const graph &g, const simulator &sim) {
 	}
 	printf("\n");
 }
+
+
 
 } // namespace hse 
