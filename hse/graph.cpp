@@ -750,16 +750,22 @@ void graph::update_masks() {
  * @param proper_nesting Whether to enforce proper nesting of control structures
  * @param aggressive Whether to use aggressive optimization strategies
  */
-void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
+void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bool debug)
 {
-	for (int i = 0; i < (int)transitions.size(); i++)
+	for (int i = 0; i < (int)transitions.size(); i++) {
 		transitions[i].remote_action = transitions[i].local_action.remote(remote_groups());
+	}
+
+	if (debug) cout << "entering hse::graph::post_process()" << endl;
 
 	// Handle Reset Behavior
 	bool change = true;
 	while (change)
 	{
-		super::reduce(proper_nesting, aggressive);
+		super::reduce(proper_nesting, aggressive, debug);
+		change = false;
+
+		if (debug) cout << "\tpropagating reset " << to_string(reset) << endl;
 
 		for (int i = 0; i < (int)reset.size(); i++)
 		{
@@ -781,6 +787,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 				}
 
 				if (firable) {
+					if (debug) cout << "\tfiring " << j << endl;
+
 					petri::enabled_transition t = sim.fire(j);
 					reset[i].tokens = sim.tokens;
 					for (int k = (int)transitions[t.index].local_action.size()-1; k >= 0; k--) {
@@ -805,7 +813,9 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 
 	change = true;
 	while (change) {
-		super::reduce(proper_nesting, aggressive);
+		super::reduce(proper_nesting, aggressive, debug);
+
+		if (debug) cout << "\treducing structure" << endl;
 
 		// Remove skips
 		change = false;
@@ -813,6 +823,7 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 			if (transitions[i.index].local_action.is_tautology()) {
 				vector<petri::iterator> n = next(i); // places
 				if (n.size() > 1) {
+					if (debug) cout << "\tremoving skip " << i << endl;
 					vector<petri::iterator> p = prev(i); // places
 					vector<vector<petri::iterator> > pp;
 					for (int j = 0; j < (int)p.size(); j++) {
@@ -862,6 +873,7 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 			}
 
 			if (passive.size() > 1 || (passive.size() == 1 && active.size() > 0)) {
+				if (debug) cout << "unzipping choice " << i << endl;
 				vector<petri::iterator> copies;
 				if ((int)active.size() == 0) {
 					copies.push_back(i);
@@ -907,6 +919,7 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 
 		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
 			if (transitions[i.index].local_action == 1) {
+				if (debug) cout << "forwarding passive transition " << i << endl;
 				vector<petri::iterator> nn = next(next(i)); // transitions
 				for (int l = 0; l < (int)nn.size(); l++) {
 					transitions[nn[l].index] = transition::merge(petri::sequence, transitions[i.index], transitions[nn[l].index]);
@@ -919,6 +932,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate)
 		if (change)
 			continue;
 	}
+
+	if (debug) cout << "exiting hse::graph::post_process()" << endl;
 
 	if (annotate) {
 		annotate_conditional_branches();

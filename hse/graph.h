@@ -200,7 +200,7 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 
 	void update_masks();
 
-	void post_process(bool proper_nesting = false, bool aggressive = false, bool annotate=true);
+	void post_process(bool proper_nesting = false, bool aggressive = false, bool annotate=true, bool debug=false);
 	void check_variables();
 	vector<petri::iterator> relevant_nodes(vector<petri::iterator> i);
 
