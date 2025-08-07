@@ -39,8 +39,9 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	Timer tmr;
 
 	// Initialize all predicates and effective predicates to false.
-	for (int i = 0; i < (int)g.places.size(); i++)
-	{
+	for (int i = 0; i < (int)g.places.size(); i++) {
+		if (not g.places.is_valid(i)) continue;
+
 		g.places[i].predicate = boolean::cover();
 		g.places[i].effective = boolean::cover();
 	}
@@ -63,19 +64,18 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	vector<deadlock> deadlocks;
 
 	// initialize the list of current simulations with reset
-	for (int i = 0; i < (int)g.reset.size(); i++)
-	{
+	for (int i = 0; i < (int)g.reset.size(); i++) {
 		simulator sim(&g, g.reset[i], annotate_ghosts);
 		sim.enabled();
 
-		if (states.insert(sim.get_state()).second)
+		if (states.insert(sim.get_state()).second) {
 			simulations.push_back(sim);
+		}
 	}
 
 	// this is a depth-first search of all states reachable from reset.
 	int count = 0;
-	while (simulations.size() > 0)
-	{
+	while (simulations.size() > 0) {
 		count++;
 		// grab the simulation at the top of the stack
 		simulator sim = simulations.back();
@@ -85,8 +85,7 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 		// Create a new simulation for each enabled transition in the current
 		// simulation and push it to the end of the stack as long as we haven't
 		// seen that state before
-		for (int i = 0; i < (int)sim.ready.size(); i++)
-		{
+		for (int i = 0; i < (int)sim.ready.size(); i++) {
 			simulations.push_back(sim);
 
 			// fire the enabled transition
@@ -95,17 +94,16 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 			// compute the new enabled transitions
 			simulations.back().enabled();
 
-			if (!states.insert(simulations.back().get_state()).second)
+			if (!states.insert(simulations.back().get_state()).second) {
 				simulations.pop_back();
+			}
 		}
 
 		// If there aren't any enabled transitions, then record a deadlock state.
-		if (sim.ready.size() == 0)
-		{
+		if (sim.ready.size() == 0) {
 			deadlock d = sim.get_state();
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
-			if (dloc == deadlocks.end() || *dloc != d)
-			{
+			if (dloc == deadlocks.end() || *dloc != d) {
 				error("", d.to_string(g), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
@@ -213,6 +211,8 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	// the state information to the user and when synthesizing production rules
 	// for the final circuit.
 	for (int i = 0; i < (int)g.places.size(); i++) {
+		if (not g.places.is_valid(i)) continue;
+
 		g.places[i].effective.espresso();
 		sort(g.places[i].effective.cubes.begin(), g.places[i].effective.cubes.end());
 		g.places[i].predicate.espresso();
@@ -223,11 +223,9 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	}
 }
 
-struct simulation
-{
+struct simulation {
 	simulation() {}
-	simulation(simulator exec, petri::iterator node)
-	{
+	simulation(simulator exec, petri::iterator node) {
 		this->exec = exec;
 		this->node = node;
 	}
@@ -239,21 +237,18 @@ struct simulation
 
 // This converts a given graph to the fully expanded state space through simulation. It systematically
 // simulates all possible transition orderings and determines all of the resulting state information.
-graph to_state_graph(graph &g, bool report_progress)
-{
+graph to_state_graph(graph &g, bool report_progress) {
 	graph result;
 	hashmap<state, petri::iterator, 10000> states;
 	vector<simulation> simulations;
 	vector<deadlock> deadlocks;
 
-	for (int i = 0; i < (int)g.reset.size(); i++)
-	{
+	for (int i = 0; i < (int)g.reset.size(); i++) {
 		simulator sim(&g, g.reset[i]);
 		sim.enabled();
 
 		map<state, petri::iterator>::iterator loc;
-		if (states.insert(sim.get_key(), petri::iterator(), &loc))
-		{
+		if (states.insert(sim.get_key(), petri::iterator(), &loc)) {
 			loc->second = result.create(place(loc->first.encodings));
 
 			// Set up the initial state which is determined by the reset behavior
@@ -265,8 +260,7 @@ graph to_state_graph(graph &g, bool report_progress)
 	}
 
 	int count = 0;
-	while (simulations.size() > 0)
-	{
+	while (simulations.size() > 0) {
 		simulation sim = simulations.back();
 		simulations.pop_back();
 		if (simulations.size() > 0)
@@ -276,8 +270,7 @@ graph to_state_graph(graph &g, bool report_progress)
 			progress("", ::to_string(count) + " " + ::to_string(simulations.size()) + " " + ::to_string(states.max_bucket_size()) + "/" + ::to_string(states.count) + " " + ::to_string(sim.exec.ready.size()), __FILE__, __LINE__);
 
 		simulations.reserve(simulations.size() + sim.exec.ready.size());
-		for (int i = 0; i < (int)sim.exec.ready.size(); i++)
-		{
+		for (int i = 0; i < (int)sim.exec.ready.size(); i++) {
 			simulations.push_back(sim);
 			int index = simulations.back().exec.loaded[simulations.back().exec.ready[i].first].index;
 			int term = simulations.back().exec.ready[i].second;
@@ -286,16 +279,13 @@ graph to_state_graph(graph &g, bool report_progress)
 			simulations.back().exec.enabled();
 
 			map<state, petri::iterator>::iterator loc;
-			if (states.insert(simulations.back().exec.get_key(), petri::iterator(), &loc))
-			{
+			if (states.insert(simulations.back().exec.get_key(), petri::iterator(), &loc)) {
 				loc->second = result.create(place(loc->first.encodings));
 				petri::iterator trans = result.create(g.transitions[index].subdivide(term));
 				result.connect(simulations.back().node, trans);
 				result.connect(trans, loc->second);
 				simulations.back().node = loc->second;
-			}
-			else
-			{
+			} else {
 				petri::iterator trans = result.create(g.transitions[index].subdivide(term));
 				result.connect(simulations.back().node, trans);
 				result.connect(trans, loc->second);
@@ -303,12 +293,10 @@ graph to_state_graph(graph &g, bool report_progress)
 			}
 		}
 
-		if (sim.exec.ready.size() == 0)
-		{
+		if (sim.exec.ready.size() == 0) {
 			deadlock d = sim.exec.get_state();
 			vector<deadlock>::iterator dloc = lower_bound(deadlocks.begin(), deadlocks.end(), d);
-			if (dloc == deadlocks.end() || *dloc != d)
-			{
+			if (dloc == deadlocks.end() || *dloc != d) {
 				error("", d.to_string(g), __FILE__, __LINE__);
 				deadlocks.insert(dloc, d);
 			}
@@ -325,42 +313,35 @@ graph to_state_graph(graph &g, bool report_progress)
 	return result;
 }
 
-struct firing
-{
+struct firing {
 	boolean::cube guard;
 	term_index action;
 	state loc;
 };
 
-bool operator<(firing f0, firing f1)
-{
+bool operator<(firing f0, firing f1) {
 	return ((f0.action < f1.action) ||
 			(f0.action == f1.action && ((f0.guard < f1.guard) ||
 										(f0.guard == f1.guard && f0.loc < f1.loc))));
 }
 
-bool operator==(firing f0, firing f1)
-{
+bool operator==(firing f0, firing f1) {
 	return f0.guard == f1.guard && f0.action == f1.action && f0.loc == f1.loc;
 }
 
-struct cycle
-{
+struct cycle {
 	vector<firing> firings;
 };
 
-bool operator<(cycle f0, cycle f1)
-{
+bool operator<(cycle f0, cycle f1) {
 	return f0.firings.size() < f1.firings.size();
 }
 
-bool operator==(cycle f0, cycle f1)
-{
+bool operator==(cycle f0, cycle f1) {
 	if (f0.firings.size() != f1.firings.size())
 		return false;
 
-	for (int i = 0; i < (int)f0.firings.size(); i++)
-	{
+	for (int i = 0; i < (int)f0.firings.size(); i++) {
 		bool equal = true;
 		for (int j = 0; j < (int)f0.firings.size() && equal; j++)
 			equal = (f0.firings[(i+j)%(int)f0.firings.size()].action == f1.firings[j].action && f0.firings[(i+j)%(int)f0.firings.size()].guard == f1.firings[j].guard);
@@ -372,11 +353,9 @@ bool operator==(cycle f0, cycle f1)
 	return false;
 }
 
-struct frame
-{
+struct frame {
 	frame() {}
-	frame(simulator sim)
-	{
+	frame(simulator sim) {
 		this->sim = sim;
 		indices.resize(sim.base->nets.size(), 0);
 	}
@@ -387,27 +366,23 @@ struct frame
 	vector<int> indices;
 };
 
-cycle get_cycle(graph &g, simulator &sim)
-{
+cycle get_cycle(graph &g, simulator &sim) {
 	cycle result;
 	vector<int> indices(sim.base->nets.size(), 0);
 
 	bool done = false;
-	while (!done)
-	{
+	while (!done) {
 		sim.enabled();
 		int index = -1;
 		int value = -1;
-		for (int i = 0; i < (int)sim.ready.size(); i++)
-		{
+		for (int i = 0; i < (int)sim.ready.size(); i++) {
 			int test = -1;
 			vector<int> tvars = g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second].vars();
 			for (int j = 0; j < (int)tvars.size(); j++)
 				if (indices[tvars[j]] > test)
 					test = indices[tvars[j]];
 
-			if (test > value)
-			{
+			if (test > value) {
 				index = i;
 				value = test;
 			}
@@ -429,8 +404,7 @@ cycle get_cycle(graph &g, simulator &sim)
 	return result;
 }
 
-vector<cycle> get_cycles(graph &g, bool report_progress)
-{
+vector<cycle> get_cycles(graph &g, bool report_progress) {
 	vector<cycle> result;
 	list<frame> frames;
 	//hashtable<state, 200> states;
@@ -484,8 +458,7 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 		vector<vector<int> > tindices;
 
 		// figure out the index for each transition in the list of ready transitions in curr.sim
-		for (int i = 0; i < (int)curr.sim.ready.size(); i++)
-		{
+		for (int i = 0; i < (int)curr.sim.ready.size(); i++) {
 			// initialize the excluded list while we are at it
 			excluded.push_back(i);
 
@@ -508,15 +481,13 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 		// Now we need to choose multiple transitions to fire. The fewer the better.
 		// So we have two sorting criteria: maximize their index, and minimize the number of transitions they exclude from choice
 		int chosen = -1;
-		while (excluded.size() > 0 && tindices.size() > 0)
-		{
+		while (excluded.size() > 0 && tindices.size() > 0) {
 			vector<int> old = excluded;
 			excluded.clear();
 
 			// the list of possibly excluded transitions for each tindex
 			vector<vector<int> > possible(curr.sim.ready.size(), vector<int>());
-			for (int i = 0; i < (int)tindices.size(); i++)
-			{
+			for (int i = 0; i < (int)tindices.size(); i++) {
 				for (int j = 0; j < (int)old.size(); j++)
 					if ((curr.sim.ready[tindices[i][2]].first < curr.sim.ready[old[j]].first && find(choices.begin(), choices.end(), pair<int, int>(curr.sim.ready[tindices[i][2]].first, curr.sim.ready[old[j]].first)) != choices.end()) ||
 						(curr.sim.ready[old[j]].first < curr.sim.ready[tindices[i][2]].first && find(choices.begin(), choices.end(), pair<int, int>(curr.sim.ready[old[j]].first, curr.sim.ready[tindices[i][2]].first)) != choices.end()))
@@ -545,8 +516,7 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 			vector<int> index = tindices.back();
 
 			// TODO check to make sure this assumption about minimal cycles with "chosen" actually holds true
-			if (index.size() == 3 && index[0] >= chosen)
-			{
+			if (index.size() == 3 && index[0] >= chosen) {
 				chosen = index[0];
 
 				firing t;
@@ -555,14 +525,11 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 				t.loc = curr.sim.get_state();
 
 				vector<firing>::iterator loc = find(curr.part.firings.begin(), curr.part.firings.end(), t);
-				if (loc != curr.part.firings.end())
-				{
+				if (loc != curr.part.firings.end()) {
 					curr.part.firings.erase(curr.part.firings.begin(), loc);
 					if (find(result.begin(), result.end(), curr.part) == result.end())
 						result.push_back(curr.part);
-				}
-				else// if (!states.contains(t.loc))
-				{
+				} else { // if (!states.contains(t.loc))
 					//states.insert(t.loc);
 					excluded = possible[index[2]];
 					frames.push_back(curr);
@@ -584,8 +551,7 @@ vector<cycle> get_cycles(graph &g, bool report_progress)
 	return result;
 }
 
-struct pnode
-{
+struct pnode {
 	pnode()
 	{
 		v = -1;
@@ -601,20 +567,17 @@ struct pnode
 	}
 };
 
-bool operator<(pnode a, pnode b)
-{
+bool operator<(pnode a, pnode b) {
 	return (a.i < b.i ||
 			(a.i == b.i && (a.v < b.v ||
 			(a.v == b.v && (a.d < b.d)))));
 }
 
-bool operator==(pnode a, pnode b)
-{
+bool operator==(pnode a, pnode b) {
 	return a.v == b.v && a.i == b.i && a.d == b.d;
 }
 
-struct parc
-{
+struct parc {
 	parc() {}
 	parc(pnode a, pnode b) {n0 = a; n1 = b;}
 	~parc() {}
@@ -622,28 +585,24 @@ struct parc
 	pnode n0;
 	pnode n1;
 
-	string to_string(const hse::graph &g) const
-	{
+	string to_string(const hse::graph &g) const {
 		return n0.to_string(g) + " -> " + n1.to_string(g);
 	}
 };
 
-bool operator<(parc a, parc b)
-{
+bool operator<(parc a, parc b) {
 	return (a.n1 < b.n1 ||
 			(a.n1 == b.n1 && (a.n0 < b.n0)));
 }
 
-bool operator==(parc a, parc b)
-{
+bool operator==(parc a, parc b) {
 	return a.n0 == b.n0 && a.n1 == b.n1;
 }
 
 
 
 // Converts the HSE into a petri net using index-priority simulation.
-graph to_petri_net(graph &g, bool report_progress)
-{
+graph to_petri_net(graph &g, bool report_progress) {
 	graph result;
 
 	vector<cycle> cycles = get_cycles(g, report_progress);
@@ -654,14 +613,11 @@ graph to_petri_net(graph &g, bool report_progress)
 	*/
 
 	sort(cycles.begin(), cycles.end());
-	for (int i = 0; i < (int)cycles.size(); i++)
-	{
+	for (int i = 0; i < (int)cycles.size(); i++) {
 		cout << "Cycle " << i << endl;
-		for (int j = 0; j < (int)cycles[i].firings.size(); j++)
-		{
+		for (int j = 0; j < (int)cycles[i].firings.size(); j++) {
 			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << export_expression(cycles[i].firings[j].guard, g).to_string() << " -> " << export_composition(g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term], g).to_string() << "\t{";
-			for (int k = 0; k < (int)cycles[i].firings[j].loc.tokens.size(); k++)
-			{
+			for (int k = 0; k < (int)cycles[i].firings[j].loc.tokens.size(); k++) {
 				if (k != 0)
 					cout << " ";
 				cout << cycles[i].firings[j].loc.tokens[k].index;
@@ -671,21 +627,18 @@ graph to_petri_net(graph &g, bool report_progress)
 	}
 
 	vector<vector<parc> > arcs;
-	for (int i = 0; i < (int)cycles.size(); i++)
-	{
+	for (int i = 0; i < (int)cycles.size(); i++) {
 		vector<parc> cycle_arcs;
 		map<pair<int, int>, int> cycle_nodes;
 		int iteration = 0;
-		for (int j = 0; j < (int)cycles[i].firings.size(); j++)
-		{
+		for (int j = 0; j < (int)cycles[i].firings.size(); j++) {
 			boolean::cube guard = cycles[i].firings[j].guard;
 			boolean::cube term = g.transitions[cycles[i].firings[j].action.index].local_action[cycles[i].firings[j].action.term];
 			vector<int> gv = guard.vars();
 			vector<int> fv = term.vars();
 			vector<pnode> gn;
 			vector<pnode> fn;
-			for (int k = 0; k < (int)gv.size(); k++)
-			{
+			for (int k = 0; k < (int)gv.size(); k++) {
 				pnode n;
 				n.v = gv[k];
 				n.d = guard.get(gv[k]);
@@ -697,8 +650,7 @@ graph to_petri_net(graph &g, bool report_progress)
 				gn.push_back(n);
 			}
 
-			for (int k = 0; k < (int)fv.size(); k++)
-			{
+			for (int k = 0; k < (int)fv.size(); k++) {
 				pnode n;
 				n.v = fv[k];
 				n.d = term.get(fv[k]);
@@ -706,13 +658,11 @@ graph to_petri_net(graph &g, bool report_progress)
 				map<pair<int, int>, int>::iterator loc = cycle_nodes.find(pair<int, int>(n.v, n.d));
 				if (loc == cycle_nodes.end())
 					cycle_nodes.insert(pair<pair<int, int>, int>(pair<int, int>(n.v, n.d), iteration));
-				else if (loc->second == iteration)
-				{
+				else if (loc->second == iteration) {
 					loc->second++;
 					iteration++;
 					n.i++;
-				}
-				else if (loc->second < iteration)
+				} else if (loc->second < iteration)
 					loc->second = iteration;
 
 				fn.push_back(n);
@@ -723,10 +673,8 @@ graph to_petri_net(graph &g, bool report_progress)
 					cycle_arcs.push_back(parc(gn[k], fn[l]));
 		}
 
-		for (int j = (int)cycle_arcs.size()-1; j >= 0; j--)
-		{
-			if (cycle_arcs[j].n0.i < 0)
-			{
+		for (int j = (int)cycle_arcs.size()-1; j >= 0; j--) {
+			if (cycle_arcs[j].n0.i < 0) {
 				map<pair<int, int>, int>::iterator loc = cycle_nodes.find(pair<int, int>(cycle_arcs[j].n0.v, cycle_arcs[j].n0.d));
 				if (loc != cycle_nodes.end())
 					cycle_arcs[j].n0.i = loc->second;
@@ -734,8 +682,7 @@ graph to_petri_net(graph &g, bool report_progress)
 				// node, that means that transition must have been vacuous
 				// this is the only time that a pair of parallel transitions
 				// are made conditional. So we just erase that requirment
-				else
-				{
+				else {
 					cycle_arcs.erase(cycle_arcs.begin() + j);
 					continue;
 				}
@@ -743,13 +690,11 @@ graph to_petri_net(graph &g, bool report_progress)
 
 			// This should never happen because every 'to' node in every arc
 			// has been executed by definition.
-			if (cycle_arcs[j].n1.i < 0)
-			{
+			if (cycle_arcs[j].n1.i < 0) {
 				map<pair<int, int>, int>::iterator loc = cycle_nodes.find(pair<int, int>(cycle_arcs[j].n1.v, cycle_arcs[j].n1.d));
 				if (loc != cycle_nodes.end())
 					cycle_arcs[j].n1.i = loc->second;
-				else
-				{
+				else {
 					cycle_arcs.erase(cycle_arcs.begin() + j);
 					continue;
 				}
@@ -761,20 +706,16 @@ graph to_petri_net(graph &g, bool report_progress)
 
 	// Add the transitions to the graph
 	map<pnode, int> nodes;
-	for (int i = 0; i < (int)arcs.size(); i++)
-	{
-		for (int j = 0; j < (int)arcs[i].size(); j++)
-		{
+	for (int i = 0; i < (int)arcs.size(); i++) {
+		for (int j = 0; j < (int)arcs[i].size(); j++) {
 			map<pnode, int>::iterator loc = nodes.find(arcs[i][j].n0);
-			if (loc == nodes.end())
-			{
+			if (loc == nodes.end()) {
 				nodes.insert(pair<pnode, int>(arcs[i][j].n0, result.transitions.size()));
 				result.transitions.push_back(transition(1, 1, boolean::cover(arcs[i][j].n0.v, arcs[i][j].n0.d)));
 			}
 
 			loc = nodes.find(arcs[i][j].n1);
-			if (loc == nodes.end())
-			{
+			if (loc == nodes.end()) {
 				nodes.insert(pair<pnode, int>(arcs[i][j].n1, result.transitions.size()));
 				result.transitions.push_back(transition(1, 1, boolean::cover(arcs[i][j].n1.v, arcs[i][j].n1.d)));
 			}
@@ -791,8 +732,7 @@ graph to_petri_net(graph &g, bool report_progress)
 	// groups[i][j].second is the arc
 	vector<map<parc, vector<int> > > groups;
 	for (int i = 0; i < (int)arcs.size(); i++)
-		for (int j = 0; j < (int)arcs[i].size(); j++)
-		{
+		for (int j = 0; j < (int)arcs[i].size(); j++) {
 			vector<int> found;
 			for (int k = 0; k < (int)groups.size(); k++)
 				for (map<parc, vector<int> >::iterator l = groups[k].begin(); l != groups[k].end() && (found.size() == 0 || found.back() != k); l++)
@@ -800,13 +740,10 @@ graph to_petri_net(graph &g, bool report_progress)
 						arcs[i][j].n1 == l->first.n1)
 						found.push_back(k);
 
-			if (found.size() > 0)
-			{
+			if (found.size() > 0) {
 				sort(found.rbegin(), found.rend());
-				for (int k = 0; k < (int)found.size()-1; k++)
-				{
-					for (map<parc, vector<int> >::iterator l = groups[found[k]].begin(); l != groups[found[k]].end(); l++)
-					{
+				for (int k = 0; k < (int)found.size()-1; k++) {
+					for (map<parc, vector<int> >::iterator l = groups[found[k]].begin(); l != groups[found[k]].end(); l++) {
 						map<parc, vector<int> >::iterator loc = groups[found.back()].find(l->first);
 						if (loc == groups[found.back()].end())
 							groups[found.back()].insert(*l);
@@ -821,24 +758,20 @@ graph to_petri_net(graph &g, bool report_progress)
 					groups[found.back()].insert(pair<parc, vector<int> >(arcs[i][j], vector<int>(1, i)));
 				else
 					loc->second.push_back(i);
-			}
-			else
-			{
+			} else {
 				groups.resize(groups.size()+1);
 				groups.back().insert(pair<parc, vector<int> >(arcs[i][j], vector<int>(1, i)));
 			}
 		}
 
-	for (int i = 0; i < (int)arcs.size(); i++)
-	{
+	for (int i = 0; i < (int)arcs.size(); i++) {
 		cout << "Cycle " << i << endl;
 		for (int j = 0; j < (int)arcs[i].size(); j++)
 			cout << "Arc " << j << ": " << arcs[i][j].to_string(g) << endl;
 	}
 
 	vector<vector<parc> > choices;
-	while (groups.size() > 0)
-	{
+	while (groups.size() > 0) {
 		vector<parc> selected;
 		vector<int> covered;
 		vector<int> missing;
@@ -847,21 +780,18 @@ graph to_petri_net(graph &g, bool report_progress)
 		sort(missing.begin(), missing.end());
 		missing.resize(unique(missing.begin(), missing.end()) - missing.begin());
 
-		while (missing.size() > 0)
-		{
+		while (missing.size() > 0) {
 			cout << to_string(missing) << " " << to_string(covered) << endl;
 			map<parc, vector<int> >::iterator loc = groups[0].end();
 			int count = 0;
 
 			for (map<parc, vector<int> >::iterator j = groups[0].begin(); j != groups[0].end(); j++)
-				if (count < (int)j->second.size() && !vector_intersects(covered, j->second))
-				{
+				if (count < (int)j->second.size() && !vector_intersects(covered, j->second)) {
 					loc = j;
 					count = j->second.size();
 				}
 
-			if (loc != groups[0].end())
-			{
+			if (loc != groups[0].end()) {
 				cout << loc->first.to_string(g) << endl;
 				selected.push_back(loc->first);
 				missing = vector_difference(missing, loc->second);
@@ -872,8 +802,7 @@ graph to_petri_net(graph &g, bool report_progress)
 		cout << to_string(missing) << " " << to_string(covered) << endl;
 
 		cout << "Group: {";
-		for (map<parc, vector<int> >::iterator j = groups[0].begin(); j != groups[0].end(); j++)
-		{
+		for (map<parc, vector<int> >::iterator j = groups[0].begin(); j != groups[0].end(); j++) {
 			if (j != groups[0].begin())
 				cout << " ";
 			cout << "(" << j->first.to_string(g) << " " << to_string(j->second) << ")";
@@ -881,8 +810,7 @@ graph to_petri_net(graph &g, bool report_progress)
 		cout << "}" << endl;
 
 		cout << "Selection: {";
-		for (int j = 0; j < (int)selected.size(); j++)
-		{
+		for (int j = 0; j < (int)selected.size(); j++) {
 			if (j != 0)
 				cout << ", ";
 			cout << "(" << selected[j].to_string(g) << ")";
@@ -890,8 +818,7 @@ graph to_petri_net(graph &g, bool report_progress)
 		cout << "}" << endl;
 
 		choices.push_back(selected);
-		for (int j = 0; j < (int)selected.size(); j++)
-		{
+		for (int j = 0; j < (int)selected.size(); j++) {
 			map<parc, vector<int> >::iterator k = groups[0].find(selected[j]);
 			if (k != groups[0].end())
 				groups[0].erase(k);
@@ -901,8 +828,7 @@ graph to_petri_net(graph &g, bool report_progress)
 		// fully connected anymore. So we have to split it up and redistribute
 		map<parc, vector<int> > group = groups[0];
 		groups.erase(groups.begin());
-		for (map<parc, vector<int> >::iterator j = group.begin(); j != group.end(); j++)
-		{
+		for (map<parc, vector<int> >::iterator j = group.begin(); j != group.end(); j++) {
 			vector<int> found;
 			for (int k = 0; k < (int)groups.size(); k++)
 				for (map<parc, vector<int> >::iterator l = groups[k].begin(); l != groups[k].end() && (found.size() == 0 || found.back() != k); l++)
@@ -910,18 +836,14 @@ graph to_petri_net(graph &g, bool report_progress)
 						j->first.n1 == l->first.n1)
 						found.push_back(k);
 
-			if (found.size() > 0)
-			{
+			if (found.size() > 0) {
 				sort(found.rbegin(), found.rend());
-				for (int k = 0; k < (int)found.size()-1; k++)
-				{
-					for (map<parc, vector<int> >::iterator l = groups[found[k]].begin(); l != groups[found[k]].end(); l++)
-					{
+				for (int k = 0; k < (int)found.size()-1; k++) {
+					for (map<parc, vector<int> >::iterator l = groups[found[k]].begin(); l != groups[found[k]].end(); l++) {
 						map<parc, vector<int> >::iterator loc = groups[found.back()].find(l->first);
 						if (loc == groups[found.back()].end())
 							groups[found.back()].insert(*l);
-						else
-						{
+						else {
 							loc->second.insert(loc->second.end(), l->second.begin(), l->second.end());
 							sort(loc->second.begin(), loc->second.end());
 						}
@@ -932,38 +854,31 @@ graph to_petri_net(graph &g, bool report_progress)
 				map<parc, vector<int> >::iterator loc = groups[found.back()].find(j->first);
 				if (loc == groups[found.back()].end())
 					groups[found.back()].insert(*j);
-				else
-				{
+				else {
 					loc->second.insert(loc->second.end(), j->second.begin(), j->second.end());
 					sort(loc->second.begin(), loc->second.end());
 				}
-			}
-			else
-			{
+			} else {
 				groups.resize(groups.size()+1);
 				groups.back().insert(*j);
 			}
 		}
 	}
 
-	for (int i = 0; i < (int)choices.size(); i++)
-	{
+	for (int i = 0; i < (int)choices.size(); i++) {
 		hse::iterator p(hse::place::type, result.places.size());
 		result.places.push_back(place());
 		cout << "Choice " << i << ": {";
-		for (int j = 0; j < (int)choices[i].size(); j++)
-		{
+		for (int j = 0; j < (int)choices[i].size(); j++) {
 			map<pnode, int>::iterator t0 = nodes.find(choices[i][j].n0);
-			if (t0 != nodes.end())
-			{
+			if (t0 != nodes.end()) {
 				petri::arc a0(petri::iterator(transition::type, t0->second), p);
 				if (find(result.arcs[transition::type].begin(), result.arcs[transition::type].end(), a0) == result.arcs[transition::type].end())
 					result.arcs[transition::type].push_back(a0);
 			}
 
 			map<pnode, int>::iterator t1 = nodes.find(choices[i][j].n1);
-			if (t1 != nodes.end())
-			{
+			if (t1 != nodes.end()) {
 				petri::arc a1(p, petri::iterator(transition::type, t1->second));
 				if (find(result.arcs[place::type].begin(), result.arcs[place::type].end(), a1) == result.arcs[place::type].end())
 					result.arcs[place::type].push_back(a1);
@@ -979,14 +894,14 @@ graph to_petri_net(graph &g, bool report_progress)
 	// Because of the way the cycles are merged we might need connections between the up and down going transitions of a variable
 	// So we need to check if those dependencies are guaranteed somehow.
 	vector<pair<vector<int>, int> > con;
-	for (int i = 0; i < (int)result.transitions.size(); i++)
-	{
+	for (int i = 0; i < (int)result.transitions.size(); i++) {
+		if (not result.transition.is_valid(i)) continue;
+
 		vector<pair<vector<int>, vector<int> > > tokens(1, pair<vector<int>, vector<int> >(result.prev(hse::transition::type, i), vector<int>()));
 		vector<int> joint;
 
 		bool loop = false;
-		while (tokens.size() > 0)
-		{
+		while (tokens.size() > 0) {
 			vector<int> curr = tokens.back().first;
 			vector<int> cov = tokens.back().second;
 			cov.insert(cov.end(), curr.begin(), curr.end());
@@ -996,40 +911,31 @@ graph to_petri_net(graph &g, bool report_progress)
 
 			vector<vector<int> > ttoken(1, vector<int>());
 
-			for (int j = 0; j < (int)curr.size(); j++)
-			{
+			for (int j = 0; j < (int)curr.size(); j++) {
 				int idx = (int)ttoken.size();
 				vector<int> prev = result.prev(hse::place::type, curr[j]);
-				for (int k = (int)prev.size()-1; k >= 0; k--)
-				{
-					if (k != 0)
-					{
+				for (int k = (int)prev.size()-1; k >= 0; k--) {
+					if (k != 0) {
 						ttoken.insert(ttoken.end(), ttoken.begin(), ttoken.begin() + idx);
 						for (int l = (int)ttoken.size()-idx; l < (int)ttoken.size(); l++)
 							ttoken[l].push_back(prev[k]);
-					}
-					else
+					} else
 						for (int l = 0; l < idx; l++)
 							ttoken[l].push_back(prev[k]);
 				}
 			}
 
-			for (int j = 0; j < (int)ttoken.size(); j++)
-			{
+			for (int j = 0; j < (int)ttoken.size(); j++) {
 				bool found = false;
-				for (int k = 0; k < (int)ttoken[j].size(); k++)
-				{
-					if (are_mutex(result.transitions[ttoken[j][k]].local_action, result.transitions[i].local_action))
-					{
+				for (int k = 0; k < (int)ttoken[j].size(); k++) {
+					if (are_mutex(result.transitions[ttoken[j][k]].local_action, result.transitions[i].local_action)) {
 						found = true;
 						joint.push_back(ttoken[j][k]);
-					}
-					else if (are_mutex(~result.transitions[ttoken[j][k]].local_action, result.transitions[i].local_action))
+					} else if (are_mutex(~result.transitions[ttoken[j][k]].local_action, result.transitions[i].local_action))
 						loop = true;
 				}
 
-				if (!found && !loop)
-				{
+				if (!found && !loop) {
 					tokens.push_back(pair<vector<int>, vector<int> >(result.prev(hse::transition::type, ttoken[j]), cov));
 					sort(tokens.back().first.begin(), tokens.back().first.end());
 					tokens.back().first.resize(unique(tokens.back().first.begin(), tokens.back().first.end()) - tokens.back().first.begin());
@@ -1040,8 +946,7 @@ graph to_petri_net(graph &g, bool report_progress)
 			}
 		}
 
-		if (loop)
-		{
+		if (loop) {
 			sort(joint.begin(), joint.end());
 			joint.resize(unique(joint.begin(), joint.end()) - joint.begin());
 			con.push_back(pair<vector<int>, int>(joint, i));
@@ -1051,11 +956,9 @@ graph to_petri_net(graph &g, bool report_progress)
 
 	sort(con.begin(), con.end());
 	con.resize(unique(con.begin(), con.end()) - con.begin());
-	for (int i = 0; i < (int)con.size(); i++)
-	{
+	for (int i = 0; i < (int)con.size(); i++) {
 		cout << "{";
-		for (int j = 0; j < (int)con[i].first.size(); j++)
-		{
+		for (int j = 0; j < (int)con[i].first.size(); j++) {
 			if (j != 0)
 				cout << " ";
 			cout << export_composition(result.transitions[con[i].first[j]].local_action, g).to_string();
@@ -1070,9 +973,13 @@ graph to_petri_net(graph &g, bool report_progress)
 
 	// Now we need to place the initial marking
 	vector<int> reset;
-	for (int i = 0; i < (int)result.transitions.size(); i++)
-		if (are_mutex(~result.transitions[i].local_action, g.reset[0].encodings))
+	for (int i = 0; i < (int)result.transitions.size(); i++) {
+		if (not g.places.is_valid(i)) continue;
+
+		if (are_mutex(~result.transitions[i].local_action, g.reset[0].encodings)) {
 			reset.push_back(i);
+		}
+	}
 
 	sort(reset.begin(), reset.end());
 	reset.resize(unique(reset.begin(), reset.end()) - reset.begin());
