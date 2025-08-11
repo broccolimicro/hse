@@ -153,18 +153,21 @@ void gate_set::load(bool senseless) {
 	}
 
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
-	for (auto t0i = base->transitions.begin(); t0i != base->transitions.end(); t0i++) {
-		petri::iterator t0(petri::transition::type, t0i - base->transitions.begin());
+	for (int i = 0; i < (int)base->transitions.size(); i++) {
+		if (not base->transitions.is_valid(i)) continue;
+
+		petri::iterator t0(petri::transition::type, i);
 		
 		// The state encodings for the implicant set of states of the transition.
 		// these are the state encodings for which there is no vacuous transition that would
 		// take a token off of any of the places.
 		boolean::cover predicate = base->predicate({t0});
-		boolean::cover implicant = predicate & t0i->guard;
-		boolean::cover assume = base->arbitration(t0.index) & t0i->assume;
+		boolean::cover implicant = predicate & base->transitions[i].guard;
+		boolean::cover assume = base->arbitration(t0.index) & base->transitions[i].assume;
+		boolean::cover local_action = base->transitions[i].local_action;
 
 		// The transition actively affects the state of the system
-		for (auto term = t0i->local_action.cubes.begin(); term != t0i->local_action.cubes.end(); term++) {
+		for (auto term = local_action.cubes.begin(); term != local_action.cubes.end(); term++) {
 			vector<int> term_vars = term->vars();
 			for (auto var = term_vars.begin(); var != term_vars.end(); var++) {
 				if (find(base->ghost_nets.begin(), base->ghost_nets.end(), *var) != base->ghost_nets.end()) {

@@ -433,12 +433,16 @@ petri::mapping graph::merge(graph g) {
 	}
 
 	for (int i = 0; i < (int)g.transitions.size(); i++) {
+		if (not g.transitions.is_valid(i)) continue;
+
 		g.transitions[i].local_action.apply(netMap);
 		g.transitions[i].remote_action.apply(netMap);
 		g.transitions[i].guard.apply(netMap);
 	}
 
 	for (int i = 0; i < (int)g.places.size(); i++) {
+		if (not g.places.is_valid(i)) continue;
+
 		g.places[i].predicate.apply(netMap);
 		g.places[i].effective.apply(netMap);
 	}
@@ -723,12 +727,17 @@ bool graph::common_arbiter(petri::iterator a, petri::iterator b) const
  */
 void graph::update_masks() {
 	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++) {
+		if (not is_valid(i)) continue;
+
 		places[i.index].mask = 1;
 	}
 
-	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++)
-	{
+	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++) {
+		if (not is_valid(i)) continue;
+
 		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
+			if (not is_valid(j)) continue;
+
 			if (is_reachable(j, i)) {
 				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].assume.mask()).combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask()).combine_mask(transitions[j.index].ghost.mask());
 			}
@@ -753,6 +762,8 @@ void graph::update_masks() {
 void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bool debug)
 {
 	for (int i = 0; i < (int)transitions.size(); i++) {
+		if (not transitions.is_valid(i)) continue;
+
 		transitions[i].remote_action = transitions[i].local_action.remote(remote_groups());
 	}
 
@@ -820,6 +831,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bo
 		// Remove skips
 		change = false;
 		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
+			if (not is_valid(i)) continue;
+
 			if (transitions[i.index].local_action.is_tautology()) {
 				vector<petri::iterator> n = next(i); // places
 				if (n.size() > 1) {
@@ -862,6 +875,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bo
 		// allows us to merge that guard at the end of the conditional branch into
 		// the transition.
 		for (petri::iterator i(place::type, 0); i < (int)places.size() && !change; i++) {
+			if (not is_valid(i)) continue;
+
 			vector<petri::iterator> p = prev(i);
 			vector<petri::iterator> active, passive;
 			for (int k = 0; k < (int)p.size(); k++) {
@@ -918,6 +933,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bo
 			continue;
 
 		for (petri::iterator i(transition::type, 0); i < (int)transitions.size() && !change; i++) {
+			if (not is_valid(i)) continue;
+
 			if (transitions[i.index].local_action == 1) {
 				if (debug) cout << "forwarding passive transition " << i << endl;
 				vector<petri::iterator> nn = next(next(i)); // transitions
@@ -954,6 +971,8 @@ void graph::check_variables()
 		vector<int> read;
 
 		for (int j = 0; j < (int)transitions.size(); j++) {
+			if (not transitions.is_valid(j)) continue;
+
 			vars = transitions[j].remote_action.vars();
 			if (find(vars.begin(), vars.end(), i) != vars.end()) {
 				written.push_back(j);
@@ -991,6 +1010,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 	vector<petri::iterator> result;
 	// We're going to check this transition against all of the places in the system
 	for (petri::iterator j = begin(petri::place::type); j != end(petri::place::type); j++) {
+		if (not is_valid(j)) continue;
 		// The place is in the same process as the implicant set of states,
 		// and its not in parallel with the transition we're checking,
 		// and they aren't forced to be mutually exclusive by an arbiter
@@ -1017,6 +1037,7 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 
 	// check the states inside each transition
 	for (petri::iterator j = begin(petri::transition::type); j != end(petri::transition::type); j++) {
+		if (not is_valid(j)) continue;
 		// The place is in the same process as the implicant set of states,
 		// and its not in parallel with the transition we're checking,
 		// and they aren't forced to be mutually exclusive by an arbiter
@@ -1054,12 +1075,14 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 void graph::annotate_conditional_branches() {
 	if (not ghost_nets.empty()) {
 		for (petri::iterator i = begin(petri::transition::type); i != end(petri::transition::type); i++) {
+			if (not is_valid(i)) continue;
 			transitions[i.index].ghost = 1;
 		}
 		ghost_nets.clear();
 	}
 
 	for (petri::iterator i = begin(petri::place::type); i != end(petri::place::type); i++) {
+		if (not is_valid(i)) continue;
 		places[i.index].ghost_nets.clear();
 
 		vector<petri::iterator> n = next(i);

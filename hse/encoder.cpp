@@ -14,44 +14,36 @@
 #include <interpret_boolean/export.h>
 #include <limits>
 
-namespace hse
-{
+namespace hse {
 
-conflict::conflict()
-{
+conflict::conflict() {
 	sense = -1;
 }
 
-conflict::conflict(term_index index, int sense, vector<petri::iterator> region, boolean::cover encoding)
-{
+conflict::conflict(term_index index, int sense, vector<petri::iterator> region, boolean::cover encoding) {
 	this->sense = sense;
 	this->index = index;
 	this->region = region;
 	this->encoding = encoding;
 }
 
-conflict::~conflict()
-{
+conflict::~conflict() {
 
 }
 
-encoder::encoder()
-{
+encoder::encoder() {
 	base = NULL;
 }
 
-encoder::encoder(graph *base)
-{
+encoder::encoder(graph *base) {
 	this->base = base;
 }
 
-encoder::~encoder()
-{
+encoder::~encoder() {
 
 }
 
-void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding)
-{
+void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, boolean::cover encoding) {
 	// cluster the conflicting places into regions. We want to be able to
 	// eliminate entire regions of these conflicts with a single state variable.
 
@@ -97,8 +89,7 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 	}
 }
 
-void encoder::check(bool senseless, bool report_progress)
-{
+void encoder::check(bool senseless, bool report_progress) {
 	Timer tmr;
 	if (report_progress) {
 		printf("  %s...", base->name.c_str());
@@ -131,21 +122,25 @@ void encoder::check(bool senseless, bool report_progress)
 	conflicts.clear();
 
 	// The implicant set of states of a transition conflicts with a set of states represented by a single place if
-	for (auto t0i = base->transitions.begin(); t0i != base->transitions.end(); t0i++) {
-		petri::iterator t0(petri::transition::type, t0i - base->transitions.begin());
+	for (int j = 0; j < (int)base->transitions.size(); j++) {
+		if (not base->transitions.is_valid(j)) continue;
+
+		petri::iterator t0(petri::transition::type, j);
 
 		//if (report_progress)
 		//	progress("", "T" + ::to_string(t0.index) + "/" + ::to_string(base->transitions.size()), __FILE__, __LINE__);
 
+		boolean::cover local_action = base->transitions[j].local_action;
+
 		// The transition actively affects the state of the system
-		if (t0i->local_action.is_tautology())
+		if (local_action.is_tautology())
 			continue;
 
 		boolean::cover implicant = base->implicant({t0});
 		vector<petri::iterator> relevant = base->relevant_nodes({t0});
 
-		for (int term = 0; term < (int)t0i->local_action.cubes.size(); term++) {
-			boolean::cube action = t0i->local_action.cubes[term];
+		for (int term = 0; term < (int)local_action.cubes.size(); term++) {
+			boolean::cube action = local_action.cubes[term];
 			boolean::cover not_action = ~action;
 
 			//cout << "checking " << t0 << " " << export_expression(implicant, *variables).to_string() << " " << to_string(relevant) << " -> " << export_composition(action, *variables).to_string() << endl;
@@ -272,6 +267,8 @@ int encoder::find_insertion(int sense, petri::region pos, const petri::path_set 
 	vector<petri::iterator> para;
 	for (int type = 0; type < 2; type++) {
 		for (auto p = base->begin(type); p != base->end(type); p++) {
+			if (not base->is_valid(p)) continue;
+
 			if ((base->is_reachable(pos.flat(), {p}) or base->is_reachable({p}, pos.flat())) and base->is(parallel, pos, {p}, true, true)) {
 				para.push_back(p);
 			}
@@ -352,16 +349,20 @@ int encoder::find_insertions(int sense, petri::bound pos, const petri::path_set 
 void encoder::insert_state_variable(bool debug) {
 	if (debug) {
 		// Trace all conflicts
-		for (auto i = base->places.begin(); i != base->places.end(); i++) {
-			cout << "p" << (i-base->places.begin()) << ":" << endl;
-			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
+		for (int i = 0; i < (int)base->places.size(); i++) {
+			if (not base->places.is_valid(i)) continue;
+
+			cout << "p" << i << ":" << endl;
+			for (auto j = base->places[i].splits[parallel].begin(); j != base->places[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
-		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
-			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
+		for (int i = 0; i < (int)base->transitions.size(); i++) {
+			if (not base->transitions.is_valid(i)) continue;
+
+			cout << "t" << i << ":" << endl;
+			for (auto j = base->transitions[i].splits[parallel].begin(); j != base->transitions[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
@@ -766,16 +767,16 @@ void encoder::insert_state_variable(bool debug) {
 	}
 
 	if (debug) {
-		for (auto i = base->places.begin(); i != base->places.end(); i++) {
-			cout << "p" << (i-base->places.begin()) << ":" << endl;
-			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
+		for (int i = 0; i < (int)base->places.size(); i++) {
+			cout << "p" << i << ":" << endl;
+			for (auto j = base->places[i].splits[parallel].begin(); j != base->places[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
-		for (auto i = base->transitions.begin(); i != base->transitions.end(); i++) {
-			cout << "t" << (i-base->transitions.begin()) << ":" << endl;
-			for (auto j = i->splits[parallel].begin(); j != i->splits[parallel].end(); j++) {
+		for (int i = 0; i < (int)base->transitions.size(); i++) {
+			cout << "t" << i << ":" << endl;
+			for (auto j = base->transitions[i].splits[parallel].begin(); j != base->transitions[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}

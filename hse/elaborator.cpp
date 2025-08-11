@@ -710,14 +710,20 @@ graph to_petri_net(graph &g, bool report_progress) {
 		for (int j = 0; j < (int)arcs[i].size(); j++) {
 			map<pnode, int>::iterator loc = nodes.find(arcs[i][j].n0);
 			if (loc == nodes.end()) {
-				nodes.insert(pair<pnode, int>(arcs[i][j].n0, result.transitions.size()));
-				result.transitions.push_back(transition(1, 1, boolean::cover(arcs[i][j].n0.v, arcs[i][j].n0.d)));
+				nodes.insert(pair<pnode, int>(arcs[i][j].n0,
+					result.transitions.emplace(
+						transition(1, 1, boolean::cover(arcs[i][j].n0.v, arcs[i][j].n0.d))
+					)
+				));
 			}
 
 			loc = nodes.find(arcs[i][j].n1);
 			if (loc == nodes.end()) {
-				nodes.insert(pair<pnode, int>(arcs[i][j].n1, result.transitions.size()));
-				result.transitions.push_back(transition(1, 1, boolean::cover(arcs[i][j].n1.v, arcs[i][j].n1.d)));
+				nodes.insert(pair<pnode, int>(arcs[i][j].n1,
+					result.transitions.emplace(
+						transition(1, 1, boolean::cover(arcs[i][j].n1.v, arcs[i][j].n1.d)
+					)
+				)));
 			}
 		}
 	}
@@ -866,8 +872,7 @@ graph to_petri_net(graph &g, bool report_progress) {
 	}
 
 	for (int i = 0; i < (int)choices.size(); i++) {
-		hse::iterator p(hse::place::type, result.places.size());
-		result.places.push_back(place());
+		hse::iterator p(hse::place::type, result.places.emplace(place()));
 		cout << "Choice " << i << ": {";
 		for (int j = 0; j < (int)choices[i].size(); j++) {
 			map<pnode, int>::iterator t0 = nodes.find(choices[i][j].n0);
@@ -895,7 +900,7 @@ graph to_petri_net(graph &g, bool report_progress) {
 	// So we need to check if those dependencies are guaranteed somehow.
 	vector<pair<vector<int>, int> > con;
 	for (int i = 0; i < (int)result.transitions.size(); i++) {
-		if (not result.transition.is_valid(i)) continue;
+		if (not result.transitions.is_valid(i)) continue;
 
 		vector<pair<vector<int>, vector<int> > > tokens(1, pair<vector<int>, vector<int> >(result.prev(hse::transition::type, i), vector<int>()));
 		vector<int> joint;
@@ -964,8 +969,7 @@ graph to_petri_net(graph &g, bool report_progress) {
 			cout << export_composition(result.transitions[con[i].first[j]].local_action, g).to_string();
 		}
 		cout << "} => " << export_composition(result.transitions[con[i].second].local_action, g).to_string() << endl;
-		int p = (int)result.places.size();
-		result.places.push_back(place());
+		int p = result.places.emplace(place());
 		for (int j = 0; j < (int)con[i].first.size(); j++)
 			result.connect(petri::iterator(petri::transition::type, con[i].first[j]), petri::iterator(petri::place::type, p));
 		result.connect(hse::iterator(hse::place::type, p), hse::iterator(hse::transition::type, con[i].second));
