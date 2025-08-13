@@ -403,6 +403,8 @@ void encoder::insert_state_variable(bool debug) {
 		for (auto j = problems.back().traces[1-conflicts[i].sense].paths.begin(); j != problems.back().traces[1-conflicts[i].sense].paths.end(); ) {
 			bool found = false;
 			for (auto t = base->begin(transition::type); t != base->end(transition::type); t++) {
+				if (not base->is_valid(t)) continue;
+
 				if ((*j)[t] > 0 and are_mutex(base->transitions[t.index].local_action, problems.back().term)) {
 					found = true;
 					break;
