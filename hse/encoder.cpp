@@ -770,6 +770,7 @@ void encoder::insert_state_variable(bool debug) {
 
 	if (debug) {
 		for (int i = 0; i < (int)base->places.size(); i++) {
+			if (not base->places.is_valid(i)) continue; 
 			cout << "p" << i << ":" << endl;
 			for (auto j = base->places[i].splits[parallel].begin(); j != base->places[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
@@ -777,6 +778,7 @@ void encoder::insert_state_variable(bool debug) {
 		}
 
 		for (int i = 0; i < (int)base->transitions.size(); i++) {
+			if (not base->transitions.is_valid(i)) continue; 
 			cout << "t" << i << ":" << endl;
 			for (auto j = base->transitions[i].splits[parallel].begin(); j != base->transitions[i].splits[parallel].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
