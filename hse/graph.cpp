@@ -396,24 +396,25 @@ boolean::cube &graph::term(term_index idx) {
 	return transitions[idx.index].local_action[idx.term];
 }
 
-petri::mapping graph::merge(graph g) {
-	mapping netMap((int)g.nets.size());
+Mapping<petri::iterator> graph::merge(graph g) {
+	Mapping<int> netMap(-1, false);
 
 	// Add all of the nets and look for duplicates
 	int count = (int)nets.size();
 	for (int i = 0; i < (int)g.nets.size(); i++) {
-		netMap.nets[i] = (int)nets.size();
+		int uid = nets.size();
 		vector<int> remote;
 		for (int j = 0; j < count; j++) {
 			if (nets[j].name == g.nets[i].name) {
 				if (nets[j].region == g.nets[i].region) {
-					netMap.nets[i] = j;
+					uid = j;
 				}
 				remote.push_back(j);
 			}
 		}
 
-		if (netMap.nets[i] >= (int)nets.size()) {
+		netMap.set(i, uid);
+		if (uid >= (int)nets.size()) {
 			nets.push_back(g.nets[i]);
 			nets.back().remote = remote;
 			if (nets.back().is_ghost) {
@@ -423,13 +424,12 @@ petri::mapping graph::merge(graph g) {
 	}
 
 	// Fill in the remote nets
-	for (int i = 0; i < (int)netMap.nets.size(); i++) {
-		int k = netMap.nets[i];
-		for (int j = 0; j < (int)g.nets[i].remote.size(); j++) {
-			nets[k].remote.push_back(netMap.map(g.nets[i].remote[j]));
+	for (auto i = netMap.fwd.begin(); i != netMap.fwd.end(); i++) {
+		for (int j = 0; j < (int)g.nets[i->first].remote.size(); j++) {
+			nets[i->second].remote.push_back(netMap.map(g.nets[i->first].remote[j]));
 		}
-		sort(nets[k].remote.begin(), nets[k].remote.end());
-		nets[k].remote.erase(unique(nets[k].remote.begin(), nets[k].remote.end()), nets[k].remote.end());
+		sort(nets[i->second].remote.begin(), nets[i->second].remote.end());
+		nets[i->second].remote.erase(unique(nets[i->second].remote.begin(), nets[i->second].remote.end()), nets[i->second].remote.end());
 	}
 
 	for (int i = 0; i < (int)g.transitions.size(); i++) {
