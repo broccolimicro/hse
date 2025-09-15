@@ -74,9 +74,9 @@ void elaborate(graph &g, bool annotate_ghosts, bool record_predicates, bool repo
 	}
 
 	// this is a depth-first search of all states reachable from reset.
-	int count = 0;
+	//int count = 0;
 	while (simulations.size() > 0) {
-		count++;
+		//count++;
 		// grab the simulation at the top of the stack
 		simulator sim = simulations.back();
 		simulations.pop_back();
@@ -304,7 +304,7 @@ graph to_state_graph(graph &g, bool report_progress) {
 			simulations.back().exec.merge_errors(sim.exec);
 		}
 
-		count++;
+		//count++;
 	}
 
 	if (report_progress)
@@ -412,10 +412,10 @@ vector<cycle> get_cycles(graph &g, bool report_progress) {
 		frames.push_back(frame(simulator(&g, g.reset[i])));
 	}
 
-	int iteration = -1;
+	//int iteration = -1;
 	while (frames.size() > 0)
 	{
-		iteration++;
+		//iteration++;
 
 		/*vector<int> indices(variables.nodes.size(), 0);
 		for (list<frame>::iterator i = frames.begin(); i != frames.end(); i++)
