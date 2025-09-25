@@ -176,6 +176,8 @@ struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::stat
 	string netAt(int uid) const;
 	int netCount() const;
 
+	void setGhost(int uid);
+
 	using super::create;
 	int create(net n = net());
 

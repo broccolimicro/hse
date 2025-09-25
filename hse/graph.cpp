@@ -274,6 +274,8 @@ int graph::netIndex(string name, bool define) {
 		name = name.substr(0, tic);
 	}
 
+	bool ghost = name.rfind("__b", 0) != string::npos;
+
 	vector<int> remote;
 	// First try to find the exact net
 	for (int i = 0; i < (int)nets.size(); i++) {
@@ -289,7 +291,7 @@ int graph::netIndex(string name, bool define) {
 	// name, create a new net and connect it to the other nets with the
 	// same name
 	if (define or not remote.empty()) {
-		int uid = create(net(name, region));
+		int uid = create(net(name, region, ghost));
 		for (int i = 0; i < (int)remote.size(); i++) {
 			connect_remote(uid, remote[i]);
 		}
@@ -314,6 +316,14 @@ string graph::netAt(int uid) const {
 
 int graph::netCount() const {
 	return (int)nets.size();
+}
+
+void graph::setGhost(int uid) {
+	if (not nets[uid].is_ghost) {
+		nets[uid].is_ghost = true;
+		ghost_nets.push_back(uid);
+		sort(ghost_nets.begin(), ghost_nets.end());
+	}
 }
 
 /**
