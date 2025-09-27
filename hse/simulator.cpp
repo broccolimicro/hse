@@ -340,25 +340,25 @@ int simulator::enabled(bool sorted) {
 			// the propagated guard that have already been acknowledged by other
 			// transitions acknowledged by the base guard and the sequencing.
 			/*boolean::cover guard;
-			cout << "checking " << export_expression(preload[i].depend, *variables).to_string() << " && " << export_expression(preload[i].sequence, *variables).to_string() << " && " << export_expression(base->transitions[preload[i].index].guard, *variables).to_string() << " -> " << export_composition(base->transitions[preload[i].index].local_action, *variables).to_string() << endl;
+			cout << "checking " << emit_expression(preload[i].depend, *variables) << " && " << emit_expression(preload[i].sequence, *variables) << " && " << emit_expression(base->transitions[preload[i].index].guard, *variables) << " -> " << emit_composition(base->transitions[preload[i].index].local_action, *variables) << endl;
 			for (auto g = base->transitions[preload[i].index].guard.cubes.begin(); g != base->transitions[preload[i].index].guard.cubes.end(); g++) {
 				for (auto s = preload[i].sequence.cubes.begin(); s != preload[i].sequence.cubes.end(); s++) {
 					for (auto d = preload[i].depend.cubes.begin(); d != preload[i].depend.cubes.end(); d++) {
 						boolean::cube dep = (*s & d->mask(s->mask())).mask(g->mask());
 						boolean::cube ack = *g & dep;
 						boolean::cube cov = 1;
-						cout << "\tterm " << export_expression(ack, *variables).to_string() << "  " << export_expression(dep, *variables).to_string() << endl;
+						cout << "\tterm " << emit_expression(ack, *variables) << "  " << emit_expression(dep, *variables) << endl;
 						for (auto l = history.rbegin(); l != history.rend(); l++) {
 							boolean::cube term = base->term(l->second).remote(variables->get_groups());
-							cout << "\t\thist " << export_expression(l->first, *variables).to_string() << "->" << export_composition(term, *variables).to_string() << endl;
+							cout << "\t\thist " << emit_expression(l->first, *variables) << "->" << emit_composition(term, *variables) << endl;
 							if (ack.acknowledges(term)) {
 								boolean::cube implied = l->first.remote(variables->get_groups()).mask(g->mask());
-								cout << "\t\t\tfound " << export_expression(implied, *variables).to_string() << endl;
+								cout << "\t\t\tfound " << emit_expression(implied, *variables) << endl;
 								ack &= implied;
 								cov &= implied;
 							}
 						}
-						cout << "\tdone " << export_expression(*g, *variables).to_string() << "  " << export_expression(dep, *variables).to_string() << "  " << export_expression(cov, *variables).to_string() << "  " << export_expression(filter(dep, cov), *variables).to_string() << endl;
+						cout << "\tdone " << emit_expression(*g, *variables) << "  " << emit_expression(dep, *variables) << "  " << emit_expression(cov, *variables) << "  " << export_expression(filter(dep, cov), *variables).to_string() << endl;
 
 						guard.push_back(*g & *d & filter(*s, cov));
 					}
@@ -432,7 +432,7 @@ int simulator::enabled(bool sorted) {
 						boolean::cover exclude = base->exclusion(preload[i].index);
 						boolean::cover weak = boolean::weakest_guard(base->transitions[preload[i].index].guard, exclude);
 						guard &= weak;
-						//cout << "setting token guard:" << export_expression(base->transitions[preload[i].index].guard, *variables).to_string() << " exclude:" << export_expression(exclude, *variables).to_string() << " weak:" << export_expression(weak, *variables).to_string() << " result:" << export_expression(guard, *variables).to_string() << endl;
+						//cout << "setting token guard:" << emit_expression(base->transitions[preload[i].index].guard, *variables) << " exclude:" << emit_expression(exclude, *variables) << " weak:" << emit_expression(weak, *variables) << " result:" << emit_expression(guard, *variables) << endl;
 					}
 
 					for (int j = 0; j < (int)output.size(); j++)

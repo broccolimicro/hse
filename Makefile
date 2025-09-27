@@ -1,5 +1,5 @@
 NAME          = hse
-DEPEND        = petri boolean prs interpret_boolean parse_expression parse_ucs parse common
+DEPEND        = petri boolean prs interpret_boolean parse_cog parse_expression parse_ucs parse common
 TEST_DEPEND   = petri prs interpret_hse interpret_boolean boolean parse_chp parse_astg parse_dot parse_cog parse_expression parse_ucs parse common
 
 COVERAGE ?= 0

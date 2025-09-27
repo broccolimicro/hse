@@ -143,7 +143,7 @@ void encoder::check(bool senseless, bool report_progress) {
 			boolean::cube action = local_action.cubes[term];
 			boolean::cover not_action = ~action;
 
-			//cout << "checking " << t0 << " " << export_expression(implicant, *variables).to_string() << " " << to_string(relevant) << " -> " << export_composition(action, *variables).to_string() << endl;
+			//cout << "checking " << t0 << " " << emit_expression(implicant, *variables) << " " << to_string(relevant) << " -> " << export_composition(action, *variables).to_string() << endl;
 
 			for (int sense = senseless ? -1 : 0; senseless ? sense == -1 : sense < 2; sense++) {
 				// If we aren't specifically checking senses or this transition affects the senses we are checking
@@ -154,13 +154,13 @@ void encoder::check(bool senseless, bool report_progress) {
 				// we cannot use the variables affected by the transitions in their rules because that would
 				// make the rules self-invalidating, so we have to mask them out.
 				boolean::cover term_implicant = (implicant & not_action).mask(action.mask()).mask(sense);
-				//cout << "\tterm_implicant " << export_expression(term_implicant, *variables).to_string() << endl;
+				//cout << "\tterm_implicant " << emit_expression(term_implicant, *variables) << endl;
 
 				for (auto i = relevant.begin(); i != relevant.end(); i++) {
 					// Get only the state encodings for the place for which the transition is invacuous and
 					// there is no other vacuous transition that would take a token off the place.
 					boolean::cover encoding = base->effective_implicant({*i});
-					//cout << "\t against " << *i << " " << export_expression(encoding, *variables).to_string() << endl;
+					//cout << "\t against " << *i << " " << emit_expression(encoding, *variables) << endl;
 
 					// The implicant states for any actions that would have the same
 					// effect as the transition we're checking can be removed from our
@@ -175,7 +175,7 @@ void encoder::check(bool senseless, bool report_progress) {
 
 					// Check if they share a common state encoding given the above checks
 					encoding = base->filter_vacuous(*i, encoding, action);
-					//cout << "\t final encoding " << export_expression(encoding, *variables).to_string() << endl;
+					//cout << "\t final encoding " << emit_expression(encoding, *variables) << endl;
 					if (not are_mutex(term_implicant, encoding)) {
 						add_conflict(t0.index, term, sense, *i, term_implicant & encoding);
 					}
@@ -222,7 +222,7 @@ int encoder::score_insertion(int sense, petri::region pos, const petri::path_set
 		// previous insertions. I should insert the assignments that are
 		// more certain first.
 
-		//cout << "\t\tlooking at " << *i << " for " << export_expression(implicant, *variables).to_string() << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
+		//cout << "\t\tlooking at " << *i << " for " << emit_expression(implicant, *variables) << " vs " << export_expression(base->effective_implicant(vector<petri::iterator>(1, *i)), *variables).to_string() << endl;
 		int conflict = not dontcare.covers(*i) and not are_mutex(implicant, base->effective_implicant({*i}));
 		if (conflict != 0) {
 			//cout << "\t\tfound conflict" ;

@@ -9,6 +9,7 @@
 #include <interpret_boolean/export.h>
 #include "state.h"
 #include "graph.h"
+#include "expression.h"
 
 namespace hse
 {
@@ -44,7 +45,7 @@ void term_index::hash(hasher &hash) const
 
 string term_index::to_string(const graph &g)
 {
-	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + export_expression_xfactor(g.transitions[index].guard[term], g).to_string() + " -> " + export_composition(g.transitions[index].local_action[term], g).to_string();
+	return "T" + ::to_string(index) + "." + ::to_string(term) + ":" + emit_expression_xfactor(g.transitions[index].guard[term], g) + " -> " + emit_composition(g.transitions[index].local_action[term], g);
 }
 
 petri::iterator term_index::iter() const {
@@ -125,7 +126,7 @@ enabled_transition::~enabled_transition()
 
 string enabled_transition::to_string(const graph &g)
 {
-	return "T" + ::to_string(index) + ":" + export_expression_xfactor(g.transitions[index].guard, g).to_string() + " -> " + export_composition(g.transitions[index].local_action, g).to_string();
+	return "T" + ::to_string(index) + ":" + emit_expression_xfactor(g.transitions[index].guard, g) + " -> " + emit_composition(g.transitions[index].local_action, g);
 }
 
 bool operator<(enabled_transition i, enabled_transition j)
@@ -283,7 +284,7 @@ string state::to_string(const graph &g)
 			result += " ";
 		result += ::to_string(tokens[i].index);
 	}
-	result += "} " + export_expression_hfactor(encodings, g).to_string();
+	result += "} " + emit_expression_hfactor(encodings, g);
 	return result;
 }
 

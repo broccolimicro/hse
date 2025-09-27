@@ -9,7 +9,7 @@
 #include <interpret_hse/import.h>
 #include <string>
 
-#include <interpret_boolean/export.h>
+#include <hse/expression.h>
 
 namespace hse {
 
@@ -44,7 +44,7 @@ graph parse_hse_string(const std::string &hse_str) {
 
 void print_enabled(const graph &g, const simulator &sim) {
 	for (int i = 0; i < (int)sim.ready.size(); i++) {
-		printf("(%d) T%d.%d:%s->%s\n", i, sim.loaded[sim.ready[i].first].index, sim.ready[i].second, export_expression(g.transitions[sim.loaded[sim.ready[i].first].index].guard, g).to_string().c_str(), export_composition(g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second], g).to_string().c_str());
+		printf("(%d) T%d.%d:%s->%s\n", i, sim.loaded[sim.ready[i].first].index, sim.ready[i].second, emit_expression(g.transitions[sim.loaded[sim.ready[i].first].index].guard, g).c_str(), emit_composition(g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second], g).c_str());
 		if (sim.loaded[sim.ready[i].first].vacuous) {
 			printf("\tvacuous");
 		}
