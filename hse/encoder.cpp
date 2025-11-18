@@ -789,7 +789,7 @@ void encoder::insert_state_variable(bool debug) {
 	}
 	// TODO(edward.bingham) There seems to be a bug in identifying redundant
 	// states, but I can't seem to pin it down.
-	base->erase_redundant();
+	base->remove_redundant();
 	base->update_masks();
 
 	// TODO(edward.bingham) Update the predicate space and conflicts without
