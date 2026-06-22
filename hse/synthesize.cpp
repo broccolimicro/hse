@@ -325,6 +325,14 @@ void gate_set::save(prs::production_rule_set *out) {
 		}
 	}
 
+	for (int i = 0; i < (int)base->nets.size(); i++) {
+		for (int j : base->nets[i].remote) {
+			if (j > i) {
+				out->connect_remote(m.map(i), m.map(j));
+			}
+		}
+	}
+
 	int gnd = out->netIndex("GND", true);
 	int vdd = out->netIndex("Vdd", true);
 	out->set_power(vdd, gnd);
