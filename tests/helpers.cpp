@@ -23,7 +23,7 @@ graph parse_hse_string(const std::string &hse_str) {
   tokenizer tokens;
   tokens.register_token<parse::block_comment>(false);
   tokens.register_token<parse::line_comment>(false);
-  parse_chp::register_syntax(tokens);
+  parse_chp::factory.register_syntax(tokens);
   
   // Insert the string into the tokenizer
   tokens.insert("string_input", hse_str, nullptr);
