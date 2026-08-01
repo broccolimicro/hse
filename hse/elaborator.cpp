@@ -15,8 +15,6 @@
 #include <set>
 #include <deque>
 
-#include "expression.h"
-
 using namespace std;
 
 namespace hse
@@ -449,7 +447,7 @@ vector<cycle> get_cycles(graph &g, bool report_progress) {
 		}
 		cout << endl;
 		for (int i = 0; i < (int)curr.sim.ready.size(); i++)
-			cout << "(" << i << ")\t" << emit_expression(curr.sim.loaded[curr.sim.ready[i].first].guard_action, variables) << " -> " << emit_composition(g.transitions[curr.sim.loaded[curr.sim.ready[i].first].index].local_action.cubes[curr.sim.ready[i].second], variables) << endl;
+			cout << "(" << i << ")\t" << curr.sim.loaded[curr.sim.ready[i].first].guard_action.to_string(variables) << " -> " << g.transitions[curr.sim.loaded[curr.sim.ready[i].first].index].local_action.cubes[curr.sim.ready[i].second].to_action(variables) << endl;
 		*/
 
 		vector<int> excluded;
@@ -618,7 +616,7 @@ graph to_petri_net(graph &g, bool report_progress) {
 	for (int i = 0; i < (int)cycles.size(); i++) {
 		cout << "Cycle " << i << endl;
 		for (int j = 0; j < (int)cycles[i].firings.size(); j++) {
-			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << emit_expression(cycles[i].firings[j].guard, g) << " -> " << emit_composition(g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term], g) << "\t{";
+			cout << "\t(" << cycles[i].firings[j].action.index << " " << cycles[i].firings[j].action.term << ")\t" << cycles[i].firings[j].guard.to_string(g) << " -> " << g.transitions[cycles[i].firings[j].action.index].local_action.cubes[cycles[i].firings[j].action.term].to_action(g) << "\t{";
 			for (int k = 0; k < (int)cycles[i].firings[j].loc.tokens.size(); k++) {
 				if (k != 0)
 					cout << " ";
@@ -957,7 +955,7 @@ graph to_petri_net(graph &g, bool report_progress) {
 			sort(joint.begin(), joint.end());
 			joint.resize(unique(joint.begin(), joint.end()) - joint.begin());
 			con.push_back(pair<vector<int>, int>(joint, i));
-			cout << "Found Loop " << emit_composition(result.transitions[i].local_action, g) << endl;
+			cout << "Found Loop " << result.transitions[i].local_action.to_action(g) << endl;
 		}
 	}
 
@@ -968,9 +966,9 @@ graph to_petri_net(graph &g, bool report_progress) {
 		for (int j = 0; j < (int)con[i].first.size(); j++) {
 			if (j != 0)
 				cout << " ";
-			cout << emit_composition(result.transitions[con[i].first[j]].local_action, g);
+			cout << result.transitions[con[i].first[j]].local_action.to_action(g);
 		}
-		cout << "} => " << emit_composition(result.transitions[con[i].second].local_action, g) << endl;
+		cout << "} => " << result.transitions[con[i].second].local_action.to_action(g) << endl;
 		int p = result.places.emplace(place());
 		for (int j = 0; j < (int)con[i].first.size(); j++)
 			result.connect(petri::iterator(petri::transition::type, con[i].first[j]), petri::iterator(petri::place::type, p));

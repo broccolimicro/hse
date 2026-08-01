@@ -9,8 +9,6 @@
 #include <interpret_hse/import.h>
 #include <string>
 
-#include <hse/expression.h>
-
 namespace hse {
 
 // @brief Parse an HSE string and convert it to an HSE graph
@@ -33,7 +31,7 @@ graph parse_hse_string(const std::string &hse_str) {
   tokens.expect<parse_chp::composition>();
   if (tokens.decrement(__FILE__, __LINE__)) {
     parse_chp::composition syntax(tokens);
-    hse::import_hse(hg, syntax, &tokens, true);
+    parse_chp::import_hse(hg, syntax, &tokens, true);
   }
 
 	hg.post_process(true, false, false);
@@ -44,7 +42,7 @@ graph parse_hse_string(const std::string &hse_str) {
 
 void print_enabled(const graph &g, const simulator &sim) {
 	for (int i = 0; i < (int)sim.ready.size(); i++) {
-		printf("(%d) T%d.%d:%s->%s\n", i, sim.loaded[sim.ready[i].first].index, sim.ready[i].second, emit_expression(g.transitions[sim.loaded[sim.ready[i].first].index].guard, g).c_str(), emit_composition(g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second], g).c_str());
+		printf("(%d) T%d.%d:%s->%s\n", i, sim.loaded[sim.ready[i].first].index, sim.ready[i].second, g.transitions[sim.loaded[sim.ready[i].first].index].guard.to_string(g).c_str(), g.transitions[sim.loaded[sim.ready[i].first].index].local_action[sim.ready[i].second].to_action(g).c_str());
 		if (sim.loaded[sim.ready[i].first].vacuous) {
 			printf("\tvacuous");
 		}

@@ -2,7 +2,6 @@
 
 #include <common/timer.h>
 #include <common/mapping.h>
-#include "expression.h"
 
 namespace hse
 {
@@ -119,17 +118,17 @@ void gate::weaken_brute_force()
 void gate::print(int uid, graph *base) {
 	cout << base->nets[uid].to_string() << "-" << endl;
 	cout << "\t" << ::to_string(tids[0]) << endl;
-	cout << "\timplicant: " << emit_expression(implicant[0], *base) << endl; 
-	cout << "\texclusion: " << emit_expression(exclusion[0], *base) << endl; 
-	cout << "\tholding: " << emit_expression(holding[0], *base) << endl; 
-	cout << "\tassume: " << emit_expression(assume[0], *base) << endl;
+	cout << "\timplicant: " << implicant[0].to_string(*base) << endl; 
+	cout << "\texclusion: " << exclusion[0].to_string(*base) << endl; 
+	cout << "\tholding: " << holding[0].to_string(*base) << endl; 
+	cout << "\tassume: " << assume[0].to_string(*base) << endl;
 
  	cout << base->nets[uid].to_string() << "+" << endl;
 	cout << "\t" << ::to_string(tids[1]) << endl;
-	cout << "\timplicant: " << emit_expression(implicant[1], *base) << endl; 
-	cout << "\texclusion: " << emit_expression(exclusion[1], *base) << endl; 
-	cout << "\tholding: " << emit_expression(holding[1], *base) << endl; 
-	cout << "\tassume: " << emit_expression(assume[1], *base) << endl;
+	cout << "\timplicant: " << implicant[1].to_string(*base) << endl; 
+	cout << "\texclusion: " << exclusion[1].to_string(*base) << endl; 
+	cout << "\tholding: " << holding[1].to_string(*base) << endl; 
+	cout << "\tassume: " << assume[1].to_string(*base) << endl;
 }
 
 gate_set::gate_set() {
@@ -208,7 +207,7 @@ void gate_set::load(bool senseless) {
 			for (auto n = relevant.begin(); n != relevant.end(); n++) {
 				//cout << "excluding " << *n << endl;
 				if (n->type == petri::place::type) {
-					//cout << emit_expression(base->places[n->index].effective, v) << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
+					//cout << base->places[n->index].effective.to_string(v) << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
 					//cout << export_expression(base->effective(*n), v).to_string() << " " << export_expression(boolean::cube(var, 1-val), v).to_string() << endl;
 					gate->exclusion[val] |= base->effective(*n) & boolean::cube(var, 1-val);
 				} else {
