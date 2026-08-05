@@ -31,7 +31,7 @@ graph parse_hse_string(const std::string &hse_str) {
   tokens.expect<parse_chp::composition>();
   if (tokens.decrement(__FILE__, __LINE__)) {
     parse_chp::composition syntax(tokens);
-    parse_chp::import_hse(hg, syntax, &tokens, true);
+    hse::import_hse(hg, syntax, &tokens, true);
   }
 
 	hg.post_process(true, false, false);

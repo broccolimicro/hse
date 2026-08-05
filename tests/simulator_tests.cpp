@@ -129,7 +129,7 @@ TEST(Simulator, Parallel) {
 
 TEST(Simulator, Choice) {
 	// Create a graph with places, transitions, and initial state
-	graph g = parse_hse_string("x-,y-; *[[1->x+:1->y+]; x-,y-]");
+	graph g = parse_hse_string("x-,y-; *[[vdd->x+:vdd->y+]; x-,y-]");
 	EXPECT_EQ(g.netCount(), 2);
   
 	int x = g.netIndex("x");
@@ -147,8 +147,8 @@ TEST(Simulator, Choice) {
 	// Get enabled transitions
 	// Verify that the correct transition is enabled
 	EXPECT_EQ(sim.enabled(), 2);
-	EXPECT_EQ(sim.ready.size(), 2u);
-	EXPECT_EQ(sim.loaded.size(), 2u);
+	ASSERT_EQ(sim.ready.size(), 2u);
+	ASSERT_EQ(sim.loaded.size(), 2u);
 	EXPECT_GE(sim.ready[0].first, 0);
 	EXPECT_GE(sim.ready[1].first, 0);
 	EXPECT_EQ(g.transitions[sim.loaded[sim.ready[0].first].index].local_action.cubes[sim.ready[0].second] | g.transitions[sim.loaded[sim.ready[1].first].index].local_action.cubes[sim.ready[1].second], boolean::cover(x, 1) | boolean::cover(y, 1));
@@ -157,17 +157,16 @@ TEST(Simulator, Choice) {
 	sim.fire(0); 
 
 	EXPECT_EQ(sim.enabled(), 1);
-	EXPECT_EQ(sim.ready.size(), 1u);
-	EXPECT_EQ(sim.loaded.size(), 2u);
+	ASSERT_EQ(sim.ready.size(), 1u);
+	ASSERT_EQ(sim.loaded.size(), 2u);
 	EXPECT_GE(sim.ready[0].first, 0);
-	EXPECT_GE(sim.ready[1].first, 0);
 
 	sim.fire(0); 
 
 	// Other transition is vacuous, we should be back to beginning
 	EXPECT_EQ(sim.enabled(), 2);
-	EXPECT_EQ(sim.ready.size(), 2u);
-	EXPECT_EQ(sim.loaded.size(), 3u); // x+, y+, vacuous x-
+	ASSERT_EQ(sim.ready.size(), 2u);
+	ASSERT_EQ(sim.loaded.size(), 3u); // x+, y+, vacuous x-
 	EXPECT_GE(sim.ready[0].first, 0);
 	EXPECT_GE(sim.ready[1].first, 0);
 	EXPECT_EQ(g.transitions[sim.loaded[sim.ready[0].first].index].local_action.cubes[sim.ready[0].second] | g.transitions[sim.loaded[sim.ready[1].first].index].local_action.cubes[sim.ready[1].second], boolean::cover(x, 1) | boolean::cover(y, 1));
