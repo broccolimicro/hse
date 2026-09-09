@@ -13,9 +13,9 @@ namespace hse
 const string ghost_prefix = "__b";
 
 using petri::iterator;
-using petri::parallel;
-using petri::choice;
-using petri::sequence;
+using petri::PARALLEL;
+using petri::CHOICE;
+using petri::SEQUENCE;
 
 // Handshaking Expansions (HSE) are represented by a collection of
 // petri nets in which the transitions are augmented with guards. Before a
@@ -58,7 +58,7 @@ struct place : petri::place
 	// See graph::ghost_nets for documentation
 	vector<int> ghost_nets;
 
-	static place merge(int composition, const place &p0, const place &p1);
+	place &merge(petri::Composition composition, const place &p1);
 };
 
 ostream &operator<<(ostream &os, const place &p);
@@ -116,8 +116,8 @@ struct transition : petri::transition
 
 	transition subdivide(int term) const;
 
-	static transition merge(int composition, const transition &t0, const transition &t1);
-	static bool mergeable(int composition, const transition &t0, const transition &t1);
+	transition &merge(petri::Composition composition, const transition &t1);
+	bool mergeable(petri::Composition composition, const transition &t1) const;
 
 	bool is_infeasible() const;
 	bool is_vacuous() const;
@@ -140,10 +140,10 @@ struct net {
 };
 
 // A graph represents a Handshaking Expansion as a Petri Net.
-struct graph : petri::graph<hse::place, hse::transition, petri::token, hse::state>
+struct graph : petri::graph<hse::place, hse::transition, hse::state>
 {
 	// See haystack/lib/petri/petri/petri.h for the structure definition.
-	typedef petri::graph<hse::place, hse::transition, petri::token, hse::state> super;
+	typedef petri::graph<hse::place, hse::transition, hse::state> super;
 
 	graph();
 	~graph();

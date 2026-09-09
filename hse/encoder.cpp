@@ -90,26 +90,29 @@ void encoder::add_conflict(int tid, int term, int sense, petri::iterator node, b
 }
 
 void encoder::check(bool senseless, bool report_progress) {
+	adj = base->adjacency();
+	reach.build(adj);
+	comp.build(adj);
+
 	Timer tmr;
 	if (report_progress) {
 		printf("  %s...", base->name.c_str());
 		fflush(stdout);
 	}
 	//cout << "Computing Parallel Groups" << endl;
-	base->compute_split_groups();
 	/*cout << "Parallel Groups" << endl;
 	for (int i = 0; i < (int)base->places.size(); i++) {
 		cout << "p" << i << " {" << endl;
-		for (int j = 0; j < (int)base->places[i].splits[parallel].size(); j++) {
-			cout << "\t" << base->places[i].splits[parallel][j].to_string() << endl;
+		for (int j = 0; j < (int)comp.places[i].splits[petri::PARALLEL].size(); j++) {
+			cout << "\t" << comp.places[i].splits[petri::PARALLEL][j].to_string() << endl;
 		}
 		cout << "}" << endl;
 	}
 
-	for (int i = 0; i < (int)base->transitions.size(); i++) {
+	for (int i = 0; i < (int)comp.transitions.size(); i++) {
 		cout << "t" << i << " {" << endl;
-		for (int j = 0; j < (int)base->transitions[i].splits[parallel].size(); j++) {
-			cout << "\t" << base->transitions[i].splits[parallel][j].to_string() << endl;
+		for (int j = 0; j < (int)comp.transitions[i].splits[petri::PARALLEL].size(); j++) {
+			cout << "\t" << comp.transitions[i].splits[petri::PARALLEL][j].to_string() << endl;
 		}
 		cout << "}" << endl;
 	}*/
@@ -209,7 +212,7 @@ int encoder::score_insertion(int sense, petri::region pos, const petri::path_set
 	// fire in the other place and that might create a conflict.
 
 	boolean::cover implicant = base->implicant(pos).mask(1-sense);
-	if (implicant.is_null() or base->crosses_reset(pos.flat())) {
+	if (implicant.is_null() or comp.crossesReset(pos.flat())) {
 		//cout << "null implicant or crosses reset" << endl;
 		return -1;
 	}
@@ -269,7 +272,7 @@ int encoder::find_insertion(int sense, petri::region pos, const petri::path_set 
 		for (auto p = base->begin(type); p != base->end(type); p++) {
 			if (not base->is_valid(p)) continue;
 
-			if ((base->is_reachable(pos.flat(), {p}) or base->is_reachable({p}, pos.flat())) and base->is(parallel, pos, {p}, true, true)) {
+			if ((reach.isReachable(pos.flat(), {p}) or reach.isReachable({p}, pos.flat())) and comp.is(petri::PARALLEL, pos, {p}, true, true)) {
 				para.push_back(p);
 			}
 		}
@@ -298,7 +301,7 @@ int encoder::find_insertion(int sense, petri::region pos, const petri::path_set 
 
 		if (stepcost >= 0 and (bestcost < 0 or stepcost < bestcost)) {
 			for (int i = (int)para.size()-1; i >= 0; i--) {
-				if (not base->is(parallel, n, para[i], true, true)) {
+				if (not comp.is(petri::PARALLEL, n, para[i], true, true)) {
 					para.erase(para.begin() + i);
 				}
 			}
@@ -349,20 +352,20 @@ int encoder::find_insertions(int sense, petri::bound pos, const petri::path_set 
 void encoder::insert_state_variable(bool debug) {
 	if (debug) {
 		// Trace all conflicts
-		for (int i = 0; i < (int)base->places.size(); i++) {
-			if (not base->places.is_valid(i)) continue;
+		for (int i = 0; i < (int)comp.places.size(); i++) {
+			if (not comp.places.is_valid(i)) continue;
 
 			cout << "p" << i << ":" << endl;
-			for (auto j = base->places[i].splits[parallel].begin(); j != base->places[i].splits[parallel].end(); j++) {
+			for (auto j = comp.places[i].splits[petri::PARALLEL].begin(); j != comp.places[i].splits[petri::PARALLEL].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
-		for (int i = 0; i < (int)base->transitions.size(); i++) {
-			if (not base->transitions.is_valid(i)) continue;
+		for (int i = 0; i < (int)comp.transitions.size(); i++) {
+			if (not comp.transitions.is_valid(i)) continue;
 
 			cout << "t" << i << ":" << endl;
-			for (auto j = base->transitions[i].splits[parallel].begin(); j != base->transitions[i].splits[parallel].end(); j++) {
+			for (auto j = comp.transitions[i].splits[petri::PARALLEL].begin(); j != comp.transitions[i].splits[petri::PARALLEL].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
@@ -383,14 +386,14 @@ void encoder::insert_state_variable(bool debug) {
 		if (conflicts[i].sense == conflict::UP) {
 			problems.push_back(CodingProblem{
 				base->term(conflicts[i].index).mask(conflict::DOWN), {
-				petri::trace(*base, base->select(parallel, to), from),
-				petri::trace(*base, base->select(parallel, from), to)
+				petri::trace(adj, comp, comp.select(petri::PARALLEL, to), from),
+				petri::trace(adj, comp, comp.select(petri::PARALLEL, from), to)
 			}});
 		} else {
 			problems.push_back(CodingProblem{
 				base->term(conflicts[i].index).mask(conflict::UP), {
-				petri::trace(*base, base->select(parallel, from), to),
-				petri::trace(*base, base->select(parallel, to), from)
+				petri::trace(adj, comp, comp.select(petri::PARALLEL, from), to),
+				petri::trace(adj, comp, comp.select(petri::PARALLEL, to), from)
 			}});
 		}
 
@@ -462,11 +465,11 @@ void encoder::insert_state_variable(bool debug) {
 		for (int j = i-1; j >= 0; j--) {
 			if (problems[i].term.vars() == problems[j].term.vars()) {
 				array<petri::path_set, 2> traces = problems[j].traces;
-				if (not traces[0].merge(*base, problems[i].traces[0])) {
+				if (not traces[0].merge(comp, problems[i].traces[0])) {
 					continue;
 				}
 
-				if (not traces[1].merge(*base, problems[i].traces[1])) {
+				if (not traces[1].merge(comp, problems[i].traces[1])) {
 					continue;
 				}
 
@@ -571,10 +574,10 @@ void encoder::insert_state_variable(bool debug) {
 				// exists a pair of partial states, one for each place, that aren't
 				// in parallel. But to be able to recognize those two states, we need
 				// to check them together.
-				auto insertions = base->deinterfere_choice(*j, *k);
+				auto insertions = comp.deinterfere_choice(*j, *k);
 				for (auto it = insertions.begin(); it != insertions.end(); it++) {
-					petri::path_set v0 = petri::trace(*base, (*it)[0], (*it)[1].flat(), true);
-					petri::path_set v1 = petri::trace(*base, (*it)[1], (*it)[0].flat(), true);
+					petri::path_set v0 = petri::trace(adj, comp, (*it)[0], (*it)[1].flat(), true);
+					petri::path_set v1 = petri::trace(adj, comp, (*it)[1], (*it)[0].flat(), true);
 					if (debug) {
 						cout << "checking up:" << to_string((*it)[1]) << "," << v1 << " down:" << to_string((*it)[0]) << "," << v0 << endl;
 					}
@@ -749,7 +752,7 @@ void encoder::insert_state_variable(bool debug) {
 			if (not group->second[1-sense].empty()) {
 				// Handle the first one, then insert the others in parallel to the first one.
 				vector<petri::iterator> pos = base->duplicate(
-						petri::parallel, 
+						petri::PARALLEL, 
 						base->insert_at(
 							group->first, //base->add_redundant(group->first),
 							transition(1, guardsense != sense or group->second[sense].empty() ? guard : boolean::cover(1))
@@ -769,18 +772,18 @@ void encoder::insert_state_variable(bool debug) {
 	}
 
 	if (debug) {
-		for (int i = 0; i < (int)base->places.size(); i++) {
-			if (not base->places.is_valid(i)) continue; 
+		for (int i = 0; i < (int)comp.places.size(); i++) {
+			if (not comp.places.is_valid(i)) continue; 
 			cout << "p" << i << ":" << endl;
-			for (auto j = base->places[i].splits[parallel].begin(); j != base->places[i].splits[parallel].end(); j++) {
+			for (auto j = comp.places[i].splits[petri::PARALLEL].begin(); j != comp.places[i].splits[petri::PARALLEL].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}
 
-		for (int i = 0; i < (int)base->transitions.size(); i++) {
-			if (not base->transitions.is_valid(i)) continue; 
+		for (int i = 0; i < (int)comp.transitions.size(); i++) {
+			if (not comp.transitions.is_valid(i)) continue; 
 			cout << "t" << i << ":" << endl;
-			for (auto j = base->transitions[i].splits[parallel].begin(); j != base->transitions[i].splits[parallel].end(); j++) {
+			for (auto j = comp.transitions[i].splits[petri::PARALLEL].begin(); j != comp.transitions[i].splits[petri::PARALLEL].end(); j++) {
 				cout << "\t" << j->to_string() << endl;
 			}
 		}

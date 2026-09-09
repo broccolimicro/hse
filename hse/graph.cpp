@@ -13,6 +13,7 @@
 #include <interpret_boolean/export.h>
 #include <petri/simulator.h>
 #include <petri/state.h>
+#include <petri/reachability.h>
 
 #include <common/mapping.h>
 
@@ -51,22 +52,17 @@ place::~place()
  * @param p1 Second place to merge
  * @return A new place that represents the composition of p0 and p1
  */
-place place::merge(int composition, const place &p0, const place &p1)
-{
-	place result;
-	if (composition == petri::parallel || composition == petri::sequence)
-	{
-		result.effective = p0.effective & p1.effective;
-		result.predicate = p0.predicate & p1.predicate;
+place &place::merge(petri::Composition composition, const place &p1) {
+	if (composition == petri::PARALLEL or composition == petri::SEQUENCE) {
+		effective &= p1.effective;
+		predicate &= p1.predicate;
+	} else if (composition == petri::CHOICE) {
+		effective |= p1.effective;
+		predicate |= p1.predicate;
 	}
-	else if (composition == petri::choice)
-	{
-		result.effective = p0.effective | p1.effective;
-		result.predicate = p0.predicate | p1.predicate;
-	}
-	result.arbiter = (p0.arbiter or p1.arbiter);
-	result.synchronizer = (p0.synchronizer or p1.synchronizer);
-	return result;
+	arbiter = arbiter or p1.arbiter;
+	synchronizer = synchronizer or p1.synchronizer;
+	return *this;
 }
 
 ostream &operator<<(ostream &os, const place &p) {
@@ -127,24 +123,21 @@ transition transition::subdivide(int term) const
  * @param t1 Second transition to merge
  * @return A new transition representing the composition
  */
-transition transition::merge(int composition, const transition &t0, const transition &t1)
-{
-	transition result;
-	if (composition == petri::parallel || composition == petri::sequence)
-	{
-		result.assume = t0.assume & t1.assume;
-		result.guard = t0.guard & t1.guard;
-		result.local_action = t0.local_action & t1.local_action;
-		result.remote_action = t0.remote_action & t1.remote_action;
+transition &transition::merge(petri::Composition composition, const transition &t1) {
+	if (composition == petri::PARALLEL or composition == petri::SEQUENCE) {
+		assume &= t1.assume;
+		guard &= t1.guard;
+		local_action &= t1.local_action;
+		remote_action &= t1.remote_action;
+	} else if (composition == petri::CHOICE) {
+		assume |= t1.assume;
+		guard |= t1.guard;
+		local_action |= t1.local_action;
+		remote_action |= t1.remote_action;
+	} else {
+		internal("", "unsupported composition for hse transition merge", __FILE__, __LINE__);
 	}
-	else if (composition == petri::choice)
-	{
-		result.assume = t0.assume | t1.assume;
-		result.guard = t0.guard | t1.guard;
-		result.local_action = t0.local_action | t1.local_action;
-		result.remote_action = t0.remote_action | t1.remote_action;
-	}
-	return result;
+	return *this;
 }
 
 /**
@@ -159,15 +152,18 @@ transition transition::merge(int composition, const transition &t0, const transi
  * @param t1 Second transition to check
  * @return True if transitions can be merged, false otherwise
  */
-bool transition::mergeable(int composition, const transition &t0, const transition &t1)
-{
-	if (composition == petri::sequence) {
-		return t0.local_action.is_tautology();
+bool transition::mergeable(petri::Composition composition, const transition &t1) const {
+	if (composition == petri::IMPLIES or composition == petri::EXCLUDES) {
+		return false;
+	}
+
+	if (composition == petri::SEQUENCE) {
+		return local_action.is_tautology();
 	}
 
 	// choice or parallel
-	return (t0.guard == t1.guard and t0.assume == t1.assume) or
-				 (t0.local_action == t1.local_action);
+	return (guard == t1.guard and assume == t1.assume) or
+				 (local_action == t1.local_action);
 }
 
 /**
@@ -742,13 +738,14 @@ void graph::update_masks() {
 		places[i.index].mask = 1;
 	}
 
+	petri::ReachabilityAnalysis reach(adjacency());
 	for (petri::iterator i = begin(petri::place::type); i < end(petri::place::type); i++) {
 		if (not is_valid(i)) continue;
 
 		for (petri::iterator j = begin(petri::transition::type); j < end(petri::transition::type); j++) {
 			if (not is_valid(j)) continue;
 
-			if (is_reachable(j, i)) {
+			if (reach.isReachable(j, i)) {
 				places[i.index].mask = places[i.index].mask.combine_mask(transitions[j.index].assume.mask()).combine_mask(transitions[j.index].guard.mask()).combine_mask(transitions[j.index].local_action.mask()).combine_mask(transitions[j.index].ghost.mask());
 			}
 		}
@@ -949,7 +946,8 @@ void graph::post_process(bool proper_nesting, bool aggressive, bool annotate, bo
 				if (debug) cout << "forwarding passive transition " << i << endl;
 				vector<petri::iterator> nn = next(next(i)); // transitions
 				for (int l = 0; l < (int)nn.size(); l++) {
-					transitions[nn[l].index] = transition::merge(petri::sequence, transitions[i.index], transitions[nn[l].index]);
+					hse::transition tmp = transitions[i.index];
+					transitions[nn[l].index] = tmp.merge(petri::SEQUENCE, transitions[nn[l].index]);
 				}
 
 				pinch(i);
@@ -1017,6 +1015,10 @@ void graph::check_variables()
  */
 vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 {
+	petri::Adjacency adj = adjacency();
+	petri::ReachabilityAnalysis reach(adj);
+	petri::CompositionAnalysis comp(adj);
+
 	vector<petri::iterator> result;
 	// We're going to check this transition against all of the places in the system
 	for (petri::iterator j = begin(petri::place::type); j != end(petri::place::type); j++) {
@@ -1027,11 +1029,11 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 	
 		bool relevant = false;
 		for (int i = 0; i < (int)curr.size() and not relevant; i++) {
-			relevant = (is_reachable(curr[i], j) or is_reachable(j, curr[i]));
+			relevant = (reach.isReachable(curr[i], j) or reach.isReachable(j, curr[i]));
 		}
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
-			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not is(parallel, curr[i], j));
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not comp.is(petri::PARALLEL, curr[i], j));
 		}
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
@@ -1053,11 +1055,11 @@ vector<petri::iterator> graph::relevant_nodes(vector<petri::iterator> curr)
 		// and they aren't forced to be mutually exclusive by an arbiter
 		bool relevant = false;
 		for (int i = 0; i < (int)curr.size() and not relevant; i++) {
-			relevant = (is_reachable(curr[i], j) or is_reachable(j, curr[i]));
+			relevant = (reach.isReachable(curr[i], j) or reach.isReachable(j, curr[i]));
 		}
 
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {
-			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not is(parallel, curr[i], j));
+			relevant = (j != curr[i] and not common_arbiter(curr[i], j) and not comp.is(petri::PARALLEL, curr[i], j));
 		}
 		
 		for (int i = 0; i < (int)curr.size() and relevant; i++) {

@@ -3,6 +3,8 @@
 #include <common/standard.h>
 #include "state.h"
 #include <petri/path.h>
+#include <petri/reachability.h>
+#include <petri/composition.h>
 
 namespace hse
 {
@@ -66,6 +68,9 @@ struct encoder
 	~encoder();
 
 	graph *base;
+	petri::Adjacency adj;
+	petri::ReachabilityAnalysis reach;
+	petri::CompositionAnalysis comp;
 
 	// conflict_regions is like conflict::region except that it includes all of
 	// the neighboring nodes so that we can check for intersection to make
