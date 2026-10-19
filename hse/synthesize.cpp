@@ -239,15 +239,26 @@ void gate_set::build_reset() {
 	int _reset = base->netIndex("_Reset", true);
 
 	// TODO(edward.bingham) There a more complete algorithm for minimal resets on production rules.
+	int resetCount = 0;
+	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
+		if (gate->reset != 2) {
+			resetCount++;
+		}
+	}
+
 	for (auto gate = gates.begin(); gate != gates.end(); gate++) {
 		int var = gate - gates.begin();
 		if (find(base->ghost_nets.begin(), base->ghost_nets.end(), var) != base->ghost_nets.end()) {
 			continue;
 		}
 
-		if (gate->reset != 2 and gate->is_combinational() and gate->assume[0].is_tautology() and gate->assume[1].is_tautology()) {
+		if (resetCount > 1 and gate->reset != 2
+			and gate->is_combinational()
+			and gate->assume[0].is_tautology()
+			and gate->assume[1].is_tautology()) {
 			// TODO not sure if this is actually correct
 			gate->reset = 2;
+			resetCount--;
 		}
 
 		if (gate->reset == 1) {
